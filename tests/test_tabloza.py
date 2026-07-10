@@ -174,6 +174,102 @@ class TestWifiConnect(unittest.TestCase):
         self.assertIn("secret123", connect_cmd)
 
 
+class TestUpdateUtils(unittest.TestCase):
+    def setUp(self):
+        import update_utils as uu
+
+        self.uu = uu
+        self.tmp = tempfile.TemporaryDirectory()
+        self.install = Path(self.tmp.name) / "tabloza"
+        self.install.mkdir()
+        (self.install / ".git").mkdir()
+        (self.install / "VERSION").write_text("1.0.0")
+        self.status = Path(self.tmp.name) / "update_status.json"
+        self.uu.INSTALL_DIR = self.install
+        self.uu.UPDATE_STATUS_FILE = self.status
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    @patch("update_utils._run_git")
+    def test_check_no_update(self, mock_git):
+        mock_git.side_effect = [
+            MagicMock(returncode=0),  # fetch
+            MagicMock(returncode=0, stdout="abc123\n"),  # local
+            MagicMock(returncode=0, stdout="abc123\n"),  # remote
+            MagicMock(returncode=0, stdout="1.0.0\n"),  # version HEAD
+            MagicMock(returncode=0, stdout="1.0.0\n"),  # version origin
+        ]
+        result = self.uu.check_for_update(fetch=True)
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["update_available"])
+        self.assertEqual(result["current_version"], "1.0.0")
+
+    @patch("update_utils._run_git")
+    def test_check_update_available(self, mock_git):
+        mock_git.side_effect = [
+            MagicMock(returncode=0),
+            MagicMock(returncode=0, stdout="aaa\n"),
+            MagicMock(returncode=0, stdout="bbb\n"),
+            MagicMock(returncode=0, stdout="1.0.0\n"),
+            MagicMock(returncode=0, stdout="1.1.0\n"),
+        ]
+        result = self.uu.check_for_update(fetch=True)
+        self.assertTrue(result["update_available"])
+        self.assertEqual(result["remote_version"], "1.1.0")
+
+    @patch("update_utils.subprocess.run")
+    @patch("update_utils._run_git")
+    def test_apply_skips_when_up_to_date(self, mock_git, mock_run):
+        mock_git.side_effect = [
+            MagicMock(returncode=0),
+            MagicMock(returncode=0, stdout="same\n"),
+            MagicMock(returncode=0, stdout="same\n"),
+            MagicMock(returncode=0, stdout="1.0.0\n"),
+            MagicMock(returncode=0, stdout="1.0.0\n"),
+        ]
+        result = self.uu.apply_update_if_needed()
+        self.assertTrue(result["ok"])
+        self.assertFalse(result["applied"])
+        self.assertTrue(result["up_to_date"])
+        mock_run.assert_not_called()
+
+    @patch("update_utils.subprocess.run")
+    @patch("update_utils._run_git")
+    def test_apply_runs_script_when_update_available(self, mock_git, mock_run):
+        script = self.install / "tabloza-update.sh"
+        script.write_text("#!/bin/bash\n")
+        script.chmod(0o755)
+        self.uu.UPDATE_SCRIPT = script
+
+        def git_side_effect(args, *a, **k):
+            if args == ["fetch", "origin", "main"]:
+                return MagicMock(returncode=0)
+            if args == ["rev-parse", "HEAD"]:
+                return MagicMock(returncode=0, stdout="old\n")
+            if args == ["rev-parse", "origin/main"]:
+                return MagicMock(returncode=0, stdout="new\n")
+            if args == ["show", "HEAD:VERSION"]:
+                return MagicMock(returncode=0, stdout="1.0.0\n")
+            if args == ["show", "origin/main:VERSION"]:
+                return MagicMock(returncode=0, stdout="1.1.0\n")
+            return MagicMock(returncode=0, stdout="")
+
+        mock_git.side_effect = git_side_effect
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+
+        result = self.uu.apply_update_if_needed()
+
+        self.assertTrue(result["applied"])
+        mock_run.assert_called_once_with(
+            [str(script)],
+            capture_output=True,
+            text=True,
+            timeout=self.uu.APPLY_TIMEOUT,
+            check=False,
+        )
+
+
 class TestEventLog(unittest.TestCase):
     def test_log_and_read(self):
         with tempfile.TemporaryDirectory() as tmp:

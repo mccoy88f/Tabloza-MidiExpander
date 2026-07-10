@@ -185,7 +185,8 @@ async function refreshStatus() {
   }
   renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
-  if (s.synth) renderSynthSettings(s.synth);
+  if (s.synth_settings) renderSynthSettings(s.synth_settings);
+  if (s.version) document.getElementById("status-version").textContent = `v${s.version}`;
   const sf = s.soundfont || {};
   const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error].join("|");
   if (sfKey !== lastSf2StateKey) {
@@ -193,6 +194,87 @@ async function refreshStatus() {
     refreshSoundfonts();
   }
 }
+
+async function pollAfterUpdate(maxAttempts = 40) {
+  const msg = document.getElementById("update-msg");
+  msg.textContent = t("updateReconnecting");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  for (let i = 0; i < maxAttempts; i += 1) {
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      const res = await fetch(`${API}/api/version`, { credentials: "same-origin" });
+      if (!res.ok) continue;
+      const data = await res.json();
+      msg.textContent = t("updateDone", { version: data.version || "?" });
+      msg.classList.add("ok");
+      setTimeout(() => window.location.reload(), 1500);
+      return;
+    } catch {
+      /* servizio in riavvio */
+    }
+  }
+  msg.textContent = t("updateReconnectManual");
+  msg.classList.add("ok");
+}
+
+document.getElementById("btn-check-update")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-check-update");
+  const msg = document.getElementById("update-msg");
+  btn.disabled = true;
+  msg.textContent = t("updateChecking");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    const check = await api("/api/update/check");
+    if (!check.update_available) {
+      msg.textContent = t("updateUpToDate", { version: check.current_version });
+      msg.classList.add("ok");
+      return;
+    }
+    msg.textContent = t("updateAvailable", {
+      from: check.current_version,
+      to: check.remote_version,
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 620000);
+    let res;
+    try {
+      res = await fetch(`${API}/api/update/apply`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (err.name === "AbortError") {
+        await pollAfterUpdate();
+        return;
+      }
+      await pollAfterUpdate();
+      return;
+    }
+    clearTimeout(timeout);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      showLogin();
+      throw new Error(t("authRequired"));
+    }
+    if (!res.ok) throw new Error(data.error || t("updateFailed"));
+    if (data.applied) {
+      await pollAfterUpdate();
+      return;
+    }
+    msg.textContent = t("updateUpToDate", { version: data.current_version });
+    msg.classList.add("ok");
+  } catch (e) {
+    msg.textContent = e.message || t("updateFailed");
+    msg.classList.add("err");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById("btn-audio-test").addEventListener("click", async () => {
   const btn = document.getElementById("btn-audio-test");

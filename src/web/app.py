@@ -51,6 +51,7 @@ from tabloza_common import (  # noqa: E402
 from soundfont_config import startup_soundfont_name  # noqa: E402
 from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_memory_stats  # noqa: E402
+from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
 from wifi_utils import connect_wifi_network, scan_wifi_networks  # noqa: E402
 
 app = Flask(__name__, static_folder="static")
@@ -167,8 +168,48 @@ def api_status():
             "device": resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")),
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
         },
-        "synth": synth_settings_for_api(config),
+        "synth_settings": synth_settings_for_api(config),
+        "version": get_version(),
     })
+
+
+# --- System update ---
+
+@app.route("/api/update/check")
+@require_auth
+def api_update_check():
+    result = check_for_update(fetch=True)
+    if not result.get("ok"):
+        return jsonify(result), 503
+    return jsonify(result)
+
+
+@app.route("/api/update/apply", methods=["POST"])
+@require_auth
+def api_update_apply():
+    log_event("web", "Verifica aggiornamenti software…")
+    result = apply_update_if_needed()
+    if result.get("busy"):
+        return jsonify({"error": result["error"]}), 409
+    if not result.get("ok"):
+        log_event("web", f"Aggiornamento fallito: {result.get('error', '?')}", "error")
+        return jsonify({"error": result.get("error", "Aggiornamento fallito")}), 500
+    if result.get("applied"):
+        log_event(
+            "web",
+            f"Aggiornato {result.get('previous_version', '?')} → {result.get('current_version', '?')}",
+        )
+    else:
+        log_event("web", f"Nessun aggiornamento (v{result.get('current_version', '?')})")
+    return jsonify(result)
+
+
+@app.route("/api/update/status")
+@require_auth
+def api_update_status():
+    status = read_update_status()
+    status["version"] = get_version()
+    return jsonify(status)
 
 
 # --- Synth engine ---
