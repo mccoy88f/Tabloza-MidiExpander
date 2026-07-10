@@ -140,7 +140,7 @@ function renderActivity(activity, midi, synth, soundfont) {
   if (sf2Error) {
     valSf2.textContent = sf2Error;
   } else if (sf2Loading) {
-    valSf2.textContent = t("sf2LoadingLarge", { name: soundfont?.selected || "…" });
+    valSf2.textContent = t("sf2Loading", { name: soundfont?.selected || "…" });
   } else if (sf2Loaded) {
     valSf2.textContent = sf2Loaded;
   } else if (soundfont?.selected) {
