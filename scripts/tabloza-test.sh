@@ -163,7 +163,18 @@ fi
 echo "       Test hardware jack (1 ciclo beep, Ctrl+C per saltare):"
 echo "       →  speaker-test -t wav -c 2 -l 1"
 echo "       Test nota FluidSynth:"
-FS_ADDR=$(aconnect -i 2>/dev/null | grep -i fluidsynth | head -1 | awk '{print $2}' | tr -d "'")
+FS_ADDR=""
+FS_CLIENT=""
+while IFS= read -r line; do
+  if [[ "$line" =~ ^client\ ([0-9]+):.*FLUID ]]; then
+    FS_CLIENT="${BASH_REMATCH[1]}"
+  elif [[ -n "$FS_CLIENT" && "$line" =~ ^[[:space:]]+([0-9]+)\ ]]; then
+    FS_ADDR="${FS_CLIENT}:${BASH_REMATCH[1]}"
+    break
+  elif [[ "$line" =~ ^client\  ]]; then
+    FS_CLIENT=""
+  fi
+done < <(aconnect -i 2>/dev/null)
 if [[ -n "$FS_ADDR" ]]; then
     echo "       →  sudo amidi -p $FS_ADDR -S '90 3C 64' && sleep 0.3 && sudo amidi -p $FS_ADDR -S '80 3C 00'"
     if command -v amidi >/dev/null 2>&1; then

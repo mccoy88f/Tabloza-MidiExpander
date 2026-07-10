@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 from activity_status import touch_midi_activity
-from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7
+from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7, send_test_note
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -203,6 +203,15 @@ def handle_sighup(signum, frame):
     start_fluidsynth(config)
 
 
+def handle_sigusr1(signum, frame):
+    log.info("SIGUSR1 ricevuto — nota di test")
+    ok, detail = send_test_note()
+    if ok:
+        log.info("Nota di test OK (%s)", detail)
+    else:
+        log.warning("Nota di test fallita: %s", detail)
+
+
 def handle_sigterm(signum, frame):
     global shutdown
     log.info("Arresto orchestratore...")
@@ -212,6 +221,7 @@ def handle_sigterm(signum, frame):
 
 def main():
     signal.signal(signal.SIGHUP, handle_sighup)
+    signal.signal(signal.SIGUSR1, handle_sigusr1)
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
 
