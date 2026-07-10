@@ -8,7 +8,11 @@ TIMEOUT=20
 log() { logger -t tabloza-wifi "$*"; echo "[tabloza-wifi] $*"; }
 
 is_eth_connected() {
-    nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | grep -qE ':ethernet:connected'
+    local dev ip
+    dev=$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | grep ':ethernet' | head -1 | cut -d: -f1)
+    [[ -z "$dev" ]] && return 1
+    ip=$(nmcli -g IP4.ADDRESS device show "$dev" 2>/dev/null | head -1 | cut -d/ -f1)
+    [[ -n "$ip" && "$ip" != "--" && ! "$ip" =~ ^169\.254\. ]]
 }
 
 # Attendi interfaccia wlan

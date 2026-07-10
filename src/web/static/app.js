@@ -173,6 +173,7 @@ function networkModeLabel(mode) {
     case "client": return t("networkWifi");
     case "ethernet": return t("networkEthernet");
     case "lan_wifi": return t("networkLanWifi");
+    case "lan_direct": return t("networkLanDirect");
     case "offline": return t("networkOffline");
     default: return t("networkUnknown");
   }
@@ -647,7 +648,43 @@ document.getElementById("btn-console-clear").addEventListener("click", async () 
   refreshConsole();
 });
 
-// --- WiFi ---
+// --- Rete ---
+document.getElementById("btn-lan-direct-start")?.addEventListener("click", async () => {
+  const msg = document.getElementById("lan-direct-msg");
+  msg.textContent = t("startLanDirect");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/network/lan-direct/start", { method: "POST" });
+    msg.textContent = t("lanDirectStarted");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
+document.getElementById("btn-lan-direct-stop")?.addEventListener("click", async () => {
+  const msg = document.getElementById("lan-direct-msg");
+  msg.textContent = t("stopLanDirect");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/network/lan-direct/stop", { method: "POST" });
+    msg.textContent = t("lanDirectStopped");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
 document.getElementById("btn-hotspot-start")?.addEventListener("click", async () => {
   const msg = document.getElementById("wifi-msg");
   msg.textContent = t("startHotspot");

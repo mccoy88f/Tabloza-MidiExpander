@@ -162,10 +162,17 @@
         </div>
       </section>
 
-      <!-- WiFi -->
+      <!-- Rete -->
       <section class="card">
-        <h2 data-i18n="sectionWifi">WiFi</h2>
-        <p id="wifi-hint" class="muted wifi-hint" data-i18n="wifiEthHint">Con cavo LAN: configura WiFi qui sotto. Hotspot opzionale per smartphone.</p>
+        <h2 data-i18n="sectionNetwork">Rete</h2>
+        <p class="muted network-block-hint" data-i18n="lanDirectHint">Ethernet: prima DHCP normale (router). Se non arriva IP entro ~25 s, il Pi fa da router su 192.168.5.1. Puoi forzare avvio/stop sotto.</p>
+        <div class="network-mode-actions">
+          <button type="button" id="btn-lan-direct-start" class="btn btn-secondary" data-i18n="startLanDirect">Avvia link LAN diretto</button>
+          <button type="button" id="btn-lan-direct-stop" class="btn btn-secondary" data-i18n="stopLanDirect">Termina link LAN diretto</button>
+        </div>
+        <p id="lan-direct-msg" class="msg hidden"></p>
+        <hr class="network-divider">
+        <p id="wifi-hint" class="muted wifi-hint" data-i18n="wifiEthHint">Con cavo LAN al router: configura WiFi qui sotto. Hotspot opzionale per smartphone.</p>
         <div class="wifi-hotspot-actions">
           <button type="button" id="btn-hotspot-start" class="btn btn-secondary" data-i18n="startHotspot">Avvia hotspot</button>
           <button type="button" id="btn-hotspot-stop" class="btn btn-secondary" data-i18n="stopHotspot">Spegni hotspot</button>

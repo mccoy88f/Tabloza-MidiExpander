@@ -237,6 +237,10 @@ input[type="text"] {
 .wifi-item:hover { background: rgba(255,255,255,0.03); }
 .wifi-signal { color: var(--muted); font-size: 0.85rem; }
 
+.network-block-hint { font-size: 0.85rem; margin: 0 0 0.75rem; }
+.network-mode-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
+.network-divider { border: none; border-top: 1px solid var(--border, #2a2d3a); margin: 1rem 0; }
+
 .wifi-hint { font-size: 0.85rem; margin: 0 0 0.75rem; }
 .wifi-hotspot-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
 

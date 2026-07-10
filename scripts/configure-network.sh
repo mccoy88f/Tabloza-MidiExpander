@@ -41,5 +41,7 @@ fi
 # Script WiFi fallback + monitor continuo
 install -m 755 "$(dirname "$0")/wifi-fallback.sh" /usr/local/bin/tabloza-wifi-fallback.sh
 install -m 755 "$(dirname "$0")/wifi-monitor.sh"  /usr/local/bin/tabloza-wifi-monitor.sh
+install -m 755 "$(dirname "$0")/lan-monitor.sh"   /usr/local/bin/tabloza-lan-monitor.sh
 
 echo "NetworkManager hotspot configurato: ${HOTSPOT_SSID} @ ${HOTSPOT_IP}"
+echo "Link LAN diretto: attivabile dal pannello (tabloza-lan-direct @ 192.168.5.1)"

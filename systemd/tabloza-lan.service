@@ -1,0 +1,14 @@
+[Unit]
+Description=Tabloza MidiExpander — Ethernet auto (DHCP / link diretto)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+Environment=TABLOZA_INSTALL_DIR=/opt/tabloza
+ExecStart=/usr/local/bin/tabloza-lan-monitor.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

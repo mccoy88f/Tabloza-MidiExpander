@@ -194,10 +194,11 @@ install -m 644 "${INSTALL_DIR}/systemd/rtpmidid.service"        /etc/systemd/sys
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-orchestrator.service" /etc/systemd/system/tabloza-orchestrator.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-web.service"     /etc/systemd/system/tabloza-web.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-wifi.service"    /etc/systemd/system/tabloza-wifi.service
+install -m 644 "${INSTALL_DIR}/systemd/tabloza-lan.service"     /etc/systemd/system/tabloza-lan.service
 
 systemctl daemon-reload
-systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi
-systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi
+systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan
+systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan
 
 # --- Permessi ---
 chown -R root:root "${INSTALL_DIR}"

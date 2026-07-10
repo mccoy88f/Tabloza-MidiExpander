@@ -52,6 +52,7 @@ from soundfont_config import startup_soundfont_name  # noqa: E402
 from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_memory_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
+from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
 from wifi_utils import (  # noqa: E402
     connect_wifi_network,
     get_network_status,
@@ -501,6 +502,24 @@ def api_wifi_hotspot_stop():
     ok, err = stop_hotspot()
     if not ok:
         return jsonify({"error": err or "Spegnimento hotspot fallito"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/network/lan-direct/start", methods=["POST"])
+@require_auth
+def api_lan_direct_start():
+    ok, err = start_lan_direct()
+    if not ok:
+        return jsonify({"error": err or "Link LAN diretto fallito"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/network/lan-direct/stop", methods=["POST"])
+@require_auth
+def api_lan_direct_stop():
+    ok, err = stop_lan_direct()
+    if not ok:
+        return jsonify({"error": err or "Spegnimento link LAN fallito"}), 500
     return jsonify({"ok": True, **get_network_status()})
 
 

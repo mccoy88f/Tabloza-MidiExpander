@@ -321,7 +321,10 @@ def _eth_connected() -> bool:
 
 def get_network_status() -> dict:
     """Report ethernet/WiFi state for dashboard."""
+    from network_utils import is_lan_direct_active, LAN_DIRECT_IP
+
     eth = _eth_connected()
+    lan_direct = is_lan_direct_active()
     wlan_mode = "disconnected"
     wifi_name = ""
 
@@ -333,7 +336,9 @@ def get_network_status() -> dict:
         elif wifi_name:
             wlan_mode = "client"
 
-    if eth and wlan_mode == "client":
+    if lan_direct:
+        network_mode = "lan_direct"
+    elif eth and wlan_mode == "client":
         network_mode = "lan_wifi"
     elif eth:
         network_mode = "ethernet"
@@ -346,7 +351,9 @@ def get_network_status() -> dict:
 
     return {
         "network_mode": network_mode,
-        "ethernet_connected": eth,
+        "ethernet_connected": eth or lan_direct,
+        "lan_direct_active": lan_direct,
+        "lan_direct_ip": LAN_DIRECT_IP if lan_direct else "",
         "wlan_mode": wlan_mode,
         "wifi_connection": wifi_name,
     }

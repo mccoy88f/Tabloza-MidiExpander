@@ -315,6 +315,55 @@ class TestUpdateUtils(unittest.TestCase):
         )
 
 
+class TestLanDirect(unittest.TestCase):
+    @patch("network_utils._run")
+    def test_start_lan_direct(self, mock_run):
+        import network_utils as nu
+
+        mock_run.side_effect = [
+            MagicMock(returncode=0, stdout="eth0:ethernet\n"),
+            MagicMock(returncode=0),
+            MagicMock(returncode=0),
+            MagicMock(returncode=0),
+            MagicMock(returncode=0),
+        ]
+        ok, err = nu.start_lan_direct()
+        self.assertTrue(ok)
+        add_cmd = mock_run.call_args_list[3][0][0]
+        self.assertIn("shared", add_cmd)
+        self.assertIn("192.168.5.1/24", add_cmd)
+
+    @patch("network_utils._write_carrier_since")
+    @patch("network_utils.start_lan_direct")
+    @patch("network_utils._ensure_dhcp_on_device")
+    @patch("network_utils._read_carrier_since", return_value=None)
+    @patch("network_utils._ethernet_carrier_up", return_value=True)
+    @patch("network_utils.has_usable_eth_ip", return_value=False)
+    @patch("network_utils.is_lan_direct_active", return_value=False)
+    @patch("network_utils.get_primary_ethernet_device", return_value="eth0")
+    def test_manage_waits_dhcp_first(self, *_mocks):
+        import network_utils as nu
+
+        nu.manage_ethernet_auto()
+        nu._ensure_dhcp_on_device.assert_called_once_with("eth0")
+        nu.start_lan_direct.assert_not_called()
+
+    @patch("network_utils.start_lan_direct")
+    @patch("network_utils._ensure_dhcp_on_device")
+    @patch("network_utils._read_carrier_since")
+    @patch("network_utils._ethernet_carrier_up", return_value=True)
+    @patch("network_utils.has_usable_eth_ip", return_value=False)
+    @patch("network_utils.is_lan_direct_active", return_value=False)
+    @patch("network_utils.get_primary_ethernet_device", return_value="eth0")
+    def test_manage_starts_router_after_grace(self, *_mocks):
+        import network_utils as nu
+        import time
+
+        nu._read_carrier_since.return_value = time.time() - 60
+        nu.manage_ethernet_auto()
+        nu.start_lan_direct.assert_called_once()
+
+
 class TestEventLog(unittest.TestCase):
     def test_log_and_read(self):
         with tempfile.TemporaryDirectory() as tmp:
