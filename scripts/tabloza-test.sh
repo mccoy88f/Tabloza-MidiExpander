@@ -102,8 +102,13 @@ fi
 
 if command -v avahi-browse >/dev/null 2>&1; then
     echo "       mDNS _apple-midi._udp (5s scan):"
-    timeout 5 avahi-browse -r _apple-midi._udp 2>/dev/null | grep -E 'tabloza|hostname' | head -5 | sed 's/^/       /' || \
+    MDNS_OUT=$(timeout 5 avahi-browse -r _apple-midi._udp 2>/dev/null || true)
+    if echo "$MDNS_OUT" | grep -qi tabloza; then
+        echo "$MDNS_OUT" | grep -iE 'tabloza|hostname' | head -5 | sed 's/^/       /'
+        green "Annuncio tabloza-me su mDNS"
+    else
         yellow "Nessun annuncio Apple MIDI trovato via mDNS"
+    fi
 else
     yellow "avahi-browse non disponibile"
 fi
@@ -112,10 +117,10 @@ fi
 hdr "Routing MIDI (ALSA)"
 if command -v aconnect >/dev/null 2>&1; then
     echo "       Porte output (sorgenti):"
-    aconnect -o 2>/dev/null | grep -iE 'fluidsynth|rtpmidid' | sed 's/^/       /' || yellow "Nessuna porta fluidsynth/rtpmidid"
+    aconnect -o 2>/dev/null | grep -iE 'fluid|rtpmidid' | sed 's/^/       /' || yellow "Nessuna porta fluid/rtpmidid"
     echo "       Porte input (destinazioni):"
-    aconnect -i 2>/dev/null | grep -iE 'fluidsynth|rtpmidid' | sed 's/^/       /' || true
-    if aconnect -o 2>/dev/null | grep -qi fluidsynth && aconnect -o 2>/dev/null | grep -qi rtpmidid; then
+    aconnect -i 2>/dev/null | grep -iE 'fluid|rtpmidid' | sed 's/^/       /' || true
+    if aconnect -i 2>/dev/null | grep -qi fluid && aconnect -o 2>/dev/null | grep -qi rtpmidid; then
         green "FluidSynth e rtpmidid presenti in ALSA"
     else
         yellow "Routing incompleto — premi MIDI Reset nel pannello web"
@@ -127,8 +132,14 @@ fi
 # --- Audio ---
 hdr "Audio"
 if pgrep -x fluidsynth >/dev/null 2>&1; then
-    green "FluidSynth in esecuzione (PID $(pgrep -x fluidsynth))"
-    pgrep -a fluidsynth | sed 's/^/       /'
+    green "FluidSynth in esecuzione (PID $(pgrep -x fluidsynth | tr '\n' ' '))"
+    while read -r line; do
+        echo "       $line"
+        if [[ "$line" == *fluidsynth* && "$line" != *"/var/lib/tabloza/soundfonts/"* ]]; then
+            yellow "FluidSynth di sistema in conflitto — arrestalo:"
+            echo "       sudo systemctl mask fluidsynth; sudo kill ${line%% *}"
+        fi
+    done < <(pgrep -a fluidsynth 2>/dev/null || true)
 else
     red "FluidSynth non in esecuzione"
 fi
@@ -163,18 +174,13 @@ fi
 echo "       Test hardware jack (1 ciclo beep, Ctrl+C per saltare):"
 echo "       →  speaker-test -t wav -c 2 -l 1"
 echo "       Test nota FluidSynth:"
-FS_ADDR=""
-FS_CLIENT=""
-while IFS= read -r line; do
-  if [[ "$line" =~ ^client\ ([0-9]+):.*FLUID ]]; then
-    FS_CLIENT="${BASH_REMATCH[1]}"
-  elif [[ -n "$FS_CLIENT" && "$line" =~ ^[[:space:]]+([0-9]+)\ ]]; then
-    FS_ADDR="${FS_CLIENT}:${BASH_REMATCH[1]}"
-    break
-  elif [[ "$line" =~ ^client\  ]]; then
-    FS_CLIENT=""
-  fi
-done < <(aconnect -i 2>/dev/null)
+FS_ADDR=$(python3 -c "
+import sys
+sys.path.insert(0, '/opt/tabloza/src')
+from midi_utils import find_fluidsynth_input
+p = find_fluidsynth_input()
+print(p['address'] if p else '')
+" 2>/dev/null || true)
 if [[ -n "$FS_ADDR" ]]; then
     echo "       →  sudo amidi -p $FS_ADDR -S '90 3C 64' && sleep 0.3 && sudo amidi -p $FS_ADDR -S '80 3C 00'"
     if command -v amidi >/dev/null 2>&1; then

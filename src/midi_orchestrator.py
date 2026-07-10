@@ -176,8 +176,45 @@ def apply_volume(config: dict):
     send_cc7(vol)
 
 
+def stop_foreign_fluidsynth():
+    """Terminate fluidsynth processes not started by Tabloza (e.g. fluid-soundfont-gm)."""
+    global fluidsynth_proc
+    own_pid = (
+        fluidsynth_proc.pid
+        if fluidsynth_proc and fluidsynth_proc.poll() is None
+        else None
+    )
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "fluidsynth"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return
+    for pid_str in result.stdout.split():
+        try:
+            pid = int(pid_str)
+        except ValueError:
+            continue
+        if own_pid and pid == own_pid:
+            continue
+        try:
+            cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("latin-1")
+        except OSError:
+            cmdline = ""
+        if "/var/lib/tabloza/soundfonts/" in cmdline:
+            continue
+        log.warning(
+            "Arresto FluidSynth esterno PID %d (%s)",
+            pid, cmdline.replace("\0", " ")[:100],
+        )
+        subprocess.run(["kill", "-TERM", str(pid)], timeout=3, check=False)
+    time.sleep(0.5)
+
+
 def start_fluidsynth(config: dict):
     global fluidsynth_proc
+    stop_foreign_fluidsynth()
     stop_fluidsynth()
 
     sf = find_soundfont(config)
@@ -193,6 +230,8 @@ def start_fluidsynth(config: dict):
         stderr=subprocess.STDOUT,
     )
     time.sleep(2)
+    if not find_fluidsynth_input():
+        log.warning("Porta MIDI ALSA non trovata — verifica con: aconnect -i")
     route_rtpmidi_to_fluidsynth()
     apply_volume(config)
 

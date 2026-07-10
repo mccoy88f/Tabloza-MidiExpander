@@ -58,6 +58,16 @@ apt-get install -y -qq \
     alsa-utils \
     libasound2-dev
 
+# FluidSynth di sistema (pacchetto fluid-soundfont-gm) confligge con Tabloza.
+log "Disabilito FluidSynth di sistema..."
+for unit in fluidsynth fluidsynth.service; do
+    systemctl stop "$unit" 2>/dev/null || true
+    systemctl disable "$unit" 2>/dev/null || true
+    systemctl mask "$unit" 2>/dev/null || true
+done
+pkill -f '/usr/share/sounds/sf3/default-GM' 2>/dev/null || true
+pkill -f '/usr/share/sounds/sf2/FluidR3_GM' 2>/dev/null || true
+
 # --- Directory dati persistenti ---
 log "Configurazione directory dati in ${DATA_DIR}..."
 mkdir -p "${SOUNDFONTS_DIR}"
