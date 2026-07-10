@@ -12,7 +12,28 @@ Riesegui l'installazione aggiornata:
 curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
 ```
 
-### Non raggiungo tabloza-me.local
+### Non raggiungo tabloza-me.local né l'IP
+
+1. Verifica che il servizio web sia attivo:
+   ```bash
+   sudo systemctl status tabloza-web
+   sudo ss -tlnp | grep ':80 '
+   ```
+2. Prova l'**IP diretto** (senza `.local`):
+   ```bash
+   hostname -I    # sul Pi
+   ```
+   Poi dal browser: `http://192.168.x.x` (sostituisci con il tuo IP)
+3. Se hai una versione vecchia, prova anche `http://<IP>:8080` (porta precedente)
+4. Stessa rete LAN/WiFi del Pi (o connesso all'hotspot `Tabloza-MidiExpander`)
+5. Verifica Avahi: `systemctl status avahi-daemon`
+6. Su Windows potrebbe servire [Bonjour](https://support.apple.com/kb/DL999) per `.local`
+7. Riavvia i servizi:
+   ```bash
+   sudo systemctl restart tabloza-web avahi-daemon
+   ```
+
+### Non raggiungo solo tabloza-me.local (ma l'IP funziona)
 
 1. Verifica che il dispositivo sia acceso e connesso alla stessa rete del telefono
 2. In modalità hotspot, connettiti a `Tabloza-MidiExpander` e apri `http://192.168.4.1`

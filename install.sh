@@ -111,6 +111,7 @@ sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts 2>/dev/null || \
     echo -e "127.0.1.1\t${HOSTNAME}" >> /etc/hosts
 systemctl enable avahi-daemon
 systemctl restart avahi-daemon
+bash "${INSTALL_DIR}/scripts/configure-avahi.sh" "${INSTALL_DIR}/config/avahi/tabloza-web.service"
 
 # --- MIDI GPIO UART: funzione pianificata (non attiva) ---
 warn "MIDI GPIO fisico: funzione pianificata, non ancora attiva."
@@ -147,7 +148,7 @@ log "============================================"
 log "  Installazione completata!"
 log "============================================"
 log ""
-log "  Web UI:    http://${HOSTNAME}.local"
+log "  Web UI:    http://${HOSTNAME}.local  (o http://<IP-del-Pi>)"
 log "  mDNS:      ${HOSTNAME}.local"
 log "  Hotspot:   ${HOTSPOT_SSID} → http://${HOTSPOT_IP}"
 log "  Password:  ${DEFAULT_PASSWORD}"

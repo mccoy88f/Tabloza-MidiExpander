@@ -339,4 +339,5 @@ def _get_network_mode() -> str:
 
 if __name__ == "__main__":
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
-    app.run(host="0.0.0.0", port=8080, debug=False)
+    port = int(os.environ.get("TABLOZA_WEB_PORT", "80"))
+    app.run(host="0.0.0.0", port=port, debug=False)
