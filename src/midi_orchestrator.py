@@ -94,7 +94,8 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
     """FluidSynth senza SF2 — caricamento dinamico via server TCP."""
     fs_cfg = config.get("fluidsynth", {})
     max_gain = fs_cfg.get("gain", 2.0)
-    from audio_utils import normalize_volume, volume_to_gain
+    from audio_utils import normalize_volume
+    from midi_utils import volume_to_gain
     vol = normalize_volume(config.get("volume", 100))
     initial_gain = volume_to_gain(vol, max_gain)
     return [
