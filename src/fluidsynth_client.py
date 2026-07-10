@@ -8,7 +8,7 @@ from pathlib import Path
 log = logging.getLogger("tabloza.fluidsynth")
 
 STATE_FILE = Path("/run/tabloza/soundfont_state.json")
-_shell_stdin: IO[bytes] | None = None
+_shell_stdin = None
 
 
 def _default_state() -> dict:
