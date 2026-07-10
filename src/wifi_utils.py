@@ -352,8 +352,11 @@ def get_network_status() -> dict:
     return {
         "network_mode": network_mode,
         "ethernet_connected": eth or lan_direct,
+        "eth_on_router": network_mode in ("ethernet", "lan_wifi"),
         "lan_direct_active": lan_direct,
         "lan_direct_ip": LAN_DIRECT_IP if lan_direct else "",
+        "hotspot_active": wlan_mode == "hotspot",
+        "wifi_client_active": wlan_mode == "client",
         "wlan_mode": wlan_mode,
         "wifi_connection": wifi_name,
     }

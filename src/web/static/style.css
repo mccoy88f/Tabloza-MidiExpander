@@ -237,6 +237,22 @@ input[type="text"] {
 .wifi-item:hover { background: rgba(255,255,255,0.03); }
 .wifi-signal { color: var(--muted); font-size: 0.85rem; }
 
+.network-status-badge {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border, #2a2d3a);
+}
+.network-status-badge[data-mode="hotspot"],
+.network-status-badge[data-mode="lan_direct"] { border-color: var(--success); }
+.network-status-badge[data-mode="offline"] { border-color: var(--danger); }
+.network-block { margin-bottom: 1rem; }
+.network-block:last-child { margin-bottom: 0; }
+.network-hint { font-size: 0.85rem; margin: 0 0 0.65rem; }
+
 .network-block-hint { font-size: 0.85rem; margin: 0 0 0.75rem; }
 .network-mode-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.5rem; }
 .network-divider { border: none; border-top: 1px solid var(--border, #2a2d3a); margin: 1rem 0; }

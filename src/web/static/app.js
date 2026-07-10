@@ -179,15 +179,76 @@ function networkModeLabel(mode) {
   }
 }
 
+function renderNetworkSection(s) {
+  const net = s.network || {};
+  const mode = s.network_mode || net.network_mode || "offline";
+  const badge = document.getElementById("network-status-badge");
+  const blockLan = document.getElementById("block-lan-direct");
+  const blockHotspot = document.getElementById("block-hotspot");
+  const blockWifi = document.getElementById("block-wifi-client");
+  const btnLanStart = document.getElementById("btn-lan-direct-start");
+  const btnLanStop = document.getElementById("btn-lan-direct-stop");
+  const btnHotspotStart = document.getElementById("btn-hotspot-start");
+  const btnHotspotStop = document.getElementById("btn-hotspot-stop");
+  const hintLan = document.getElementById("hint-lan-direct");
+  const hintHotspot = document.getElementById("hint-hotspot");
+  const hintWifi = document.getElementById("hint-wifi");
+
+  if (!badge) return;
+
+  badge.textContent = t("networkActiveMode", { mode: networkModeLabel(mode) });
+  badge.dataset.mode = mode;
+
+  const lanDirect = !!(net.lan_direct_active || mode === "lan_direct");
+  const hotspot = !!(net.hotspot_active || mode === "hotspot");
+  const ethRouter = !!(net.eth_on_router || mode === "ethernet" || mode === "lan_wifi");
+  const wifiClient = !!(net.wifi_client_active || mode === "client" || mode === "lan_wifi");
+
+  // Link LAN diretto: nascosto se Ethernet al router; altrimenti start O stop
+  if (blockLan) {
+    blockLan.classList.toggle("hidden", ethRouter);
+    btnLanStart?.classList.toggle("hidden", lanDirect);
+    btnLanStop?.classList.toggle("hidden", !lanDirect);
+    if (hintLan) {
+      hintLan.textContent = lanDirect
+        ? t("lanDirectActiveHint", { ip: net.lan_direct_ip || "192.168.5.1" })
+        : t("lanDirectIdleHint");
+    }
+  }
+
+  // Hotspot: nascosto con Ethernet router o link LAN diretto; start O stop
+  if (blockHotspot) {
+    const showHotspot = !ethRouter && !lanDirect;
+    blockHotspot.classList.toggle("hidden", !showHotspot);
+    btnHotspotStart?.classList.toggle("hidden", hotspot);
+    btnHotspotStop?.classList.toggle("hidden", !hotspot);
+    if (hintHotspot) {
+      hintHotspot.textContent = hotspot ? t("hotspotActiveHint") : t("hotspotIdleHint");
+    }
+  }
+
+  // WiFi client: nascosto se hotspot o link LAN attivi (wlan occupato)
+  if (blockWifi) {
+    const showWifi = !hotspot && !lanDirect;
+    blockWifi.classList.toggle("hidden", !showWifi);
+    if (hintWifi) {
+      if (ethRouter) {
+        hintWifi.textContent = t("wifiEthHint");
+      } else if (wifiClient && net.wifi_connection) {
+        hintWifi.textContent = t("wifiConnectedHint", { name: net.wifi_connection });
+      } else {
+        hintWifi.textContent = t("wifiScanHint");
+      }
+    }
+  }
+}
+
 async function refreshStatus() {
   const s = await api("/api/status");
   document.getElementById("status-hostname").textContent = s.hostname || "—";
   document.getElementById("status-ip").textContent = s.ip;
   document.getElementById("status-network").textContent = networkModeLabel(s.network_mode);
-  const wifiHint = document.getElementById("wifi-hint");
-  if (wifiHint) {
-    wifiHint.classList.toggle("hidden", !(s.network?.ethernet_connected));
-  }
+  renderNetworkSection(s);
   const sf2Label = s.soundfont?.loaded
     || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
   document.getElementById("status-sf2").textContent = sf2Label;

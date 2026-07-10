@@ -163,23 +163,33 @@
       </section>
 
       <!-- Rete -->
-      <section class="card">
+      <section class="card" id="network-section">
         <h2 data-i18n="sectionNetwork">Rete</h2>
-        <p class="muted network-block-hint" data-i18n="lanDirectHint">Ethernet: prima DHCP normale (router). Se non arriva IP entro ~25 s, il Pi fa da router su 192.168.5.1. Puoi forzare avvio/stop sotto.</p>
-        <div class="network-mode-actions">
-          <button type="button" id="btn-lan-direct-start" class="btn btn-secondary" data-i18n="startLanDirect">Avvia link LAN diretto</button>
-          <button type="button" id="btn-lan-direct-stop" class="btn btn-secondary" data-i18n="stopLanDirect">Termina link LAN diretto</button>
+        <p id="network-status-badge" class="network-status-badge" aria-live="polite">—</p>
+
+        <div id="block-lan-direct" class="network-block hidden">
+          <p id="hint-lan-direct" class="muted network-hint"></p>
+          <div class="network-mode-actions">
+            <button type="button" id="btn-lan-direct-start" class="btn btn-secondary" data-i18n="startLanDirect">Avvia link LAN diretto</button>
+            <button type="button" id="btn-lan-direct-stop" class="btn btn-secondary hidden" data-i18n="stopLanDirect">Termina link LAN diretto</button>
+          </div>
+          <p id="lan-direct-msg" class="msg hidden"></p>
         </div>
-        <p id="lan-direct-msg" class="msg hidden"></p>
-        <hr class="network-divider">
-        <p id="wifi-hint" class="muted wifi-hint" data-i18n="wifiEthHint">Con cavo LAN al router: configura WiFi qui sotto. Hotspot opzionale per smartphone.</p>
-        <div class="wifi-hotspot-actions">
-          <button type="button" id="btn-hotspot-start" class="btn btn-secondary" data-i18n="startHotspot">Avvia hotspot</button>
-          <button type="button" id="btn-hotspot-stop" class="btn btn-secondary" data-i18n="stopHotspot">Spegni hotspot</button>
+
+        <div id="block-hotspot" class="network-block hidden">
+          <p id="hint-hotspot" class="muted network-hint"></p>
+          <div class="wifi-hotspot-actions">
+            <button type="button" id="btn-hotspot-start" class="btn btn-secondary" data-i18n="startHotspot">Avvia hotspot</button>
+            <button type="button" id="btn-hotspot-stop" class="btn btn-secondary hidden" data-i18n="stopHotspot">Spegni hotspot</button>
+          </div>
         </div>
-        <button id="btn-wifi-scan" class="btn btn-secondary" data-i18n="scanNetworks">Scansiona reti</button>
-        <p id="wifi-msg" class="msg hidden"></p>
-        <div id="wifi-list" class="wifi-list"></div>
+
+        <div id="block-wifi-client" class="network-block">
+          <p id="hint-wifi" class="muted network-hint"></p>
+          <button id="btn-wifi-scan" class="btn btn-secondary" data-i18n="scanNetworks">Scansiona reti</button>
+          <p id="wifi-msg" class="msg hidden"></p>
+          <div id="wifi-list" class="wifi-list"></div>
+        </div>
       </section>
 
       <!-- Console -->
