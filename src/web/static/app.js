@@ -100,6 +100,29 @@ async function refreshStatus() {
   renderMidiInputs(s.midi);
 }
 
+document.getElementById("btn-midi-reset").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-midi-reset");
+  const msg = document.getElementById("midi-reset-msg");
+  if (!confirm("Riavviare FluidSynth e ricaricare tutto il routing MIDI?")) return;
+  btn.disabled = true;
+  btn.textContent = "Reset in corso…";
+  msg.textContent = "Riavvio rtpmidid e FluidSynth…";
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const data = await api("/api/midi/reset", { method: "POST" });
+    msg.textContent = data.message || "Reset completato";
+    msg.className = "msg ok";
+    refreshStatus();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "MIDI Reset";
+  }
+});
+
 // --- SoundFonts ---
 async function refreshSoundfonts() {
   const { soundfonts } = await api("/api/soundfonts");

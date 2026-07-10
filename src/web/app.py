@@ -6,6 +6,7 @@ import re
 import signal
 import subprocess
 import sys
+import time
 from functools import wraps
 from pathlib import Path
 
@@ -264,6 +265,33 @@ def api_wifi_connect():
         return jsonify({"error": f"Connessione fallita: {err}"}), 500
 
     return jsonify({"ok": True, "ssid": ssid})
+
+
+# --- MIDI Reset ---
+
+@app.route("/api/midi/reset", methods=["POST"])
+@require_auth
+def api_midi_reset():
+    try:
+        subprocess.run(
+            ["systemctl", "restart", "rtpmidid"],
+            capture_output=True, timeout=15, check=True,
+        )
+        subprocess.run(
+            ["systemctl", "restart", "tabloza-orchestrator"],
+            capture_output=True, timeout=15, check=True,
+        )
+        time.sleep(3)
+        config = load_config()
+        send_cc7(config.get("volume", 100))
+        midi = get_midi_status()
+        return jsonify({
+            "ok": True,
+            "message": "FluidSynth e routing MIDI riavviati",
+            "midi": midi,
+        })
+    except subprocess.CalledProcessError:
+        return jsonify({"error": "Reset MIDI fallito"}), 500
 
 
 # --- Helpers ---

@@ -32,7 +32,8 @@
 
 ### MIDI di rete non produce suono
 
-1. Verifica routing: `aconnect -o` e `aconnect -i`
+1. Nel pannello web, premi **MIDI Reset** (sezione Stato) per riavviare rtpmidid e FluidSynth
+2. Verifica routing: `aconnect -o` e `aconnect -i`
 2. Cerca porte `rtpmidid` e `Fluid Synth`
 3. Riavvia orchestratore: `sudo systemctl restart tabloza-orchestrator`
 4. Log: `journalctl -u tabloza-orchestrator -f`

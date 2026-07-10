@@ -130,6 +130,9 @@ input[type="text"] {
 .wifi-form input { margin-bottom: 0.5rem; }
 
 .midi-status { margin-top: 0.75rem; }
+.midi-actions { margin-top: 1rem; }
+.midi-actions .btn { width: 100%; }
+.midi-actions .msg { margin-top: 0.5rem; }
 .midi-list { list-style: none; margin-top: 0.5rem; }
 .midi-item {
   display: flex;
