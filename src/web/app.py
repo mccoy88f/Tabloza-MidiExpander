@@ -440,6 +440,17 @@ def api_audio_test_hardware():
             "label": label,
         })
     except alsaaudio.ALSAAudioError as exc:
+        err = str(exc).lower()
+        if "busy" in err and trigger_orchestrator_test_note():
+            return jsonify({
+                "ok": True,
+                "message": (
+                    f"Uscita {label} in uso da FluidSynth — inviata nota di test MIDI"
+                ),
+                "device": device,
+                "label": label,
+                "via": "fluidsynth",
+            })
         return jsonify({"error": f"Test audio fallito su {label}: {exc}"}), 500
     except OSError as exc:
         return jsonify({"error": f"Test audio fallito: {exc}"}), 500
