@@ -1,0 +1,16 @@
+[Unit]
+Description=Tabloza MidiExpander — FluidSynth MIDI Orchestrator
+After=sound.target network.target rtpmidid.service
+Wants=rtpmidid.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/tabloza/src/midi_orchestrator.py
+WorkingDirectory=/opt/tabloza/src
+Restart=always
+RestartSec=3
+WatchdogSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

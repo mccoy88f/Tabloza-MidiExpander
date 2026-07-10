@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Tabloza MidiExpander</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Login -->
+    <div id="login-screen" class="screen">
+      <div class="card login-card">
+        <h1>Tabloza MidiExpander</h1>
+        <p class="subtitle">Pannello di controllo</p>
+        <form id="login-form">
+          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
+          <button type="submit" class="btn btn-primary">Accedi</button>
+        </form>
+        <p id="login-error" class="error hidden"></p>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="screen hidden">
+      <header class="header">
+        <h1>Tabloza</h1>
+        <button id="btn-logout" class="btn btn-small">Esci</button>
+      </header>
+
+      <!-- Status -->
+      <section class="card" id="status-section">
+        <h2>Stato</h2>
+        <div class="status-grid">
+          <div><span class="label">IP</span><span id="status-ip">—</span></div>
+          <div><span class="label">Rete</span><span id="status-network">—</span></div>
+          <div><span class="label">SF2 attivo</span><span id="status-sf2">—</span></div>
+        </div>
+      </section>
+
+      <!-- Volume -->
+      <section class="card">
+        <h2>Volume Master</h2>
+        <input type="range" id="volume-slider" min="0" max="127" value="100">
+        <span id="volume-value">100</span>
+      </section>
+
+      <!-- SoundFonts -->
+      <section class="card">
+        <h2>Libreria SoundFont</h2>
+        <div id="sf2-list" class="sf2-list"></div>
+        <div class="upload-zone" id="upload-zone">
+          <p>Trascina un file .sf2 qui</p>
+          <input type="file" id="sf2-upload" accept=".sf2" hidden>
+          <button class="btn btn-secondary" onclick="document.getElementById('sf2-upload').click()">Scegli file</button>
+          <div id="upload-progress" class="progress hidden"><div class="progress-bar"></div></div>
+        </div>
+      </section>
+
+      <!-- WiFi -->
+      <section class="card">
+        <h2>WiFi</h2>
+        <button id="btn-wifi-scan" class="btn btn-secondary">Scansiona reti</button>
+        <div id="wifi-list" class="wifi-list"></div>
+      </section>
+
+      <!-- Security -->
+      <section class="card">
+        <h2>Sicurezza</h2>
+        <form id="change-password-form">
+          <input type="password" id="current-password" placeholder="Password attuale" required>
+          <input type="password" id="new-password" placeholder="Nuova password" required>
+          <button type="submit" class="btn btn-secondary">Cambia password</button>
+        </form>
+        <p id="password-msg" class="msg hidden"></p>
+      </section>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

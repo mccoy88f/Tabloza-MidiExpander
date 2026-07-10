@@ -1,0 +1,16 @@
+[Unit]
+Description=Tabloza MidiExpander — Web API and Dashboard
+After=network.target tabloza-orchestrator.service
+Wants=tabloza-orchestrator.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/tabloza/src/web/app.py
+WorkingDirectory=/opt/tabloza/src/web
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=rtpmidid — RTP-MIDI network daemon
+After=network.target avahi-daemon.service
+Wants=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rtpmidid -p 5004
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Tabloza MidiExpander — WiFi fallback manager
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/tabloza-wifi-fallback.sh
+
+[Install]
+WantedBy=multi-user.target
