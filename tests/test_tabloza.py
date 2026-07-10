@@ -157,20 +157,23 @@ class TestNmcliParse(unittest.TestCase):
 
 
 class TestWifiConnect(unittest.TestCase):
+    @patch("wifi_utils._connection_up")
     @patch("wifi_utils._run")
     @patch("wifi_utils.prepare_wifi_scan")
-    def test_connect_with_password(self, mock_prepare, mock_run):
+    def test_connect_with_password(self, mock_prepare, mock_run, mock_up):
         mock_prepare.return_value = (True, "ok")
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        mock_up.return_value = MagicMock(returncode=0, stdout="", stderr="")
         ok, err = connect_wifi_network("MyNet", "secret123", "WPA2")
         self.assertTrue(ok)
         self.assertIsNone(err)
         cmds = [c[0][0] for c in mock_run.call_args_list]
         add_cmd = next(c for c in cmds if "add" in c)
-        up_cmd = next(c for c in cmds if "up" in c and "connection" in c)
-        self.assertIn("wifi-sec.psk", add_cmd)
-        self.assertIn("secret123", add_cmd)
-        self.assertIn("up", up_cmd)
+        modify_cmd = next(c for c in cmds if "modify" in c)
+        self.assertIn("wifi-sec.key-mgmt", add_cmd)
+        self.assertIn("wifi-sec.psk", modify_cmd)
+        self.assertIn("secret123", modify_cmd)
+        mock_up.assert_called_once_with("tabloza-wifi-MyNet", password="secret123")
 
     @patch("wifi_utils.prepare_wifi_scan")
     def test_connect_secured_without_password(self, mock_prepare):

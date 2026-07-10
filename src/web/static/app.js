@@ -673,18 +673,14 @@ function showWifiForm(ssid, security = "") {
   const list = document.getElementById("wifi-list");
   const form = document.createElement("div");
   form.className = "wifi-form";
-  form.innerHTML = secured
-    ? `
-    <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong></p>
-    <input type="password" id="wifi-password" placeholder="${t("wifiPassword")}" required>
-    <button class="btn btn-primary" id="wifi-connect-btn">${t("connect")}</button>`
-    : `
-    <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong> (${t("wifiOpen")})</p>
+  form.innerHTML = `
+    <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong>${secured ? " 🔒" : ""}</p>
+    <input type="password" id="wifi-password" placeholder="${t("wifiPassword")}" autocomplete="off">
+    <p class="muted wifi-hint">${secured ? t("wifiSecuredHint") : t("wifiOpenHint")}</p>
     <button class="btn btn-primary" id="wifi-connect-btn">${t("connect")}</button>`;
   list.prepend(form);
   document.getElementById("wifi-connect-btn").addEventListener("click", async () => {
-    const pwEl = document.getElementById("wifi-password");
-    const pw = pwEl ? pwEl.value : "";
+    const pw = document.getElementById("wifi-password").value;
     if (secured && !pw) {
       const msg = document.getElementById("wifi-msg");
       msg.textContent = t("wifiPasswordRequired");

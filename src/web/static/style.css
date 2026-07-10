@@ -239,6 +239,7 @@ input[type="text"] {
 
 .wifi-form { padding: 0.75rem 0; }
 .wifi-form input { margin-bottom: 0.5rem; }
+.wifi-hint { font-size: 0.85rem; margin: 0 0 0.5rem; }
 
 .console-card details { margin: 0; }
 .console-card summary {

@@ -1,7 +1,9 @@
 """WiFi scan/connect helpers via NetworkManager."""
 
+import os
 import re
 import subprocess
+import tempfile
 import time
 
 from event_log import log_event
@@ -125,19 +127,58 @@ def _safe_conn_name(ssid: str) -> str:
 
 def _delete_wifi_profiles_for_ssid(ssid: str) -> None:
     """Remove saved NM profiles for this SSID so connect does not reuse stale secrets."""
-    result = _run(
-        ["nmcli", "-t", "-f", "NAME,802-11-wireless.ssid", "connection", "show"],
-        timeout=10,
-    )
+    result = _run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"], timeout=10)
     for line in result.stdout.splitlines():
         fields = parse_nmcli_terse_fields(line.strip())
-        if len(fields) >= 2 and fields[1] == ssid and fields[0] != HOTSPOT_CONN:
-            _run(["nmcli", "connection", "delete", fields[0]], timeout=10)
+        if len(fields) < 2 or fields[1] != "802-11-wireless":
+            continue
+        name = fields[0]
+        if name == HOTSPOT_CONN:
+            continue
+        ssid_result = _run(
+            ["nmcli", "-g", "802-11-wireless.ssid", "connection", "show", name],
+            timeout=5,
+        )
+        if ssid_result.stdout.strip() == ssid:
+            _run(["nmcli", "connection", "delete", name], timeout=10)
+    _run(["nmcli", "connection", "delete", _safe_conn_name(ssid)], timeout=10)
 
 
 def _ssid_requires_password(security: str) -> bool:
     sec = (security or "").strip()
     return bool(sec and sec != "--")
+
+
+def _wifi_key_mgmt(security: str) -> str:
+    sec = (security or "").upper()
+    if "WPA3" in sec or "SAE" in sec:
+        return "sae"
+    return "wpa-psk"
+
+
+def _write_nm_passwd_file(password: str) -> str:
+    """Temp file for nmcli connection up passwd-file (802-11-wireless-security.psk)."""
+    fd, path = tempfile.mkstemp(prefix="tabloza-nm-passwd-")
+    with os.fdopen(fd, "w") as fh:
+        fh.write(f"802-11-wireless-security.psk:{password}\n")
+    os.chmod(path, 0o600)
+    return path
+
+
+def _connection_up(conn_name: str, password: str = "") -> subprocess.CompletedProcess:
+    up_cmd = ["nmcli", "--wait", "45", "connection", "up", conn_name]
+    passwd_path = None
+    if password:
+        passwd_path = _write_nm_passwd_file(password)
+        up_cmd += ["passwd-file", passwd_path]
+    try:
+        return _run(up_cmd, timeout=60)
+    finally:
+        if passwd_path:
+            try:
+                os.unlink(passwd_path)
+            except OSError:
+                pass
 
 
 def connect_wifi_network(
@@ -152,6 +193,8 @@ def connect_wifi_network(
 
     if _ssid_requires_password(security) and not password:
         return False, "Password WiFi richiesta per questa rete"
+
+    use_psk = bool(password) or _ssid_requires_password(security)
 
     ok, detail = prepare_wifi_scan()
     if not ok:
@@ -169,9 +212,10 @@ def connect_wifi_network(
         "con-name", conn_name,
         "ifname", WLAN_IFACE,
         "ssid", ssid,
+        "802-11-wireless.mode", "infrastructure",
     ]
-    if password:
-        add_cmd += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+    if use_psk:
+        add_cmd += ["wifi-sec.key-mgmt", _wifi_key_mgmt(security)]
     else:
         add_cmd += ["wifi-sec.key-mgmt", "none"]
 
@@ -181,7 +225,18 @@ def connect_wifi_network(
         log_event("wifi", f"Connessione fallita: {err}", "error")
         return False, err
 
-    result = _run(["nmcli", "--wait", "45", "connection", "up", conn_name], timeout=60)
+    if password:
+        mod_result = _run([
+            "nmcli", "connection", "modify", conn_name,
+            "wifi-sec.key-mgmt", _wifi_key_mgmt(security),
+            "wifi-sec.psk", password,
+        ], timeout=10)
+        if mod_result.returncode != 0:
+            err = (mod_result.stderr or mod_result.stdout or "salvataggio password fallito").strip()
+            log_event("wifi", f"Connessione fallita: {err}", "error")
+            return False, err
+
+    result = _connection_up(conn_name, password=password)
     if result.returncode != 0:
         err = (result.stderr or result.stdout or "connessione fallita").strip()
         log_event("wifi", f"Connessione fallita: {err}", "error")
