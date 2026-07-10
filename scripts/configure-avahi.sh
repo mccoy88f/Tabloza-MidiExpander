@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Avahi: annuncia il pannello web HTTP su tabloza-me.local
+# Avahi: annuncia HTTP e RTP-MIDI (Apple MIDI) su tabloza-me.local
 set -euo pipefail
 
-SRC="${1:-/opt/tabloza/config/avahi/tabloza-web.service}"
-DEST="/etc/avahi/services/tabloza-web.service"
+INSTALL_DIR="${1:-/opt/tabloza}"
+AVAHI_DIR="/etc/avahi/services"
 
-install -d /etc/avahi/services
-install -m 644 "${SRC}" "${DEST}"
+install -d "${AVAHI_DIR}"
+install -m 644 "${INSTALL_DIR}/config/avahi/tabloza-web.service"    "${AVAHI_DIR}/tabloza-web.service"
+install -m 644 "${INSTALL_DIR}/config/avahi/tabloza-rtpmidi.service" "${AVAHI_DIR}/tabloza-rtpmidi.service"
+
 systemctl restart avahi-daemon
 
-echo "Avahi HTTP service installato: tabloza-me.local → porta 80"
+echo "Avahi installato:"
+echo "  HTTP:      tabloza-me.local → porta 80"
+echo "  RTP-MIDI:  tabloza-me → _apple-midi._udp porta 5004"

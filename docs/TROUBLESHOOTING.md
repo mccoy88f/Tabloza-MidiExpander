@@ -54,6 +54,33 @@ curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/
 
 ## RTP-MIDI
 
+### Il Mac non vede tabloza-me in Audio MIDI Setup (ma il web funziona)
+
+Il web (`http://tabloza-me.local`) e il MIDI wireless usano **servizi mDNS diversi**:
+- Web → `_http._tcp`
+- MIDI → `_apple-midi._udp` porta **5004**
+
+**Sul Mac** (Terminale), verifica se il MIDI è annunciato:
+```bash
+dns-sd -B _apple-midi._udp local.
+```
+Attendi 10 secondi. Se non compare `tabloza-me`, il problema è sul Pi.
+
+**Sul Pi** (SSH):
+```bash
+sudo bash /opt/tabloza/scripts/configure-rtpmidid.sh
+sudo bash /opt/tabloza/scripts/configure-avahi.sh /opt/tabloza
+sudo systemctl restart rtpmidid avahi-daemon tabloza-orchestrator
+sudo ss -ulnp | grep 5004
+sudo tabloza-test
+```
+
+**Su Mac — Configurazione Audio e MIDI:**
+1. Finestra → Mostra Studio MIDI → doppio clic **Rete**
+2. In **Le mie sessioni**: clic **+**, inserisci un nome, **attiva la spunta**
+3. In **Directory** cerca `tabloza-me` → **Connetti**
+4. Se non compare: attendi 30s e riprova dopo i comandi sul Pi sopra
+
 ### Il Mac/iPad non vede il dispositivo
 
 1. `systemctl status rtpmidid` — deve essere attivo

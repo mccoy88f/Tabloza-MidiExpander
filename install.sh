@@ -112,7 +112,7 @@ sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts 2>/dev/null || \
     echo -e "127.0.1.1\t${HOSTNAME}" >> /etc/hosts
 systemctl enable avahi-daemon
 systemctl restart avahi-daemon
-bash "${INSTALL_DIR}/scripts/configure-avahi.sh" "${INSTALL_DIR}/config/avahi/tabloza-web.service"
+bash "${INSTALL_DIR}/scripts/configure-avahi.sh" "${INSTALL_DIR}"
 
 # --- MIDI GPIO UART: funzione pianificata (non attiva) ---
 warn "MIDI GPIO fisico: funzione pianificata, non ancora attiva."
