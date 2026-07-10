@@ -114,9 +114,8 @@ def play_stereo_tone(
 ) -> None:
     """Play the same sine tone on left and right on the given ALSA device."""
     pcm = _open_playback_pcm(device, sample_rate)
-    period = pcm.getperiodsize()
-    if isinstance(period, tuple):
-        period = period[0]
+    period = 1024
+    pcm.setperiodsize(period)
     amp = int(32767 * volume)
     total_samples = int(sample_rate * duration_sec)
     written = 0
