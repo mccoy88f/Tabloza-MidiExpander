@@ -45,12 +45,32 @@ if [[ -f /proc/device-tree/model ]]; then
     fi
 fi
 
-# --- Dipendenze ---
-log "Aggiornamento pacchetti e installazione dipendenze..."
+# --- Bootstrap git (prima di tutto: sblocca /opt/tabloza) ---
+log "Bootstrap git..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
+apt-get install -y -qq git curl
+
+mkdir -p "${INSTALL_DIR}"
+if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    log "Aggiornamento sorgenti esistenti..."
+    git -C "${INSTALL_DIR}" checkout -f main 2>/dev/null || true
+    if ! git -C "${INSTALL_DIR}" fetch origin main; then
+        warn "Fetch fallito — reinstallazione pulita di ${INSTALL_DIR}"
+        rm -rf "${INSTALL_DIR}"
+    fi
+fi
+if [[ -d "${INSTALL_DIR}/.git" ]]; then
+    git -C "${INSTALL_DIR}" reset --hard origin/main
+    git -C "${INSTALL_DIR}" clean -fd
+else
+    log "Download sorgenti da GitHub..."
+    git clone --depth 1 -b main "${REPO_URL}" "${INSTALL_DIR}"
+fi
+
+# --- Dipendenze ---
+log "Installazione dipendenze..."
 apt-get install -y -qq \
-    git curl \
     fluidsynth fluid-soundfont-gm \
     avahi-daemon avahi-utils \
     network-manager \
@@ -71,18 +91,6 @@ pkill -f '/usr/share/sounds/sf2/FluidR3_GM' 2>/dev/null || true
 # --- Directory dati persistenti ---
 log "Configurazione directory dati in ${DATA_DIR}..."
 mkdir -p "${SOUNDFONTS_DIR}"
-mkdir -p "${INSTALL_DIR}"
-
-# --- Clone / aggiornamento sorgenti ---
-if [[ -d "${INSTALL_DIR}/.git" ]]; then
-    log "Aggiornamento sorgenti esistenti..."
-    git -C "${INSTALL_DIR}" fetch origin main
-    # /opt/tabloza è gestito dall'installer: scarta modifiche locali accidentali.
-    git -C "${INSTALL_DIR}" reset --hard origin/main
-else
-    log "Download sorgenti da GitHub..."
-    git clone --depth 1 "${REPO_URL}" "${INSTALL_DIR}"
-fi
 
 # --- rtpmidid (da GitHub, non nei repo Pi OS) ---
 log "Installazione rtpmidid..."
@@ -146,6 +154,7 @@ bash "${INSTALL_DIR}/scripts/configure-audio-rt.sh"
 log "Installazione comandi tabloza-test e tabloza-uninstall..."
 install -m 755 "${INSTALL_DIR}/scripts/tabloza-test.sh"      /usr/local/bin/tabloza-test
 install -m 755 "${INSTALL_DIR}/scripts/tabloza-uninstall.sh"  /usr/local/bin/tabloza-uninstall
+install -m 755 "${INSTALL_DIR}/scripts/tabloza-update.sh"    /usr/local/bin/tabloza-update
 
 # --- Servizi systemd ---
 log "Installazione servizi systemd..."

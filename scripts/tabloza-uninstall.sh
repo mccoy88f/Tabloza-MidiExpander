@@ -47,6 +47,7 @@ rm -f /usr/local/bin/tabloza-wifi-fallback.sh
 rm -f /usr/local/bin/tabloza-wifi-monitor.sh
 rm -f /usr/local/bin/tabloza-test
 rm -f /usr/local/bin/tabloza-uninstall
+rm -f /usr/local/bin/tabloza-update
 
 log "Rimozione configurazioni..."
 rm -f /etc/avahi/services/tabloza-web.service
