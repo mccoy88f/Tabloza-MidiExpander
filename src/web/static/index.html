@@ -10,12 +10,16 @@
   <div id="app">
     <!-- Login -->
     <div id="login-screen" class="screen">
+      <div class="lang-switcher">
+        <button type="button" class="lang-btn" data-lang="it" id="lang-it-login">IT</button>
+        <button type="button" class="lang-btn" data-lang="en" id="lang-en-login">EN</button>
+      </div>
       <div class="card login-card">
-        <h1>Tabloza MidiExpander</h1>
-        <p class="subtitle">Pannello di controllo</p>
+        <h1 data-i18n="appTitle">Tabloza MidiExpander</h1>
+        <p class="subtitle" data-i18n="loginSubtitle">Pannello di controllo</p>
         <form id="login-form">
-          <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" required>
-          <button type="submit" class="btn btn-primary">Accedi</button>
+          <input type="password" id="login-password" data-i18n-placeholder="password" placeholder="Password" autocomplete="current-password" required>
+          <button type="submit" class="btn btn-primary" data-i18n="login">Accedi</button>
         </form>
         <p id="login-error" class="error hidden"></p>
       </div>
@@ -25,43 +29,49 @@
     <div id="dashboard" class="screen hidden">
       <header class="header">
         <h1>Tabloza</h1>
-        <button id="btn-logout" class="btn btn-small">Esci</button>
+        <div class="header-actions">
+          <div class="lang-switcher lang-switcher-inline">
+            <button type="button" class="lang-btn" data-lang="it">IT</button>
+            <button type="button" class="lang-btn" data-lang="en">EN</button>
+          </div>
+          <button id="btn-logout" class="btn btn-small" data-i18n="logout">Esci</button>
+        </div>
       </header>
 
       <!-- Status -->
       <section class="card" id="status-section">
-        <h2>Stato</h2>
+        <h2 data-i18n="sectionStatus">Stato</h2>
         <div class="status-grid">
-          <div><span class="label">Indirizzo</span><span id="status-hostname">—</span></div>
-          <div><span class="label">IP</span><span id="status-ip">—</span></div>
-          <div><span class="label">Rete</span><span id="status-network">—</span></div>
-          <div><span class="label">SF2 attivo</span><span id="status-sf2">—</span></div>
+          <div><span class="label" data-i18n="labelAddress">Indirizzo</span><span id="status-hostname">—</span></div>
+          <div><span class="label" data-i18n="labelIp">IP</span><span id="status-ip">—</span></div>
+          <div><span class="label" data-i18n="labelNetwork">Rete</span><span id="status-network">—</span></div>
+          <div><span class="label" data-i18n="labelActiveSf2">SF2 attivo</span><span id="status-sf2">—</span></div>
         </div>
         <div class="midi-status">
-          <span class="label">Ingressi MIDI</span>
+          <span class="label" data-i18n="labelMidiInputs">Ingressi MIDI</span>
           <ul id="midi-inputs-list" class="midi-list"></ul>
         </div>
         <div class="midi-actions">
-          <button id="btn-midi-reset" class="btn btn-secondary">MIDI Reset</button>
+          <button id="btn-midi-reset" class="btn btn-secondary" data-i18n="midiReset">MIDI Reset</button>
           <p id="midi-reset-msg" class="msg hidden"></p>
         </div>
       </section>
 
       <!-- Volume -->
       <section class="card">
-        <h2>Volume Master</h2>
+        <h2 data-i18n="sectionVolume">Volume Master</h2>
         <input type="range" id="volume-slider" min="0" max="127" value="100">
         <span id="volume-value">100</span>
       </section>
 
       <!-- SoundFonts -->
       <section class="card">
-        <h2>Libreria SoundFont</h2>
+        <h2 data-i18n="sectionSoundfonts">Libreria SoundFont</h2>
         <div id="sf2-list" class="sf2-list"></div>
         <div class="upload-zone" id="upload-zone">
-          <p>Trascina un file .sf2 qui</p>
+          <p data-i18n="uploadDrag">Trascina un file .sf2 qui</p>
           <input type="file" id="sf2-upload" accept=".sf2" hidden>
-          <button class="btn btn-secondary" onclick="document.getElementById('sf2-upload').click()">Scegli file</button>
+          <button type="button" class="btn btn-secondary" id="btn-choose-file" data-i18n="chooseFile">Scegli file</button>
           <div id="upload-progress" class="progress hidden">
             <div class="progress-bar" id="upload-progress-bar"></div>
           </div>
@@ -71,24 +81,25 @@
 
       <!-- WiFi -->
       <section class="card">
-        <h2>WiFi</h2>
-        <button id="btn-wifi-scan" class="btn btn-secondary">Scansiona reti</button>
+        <h2 data-i18n="sectionWifi">WiFi</h2>
+        <button id="btn-wifi-scan" class="btn btn-secondary" data-i18n="scanNetworks">Scansiona reti</button>
         <p id="wifi-msg" class="msg hidden"></p>
         <div id="wifi-list" class="wifi-list"></div>
       </section>
 
       <!-- Security -->
       <section class="card">
-        <h2>Sicurezza</h2>
+        <h2 data-i18n="sectionSecurity">Sicurezza</h2>
         <form id="change-password-form">
-          <input type="password" id="current-password" placeholder="Password attuale" required>
-          <input type="password" id="new-password" placeholder="Nuova password" required>
-          <button type="submit" class="btn btn-secondary">Cambia password</button>
+          <input type="password" id="current-password" data-i18n-placeholder="currentPassword" placeholder="Password attuale" required>
+          <input type="password" id="new-password" data-i18n-placeholder="newPassword" placeholder="Nuova password" required>
+          <button type="submit" class="btn btn-secondary" data-i18n="changePassword">Cambia password</button>
         </form>
         <p id="password-msg" class="msg hidden"></p>
       </section>
     </div>
   </div>
+  <script src="/static/i18n.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

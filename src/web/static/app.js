@@ -10,9 +10,9 @@ async function api(path, opts = {}) {
   const data = await res.json().catch(() => ({}));
   if (res.status === 401) {
     showLogin();
-    throw new Error("Non autenticato");
+    throw new Error(t("authRequired"));
   }
-  if (!res.ok) throw new Error(data.error || `Errore ${res.status}`);
+  if (!res.ok) throw new Error(data.error || t("errorGeneric", { code: res.status }));
   return data;
 }
 
@@ -41,6 +41,15 @@ function stopStatusRefresh() {
   statusTimer = null;
 }
 
+function setupLangSwitcher() {
+  document.querySelectorAll(".lang-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setLang(btn.dataset.lang);
+      refreshAll();
+    });
+  });
+}
+
 // --- Login ---
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -61,29 +70,34 @@ document.getElementById("btn-logout").addEventListener("click", async () => {
   showLogin();
 });
 
+document.getElementById("btn-choose-file").addEventListener("click", () => {
+  document.getElementById("sf2-upload").click();
+});
+
 // --- Status ---
 function renderMidiInputs(midi) {
   const list = document.getElementById("midi-inputs-list");
   list.innerHTML = "";
   if (!midi || !midi.sources || !midi.sources.length) {
-    list.innerHTML = '<li class="midi-item muted">Nessun ingresso rilevato</li>';
+    list.innerHTML = `<li class="midi-item muted">${t("noMidiInputs")}</li>`;
     return;
   }
   midi.sources.forEach((src) => {
     const li = document.createElement("li");
     li.className = "midi-item";
+    const name = src.type === "gpio" ? t("midiGpioName") : src.name;
     const badge = src.status === "planned"
-      ? '<span class="badge badge-planned">In arrivo</span>'
+      ? `<span class="badge badge-planned">${t("badgePlanned")}</span>`
       : src.status === "available"
-        ? '<span class="badge badge-ok">Attivo</span>'
+        ? `<span class="badge badge-ok">${t("badgeActive")}</span>`
         : '<span class="badge">—</span>';
-    li.innerHTML = `<span>${src.name}</span>${badge}`;
+    li.innerHTML = `<span>${escapeHtml(name)}</span>${badge}`;
     list.appendChild(li);
   });
   if (midi.fluidsynth) {
     const li = document.createElement("li");
     li.className = "midi-item";
-    li.innerHTML = `<span>FluidSynth (${midi.fluidsynth.address})</span><span class="badge badge-ok">Synth</span>`;
+    li.innerHTML = `<span>FluidSynth (${midi.fluidsynth.address})</span><span class="badge badge-ok">${t("badgeSynth")}</span>`;
     list.appendChild(li);
   }
 }
@@ -93,8 +107,10 @@ async function refreshStatus() {
   document.getElementById("status-hostname").textContent = s.hostname || "—";
   document.getElementById("status-ip").textContent = s.ip;
   document.getElementById("status-network").textContent =
-    s.network_mode === "hotspot" ? "Hotspot" : s.network_mode === "client" ? "WiFi" : "—";
-  document.getElementById("status-sf2").textContent = s.active_soundfont || "Nessuno";
+    s.network_mode === "hotspot" ? t("networkHotspot")
+      : s.network_mode === "client" ? t("networkWifi")
+        : t("networkUnknown");
+  document.getElementById("status-sf2").textContent = s.active_soundfont || t("noSoundfont");
   document.getElementById("volume-slider").value = s.volume;
   document.getElementById("volume-value").textContent = s.volume;
   renderMidiInputs(s.midi);
@@ -103,15 +119,15 @@ async function refreshStatus() {
 document.getElementById("btn-midi-reset").addEventListener("click", async () => {
   const btn = document.getElementById("btn-midi-reset");
   const msg = document.getElementById("midi-reset-msg");
-  if (!confirm("Riavviare FluidSynth e ricaricare tutto il routing MIDI?")) return;
+  if (!confirm(t("midiResetConfirm"))) return;
   btn.disabled = true;
-  btn.textContent = "Reset in corso…";
-  msg.textContent = "Riavvio rtpmidid e FluidSynth…";
+  btn.textContent = t("midiResetInProgress");
+  msg.textContent = t("midiResetWorking");
   msg.className = "msg";
   msg.classList.remove("hidden");
   try {
-    const data = await api("/api/midi/reset", { method: "POST" });
-    msg.textContent = data.message || "Reset completato";
+    await api("/api/midi/reset", { method: "POST" });
+    msg.textContent = t("midiResetDone");
     msg.className = "msg ok";
     refreshStatus();
   } catch (err) {
@@ -119,7 +135,7 @@ document.getElementById("btn-midi-reset").addEventListener("click", async () => 
     msg.className = "msg err";
   } finally {
     btn.disabled = false;
-    btn.textContent = "MIDI Reset";
+    btn.textContent = t("midiReset");
   }
 });
 
@@ -129,7 +145,7 @@ async function refreshSoundfonts() {
   const list = document.getElementById("sf2-list");
   list.innerHTML = "";
   if (!soundfonts.length) {
-    list.innerHTML = '<p class="muted">Nessun SoundFont caricato</p>';
+    list.innerHTML = `<p class="muted">${t("noSoundfontsLoaded")}</p>`;
     return;
   }
   soundfonts.forEach((sf) => {
@@ -140,11 +156,11 @@ async function refreshSoundfonts() {
       <div>
         <span class="sf2-name">${escapeHtml(sf.name)}</span>
         <span class="muted" style="font-size:0.8rem;margin-left:0.5rem">${sizeMB} MB</span>
-        ${sf.active ? '<span class="sf2-active"> ● attivo</span>' : ""}
+        ${sf.active ? `<span class="sf2-active"> ${t("sf2Active")}</span>` : ""}
       </div>
       <div class="sf2-actions">
-        ${!sf.active ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">Carica</button>` : ""}
-        <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">Elimina</button>
+        ${!sf.active ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${t("load")}</button>` : ""}
+        <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;
     list.appendChild(div);
   });
@@ -161,7 +177,7 @@ async function refreshSoundfonts() {
 
   list.querySelectorAll("[data-del]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm(`Eliminare ${btn.dataset.del}?`)) return;
+      if (!confirm(t("deleteConfirm", { name: btn.dataset.del }))) return;
       await api(`/api/soundfonts/${encodeURIComponent(btn.dataset.del)}`, { method: "DELETE" });
       refreshAll();
     });
@@ -189,7 +205,7 @@ fileInput.addEventListener("change", () => { if (fileInput.files.length) uploadF
 
 function uploadFile(file) {
   if (!file.name.toLowerCase().endsWith(".sf2")) {
-    showUploadStatus("Solo file .sf2", true);
+    showUploadStatus(t("sf2Only"), true);
     return;
   }
 
@@ -197,7 +213,7 @@ function uploadFile(file) {
   const bar = document.getElementById("upload-progress-bar");
   prog.classList.remove("hidden");
   bar.style.width = "0%";
-  showUploadStatus(`Caricamento ${file.name}...`, false);
+  showUploadStatus(t("uploading", { name: file.name }), false);
 
   const form = new FormData();
   form.append("file", file);
@@ -210,7 +226,7 @@ function uploadFile(file) {
     if (e.lengthComputable) {
       const pct = Math.round((e.loaded / e.total) * 100);
       bar.style.width = `${pct}%`;
-      showUploadStatus(`Caricamento ${pct}%`, false);
+      showUploadStatus(t("uploadingPct", { pct }), false);
     }
   });
 
@@ -219,10 +235,10 @@ function uploadFile(file) {
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch (_) {}
     if (xhr.status >= 200 && xhr.status < 300) {
-      showUploadStatus(`${file.name} caricato e attivato`, false, true);
+      showUploadStatus(t("uploadDone", { name: file.name }), false, true);
       refreshAll();
     } else {
-      showUploadStatus(data.error || "Upload fallito", true);
+      showUploadStatus(data.error || t("uploadFailed"), true);
     }
     setTimeout(() => {
       prog.classList.add("hidden");
@@ -232,7 +248,7 @@ function uploadFile(file) {
   });
 
   xhr.addEventListener("error", () => {
-    showUploadStatus("Errore di rete durante l'upload", true);
+    showUploadStatus(t("uploadNetworkError"), true);
     prog.classList.add("hidden");
     fileInput.value = "";
   });
@@ -260,7 +276,7 @@ document.getElementById("volume-slider").addEventListener("input", (e) => {
 // --- WiFi ---
 document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   const msg = document.getElementById("wifi-msg");
-  msg.textContent = "Scansione in corso...";
+  msg.textContent = t("scanningWifi");
   msg.className = "msg";
   msg.classList.remove("hidden");
   try {
@@ -269,7 +285,7 @@ document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
     const list = document.getElementById("wifi-list");
     list.innerHTML = "";
     if (!networks.length) {
-      list.innerHTML = '<p class="muted">Nessuna rete trovata</p>';
+      list.innerHTML = `<p class="muted">${t("noNetworks")}</p>`;
       return;
     }
     networks.forEach((n) => {
@@ -290,19 +306,19 @@ function showWifiForm(ssid) {
   const form = document.createElement("div");
   form.className = "wifi-form";
   form.innerHTML = `
-    <p>Connetti a <strong>${escapeHtml(ssid)}</strong></p>
-    <input type="password" id="wifi-password" placeholder="Password WiFi">
-    <button class="btn btn-primary" id="wifi-connect-btn">Connetti</button>`;
+    <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong></p>
+    <input type="password" id="wifi-password" placeholder="${t("wifiPassword")}">
+    <button class="btn btn-primary" id="wifi-connect-btn">${t("connect")}</button>`;
   list.prepend(form);
   document.getElementById("wifi-connect-btn").addEventListener("click", async () => {
     const pw = document.getElementById("wifi-password").value;
     const msg = document.getElementById("wifi-msg");
-    msg.textContent = "Connessione in corso...";
+    msg.textContent = t("connecting");
     msg.className = "msg";
     msg.classList.remove("hidden");
     try {
       await api("/api/wifi/connect", { method: "POST", body: JSON.stringify({ ssid, password: pw }) });
-      msg.textContent = `Connesso a ${ssid}. Al prossimo boot il dispositivo userà questa rete.`;
+      msg.textContent = t("connectedWifi", { ssid });
       msg.className = "msg ok";
       refreshStatus();
     } catch (err) {
@@ -324,7 +340,7 @@ document.getElementById("change-password-form").addEventListener("submit", async
         new_password: document.getElementById("new-password").value,
       }),
     });
-    msg.textContent = "Password aggiornata";
+    msg.textContent = t("passwordUpdated");
     msg.className = "msg ok";
     e.target.reset();
   } catch (err) {
@@ -335,11 +351,20 @@ document.getElementById("change-password-form").addEventListener("submit", async
 });
 
 function refreshAll() {
-  refreshStatus();
-  refreshSoundfonts();
+  const onDashboard = !document.getElementById("dashboard").classList.contains("hidden");
+  if (onDashboard) {
+    refreshStatus();
+    refreshSoundfonts();
+  }
 }
 
+document.addEventListener("tabloza:lang", () => refreshAll());
+
 // --- Init ---
+setupLangSwitcher();
+document.documentElement.lang = getLang();
+applyI18n();
+
 (async () => {
   try {
     const { authenticated } = await api("/api/auth/check");
