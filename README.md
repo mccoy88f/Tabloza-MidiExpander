@@ -63,8 +63,76 @@ sudo reboot
 ### Primo accesso
 
 1. Connettiti alla rete del dispositivo o all'hotspot `Tabloza-MidiExpander`
-2. Apri **http://tabloza-me.local**
+2. Apri **http://tabloza-me.local** (o `http://<IP-del-Pi>`)
 3. Password: `tabloza`
+
+### Configurazione RTP-MIDI wireless
+
+Il Pi annuncia una sessione RTP-MIDI sulla rete:
+- **Nome:** `tabloza-me`
+- **Porta UDP:** `5004`
+- **mDNS:** `tabloza-me.local`
+
+Prerequisiti sul Pi: carica un file `.sf2` dal pannello web e verifica con `sudo tabloza-test`.
+
+#### macOS / iOS
+
+1. Mac e Pi sulla **stessa rete WiFi/LAN**
+2. Apri **Configurazione Audio e MIDI** → **Finestra → Mostra Studio MIDI**
+3. Doppio clic su **Rete** (icona globo)
+4. In **Le mie sessioni**: clic **+**, attiva la spunta sulla sessione
+5. In **Directory** cerca **`tabloza-me`** → clic **Connetti**
+6. Se non compare: **Connetti manualmente** con host `tabloza-me.local` (o IP del Pi) porta **5004**
+7. Nel DAW: uscita MIDI verso `tabloza-me`
+
+#### Windows
+
+1. Installa [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html)
+2. (Consigliato) Installa [Bonjour](https://support.apple.com/kb/DL999) per la scoperta `.local`
+3. Avvia rtpMIDI → cerca **`tabloza-me`** → **Connect**
+4. Connessione manuale: host = IP del Pi, porta = **5004**
+
+#### Se non suona
+
+- Pannello web → verifica SF2 attivo e volume > 0
+- Pannello web → **MIDI Reset**
+- SSH: `sudo tabloza-test`
+
+### Comandi utili (SSH)
+
+```bash
+sudo tabloza-test          # diagnostica completa
+sudo systemctl restart tabloza-web tabloza-orchestrator rtpmidid
+```
+
+### Disinstallazione e reinstallazione pulita
+
+**Se hai già una versione precedente** e vuoi ripartire da zero:
+
+```bash
+# 1. Disinstalla (se il comando esiste)
+sudo tabloza-uninstall
+
+# Se tabloza-uninstall non esiste ancora, disinstalla manualmente:
+sudo systemctl stop tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo systemctl disable tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo rm -f /etc/systemd/system/tabloza-*.service /etc/systemd/system/rtpmidid.service
+sudo rm -rf /opt/tabloza /etc/rtpmidid
+sudo rm -f /etc/avahi/services/tabloza-web.service
+sudo systemctl daemon-reload
+
+# 2. (Opzionale) Elimina anche SF2 e password salvate
+sudo rm -rf /var/lib/tabloza
+
+# 3. Reinstalla
+curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
+sudo reboot
+
+# 4. Verifica
+sudo tabloza-test
+```
+
+Durante `tabloza-uninstall` puoi scegliere se eliminare anche `/var/lib/tabloza` (SF2, password).
 
 ### Dati persistenti
 
@@ -149,8 +217,76 @@ sudo reboot
 ### First access
 
 1. Connect to the device network or hotspot `Tabloza-MidiExpander`
-2. Open **http://tabloza-me.local**
+2. Open **http://tabloza-me.local** (or `http://<Pi-IP>`)
 3. Password: `tabloza`
+
+### Wireless RTP-MIDI setup
+
+The Pi advertises an RTP-MIDI session on the network:
+- **Name:** `tabloza-me`
+- **UDP port:** `5004`
+- **mDNS:** `tabloza-me.local`
+
+Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza-test`.
+
+#### macOS / iOS
+
+1. Mac and Pi on the **same WiFi/LAN**
+2. Open **Audio MIDI Setup** → **Window → Show MIDI Studio**
+3. Double-click **Network** (globe icon)
+4. Under **My Sessions**: click **+**, enable the session checkbox
+5. Under **Directory** find **`tabloza-me`** → click **Connect**
+6. If missing: connect manually to host `tabloza-me.local` (or Pi IP) port **5004**
+7. In your DAW: MIDI output to `tabloza-me`
+
+#### Windows
+
+1. Install [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html)
+2. (Recommended) Install [Bonjour](https://support.apple.com/kb/DL999) for `.local` discovery
+3. Launch rtpMIDI → find **`tabloza-me`** → **Connect**
+4. Manual connection: host = Pi IP, port = **5004**
+
+#### No sound?
+
+- Web panel → check active SF2 and volume > 0
+- Web panel → **MIDI Reset**
+- SSH: `sudo tabloza-test`
+
+### Useful commands (SSH)
+
+```bash
+sudo tabloza-test          # full diagnostics
+sudo systemctl restart tabloza-web tabloza-orchestrator rtpmidid
+```
+
+### Uninstall and clean reinstall
+
+**If you have a previous version** and want a fresh start:
+
+```bash
+# 1. Uninstall (if command exists)
+sudo tabloza-uninstall
+
+# If tabloza-uninstall is not available yet, remove manually:
+sudo systemctl stop tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo systemctl disable tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo rm -f /etc/systemd/system/tabloza-*.service /etc/systemd/system/rtpmidid.service
+sudo rm -rf /opt/tabloza /etc/rtpmidid
+sudo rm -f /etc/avahi/services/tabloza-web.service
+sudo systemctl daemon-reload
+
+# 2. (Optional) Delete saved SF2 and password
+sudo rm -rf /var/lib/tabloza
+
+# 3. Reinstall
+curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
+sudo reboot
+
+# 4. Verify
+sudo tabloza-test
+```
+
+During `tabloza-uninstall` you can choose whether to delete `/var/lib/tabloza` (SF2, password).
 
 ### Persistent data
 
