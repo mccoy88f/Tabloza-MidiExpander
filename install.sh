@@ -66,7 +66,9 @@ mkdir -p "${INSTALL_DIR}"
 # --- Clone / aggiornamento sorgenti ---
 if [[ -d "${INSTALL_DIR}/.git" ]]; then
     log "Aggiornamento sorgenti esistenti..."
-    git -C "${INSTALL_DIR}" pull --ff-only origin main
+    git -C "${INSTALL_DIR}" fetch origin main
+    # /opt/tabloza è gestito dall'installer: scarta modifiche locali accidentali.
+    git -C "${INSTALL_DIR}" reset --hard origin/main
 else
     log "Download sorgenti da GitHub..."
     git clone --depth 1 "${REPO_URL}" "${INSTALL_DIR}"
