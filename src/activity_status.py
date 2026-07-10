@@ -53,9 +53,16 @@ def get_audio_activity() -> dict:
     try:
         result = subprocess.run(
             ["pgrep", "-x", "fluidsynth"],
-            capture_output=True, timeout=3,
+            capture_output=True, text=True, timeout=3,
         )
-        fluidsynth_running = result.returncode == 0
+        for pid_str in result.stdout.split():
+            try:
+                status = Path(f"/proc/{pid_str}/status").read_text()
+            except OSError:
+                continue
+            if "State:" in status and "zombie" not in status.split("State:", 1)[1].lower():
+                fluidsynth_running = True
+                break
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 

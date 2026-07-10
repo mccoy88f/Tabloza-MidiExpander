@@ -24,6 +24,7 @@ CONFIG_FILE = DATA_DIR / "config.json"
 SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
+FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
 ROUTING_INTERVAL = 5
 
 logging.basicConfig(
@@ -33,6 +34,7 @@ logging.basicConfig(
 log = logging.getLogger("tabloza.orchestrator")
 
 fluidsynth_proc: subprocess.Popen | None = None
+fluidsynth_log_handle = None
 shutdown = False
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
@@ -84,10 +86,38 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
         "-g", str(fs_cfg.get("gain", 0.5)),
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
-        "-o", "synth.cpu-cores=2",
         "-ni",
         str(sf_path),
     ]
+
+
+def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
+    if not FLUIDSYNTH_LOG.is_file():
+        return []
+    try:
+        return FLUIDSYNTH_LOG.read_text().splitlines()[-lines:]
+    except OSError:
+        return []
+
+
+def _reap_fluidsynth():
+    """Reap child process and close log handle (avoids zombies)."""
+    global fluidsynth_proc, fluidsynth_log_handle
+    if fluidsynth_proc:
+        try:
+            fluidsynth_proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            fluidsynth_proc.kill()
+            fluidsynth_proc.wait(timeout=2)
+        except ChildProcessError:
+            pass
+    fluidsynth_proc = None
+    if fluidsynth_log_handle:
+        try:
+            fluidsynth_log_handle.close()
+        except OSError:
+            pass
+    fluidsynth_log_handle = None
 
 
 def _stop_monitor_proc():
@@ -164,11 +194,7 @@ def stop_fluidsynth():
     if fluidsynth_proc and fluidsynth_proc.poll() is None:
         log.info("Arresto FluidSynth (PID %d)", fluidsynth_proc.pid)
         fluidsynth_proc.terminate()
-        try:
-            fluidsynth_proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            fluidsynth_proc.kill()
-    fluidsynth_proc = None
+    _reap_fluidsynth()
 
 
 def apply_volume(config: dict):
@@ -199,6 +225,12 @@ def stop_foreign_fluidsynth():
         if own_pid and pid == own_pid:
             continue
         try:
+            state = Path(f"/proc/{pid}/status").read_text().splitlines()[1]
+            if "Z (zombie)" in state:
+                continue
+        except (OSError, IndexError):
+            pass
+        try:
             cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("latin-1")
         except OSError:
             cmdline = ""
@@ -213,7 +245,7 @@ def stop_foreign_fluidsynth():
 
 
 def start_fluidsynth(config: dict):
-    global fluidsynth_proc
+    global fluidsynth_proc, fluidsynth_log_handle
     stop_foreign_fluidsynth()
     stop_fluidsynth()
 
@@ -222,16 +254,29 @@ def start_fluidsynth(config: dict):
         log.error("Nessun SoundFont trovato in %s", SOUNDFONTS_DIR)
         return
 
+    FLUIDSYNTH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    fluidsynth_log_handle = open(FLUIDSYNTH_LOG, "a", encoding="utf-8", buffering=1)
+    fluidsynth_log_handle.write(f"\n--- avvio {time.strftime('%Y-%m-%d %H:%M:%S')} {sf.name} ---\n")
+
     cmd = build_fluidsynth_cmd(sf, config)
     log.info("Avvio FluidSynth con %s", sf.name)
     fluidsynth_proc = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
+        stdout=fluidsynth_log_handle,
         stderr=subprocess.STDOUT,
     )
-    time.sleep(2)
+    time.sleep(3)
+    if fluidsynth_proc.poll() is not None:
+        code = fluidsynth_proc.returncode
+        _reap_fluidsynth()
+        log.error("FluidSynth terminato subito (exit %s)", code)
+        for line in _tail_fluidsynth_log():
+            log.error("fluidsynth: %s", line)
+        return
     if not find_fluidsynth_input():
-        log.warning("Porta MIDI ALSA non trovata — verifica con: aconnect -i")
+        log.warning("Porta MIDI ALSA non trovata — ultimo log FluidSynth:")
+        for line in _tail_fluidsynth_log(8):
+            log.warning("fluidsynth: %s", line)
     route_rtpmidi_to_fluidsynth()
     apply_volume(config)
 
@@ -270,7 +315,11 @@ def main():
 
     while not shutdown:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
-            log.warning("FluidSynth terminato inaspettatamente, riavvio...")
+            code = fluidsynth_proc.returncode
+            log.warning("FluidSynth terminato inaspettatamente (exit %s), riavvio...", code)
+            for line in _tail_fluidsynth_log(8):
+                log.warning("fluidsynth: %s", line)
+            _reap_fluidsynth()
             config = load_config()
             start_fluidsynth(config)
         route_rtpmidi_to_fluidsynth()

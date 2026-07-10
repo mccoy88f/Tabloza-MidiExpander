@@ -15,6 +15,12 @@ fi
 # Aggiungi utente root al gruppo audio se necessario
 usermod -aG audio root 2>/dev/null || true
 
+# Modulo sequencer ALSA richiesto da FluidSynth (-m alsa_seq)
+modprobe snd-seq 2>/dev/null || true
+if [[ -f /etc/modules ]] && ! grep -q '^snd-seq' /etc/modules 2>/dev/null; then
+    echo snd-seq >> /etc/modules
+fi
+
 # ALSA: period size ridotto per bassa latenza
 ASOUNDRC="/etc/asound.conf"
 if [[ ! -f "$ASOUNDRC" ]] || ! grep -q "tabloza" "$ASOUNDRC" 2>/dev/null; then

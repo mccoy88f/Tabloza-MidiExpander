@@ -131,15 +131,27 @@ fi
 
 # --- Audio ---
 hdr "Audio"
-if pgrep -x fluidsynth >/dev/null 2>&1; then
-    green "FluidSynth in esecuzione (PID $(pgrep -x fluidsynth | tr '\n' ' '))"
-    while read -r line; do
-        echo "       $line"
-        if [[ "$line" == *fluidsynth* && "$line" != *"/var/lib/tabloza/soundfonts/"* ]]; then
-            yellow "FluidSynth di sistema in conflitto — arrestalo:"
-            echo "       sudo systemctl mask fluidsynth; sudo kill ${line%% *}"
-        fi
-    done < <(pgrep -a fluidsynth 2>/dev/null || true)
+FS_ALIVE=0
+while read -r pid; do
+    [[ -z "$pid" ]] && continue
+    state=$(awk '/^State:/{print $2}' "/proc/${pid}/status" 2>/dev/null || echo "")
+    if [[ "$state" == "Z" ]]; then
+        yellow "FluidSynth zombie (PID ${pid}) — riavvia: sudo systemctl restart tabloza-orchestrator"
+        continue
+    fi
+    line=$(ps -p "$pid" -o args= 2>/dev/null || true)
+    echo "       ${pid} ${line}"
+    if [[ "$line" == *"/var/lib/tabloza/soundfonts/"* ]]; then
+        FS_ALIVE=$((FS_ALIVE + 1))
+    elif [[ "$line" == *fluidsynth* ]]; then
+        yellow "FluidSynth di sistema in conflitto — arrestalo:"
+        echo "       sudo systemctl mask fluidsynth; sudo kill ${pid}"
+    fi
+done < <(pgrep -x fluidsynth 2>/dev/null || true)
+if [[ "$FS_ALIVE" -gt 0 ]]; then
+    green "FluidSynth Tabloza attivo"
+elif pgrep -x fluidsynth >/dev/null 2>&1; then
+    yellow "Nessun FluidSynth Tabloza valido in esecuzione"
 else
     red "FluidSynth non in esecuzione"
 fi
@@ -194,6 +206,11 @@ if [[ -n "$FS_ADDR" ]]; then
     fi
 else
     yellow "Porta input FluidSynth non trovata"
+    if [[ -f /run/tabloza/fluidsynth.log ]]; then
+        echo "       Ultimo log FluidSynth:"
+        tail -8 /run/tabloza/fluidsynth.log | sed 's/^/       /'
+        echo "       → sudo journalctl -u tabloza-orchestrator -n 20 --no-pager"
+    fi
 fi
 
 if [[ -f /run/tabloza/last_midi_event ]]; then
