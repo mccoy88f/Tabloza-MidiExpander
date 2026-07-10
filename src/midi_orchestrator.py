@@ -18,11 +18,12 @@ from pathlib import Path
 
 from activity_status import touch_midi_activity
 from fluidsynth_client import (
+    bind_shell,
     clear_soundfont_state,
     load_soundfont,
     read_soundfont_state,
     reset_synth,
-    server_ready,
+    shell_bound,
     write_soundfont_state,
 )
 from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7, send_test_note
@@ -86,8 +87,6 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
         "-o", "synth.dynamic-sample-loading=yes",
-        "-s", "-p", "9800",
-        "-ni",
     ]
 
 
@@ -110,12 +109,15 @@ def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
         except OSError:
             pass
     fluidsynth_log_fd = open(FLUIDSYNTH_LOG, "ab", buffering=0)
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.PIPE,
         stdout=fluidsynth_log_fd,
         stderr=subprocess.STDOUT,
         start_new_session=True,
     )
+    bind_shell(proc.stdin)
+    return proc
 
 
 def _wait_fluidsynth_ready(timeout_sec: float) -> tuple[bool, str]:
@@ -123,12 +125,12 @@ def _wait_fluidsynth_ready(timeout_sec: float) -> tuple[bool, str]:
     while time.time() < deadline:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
             return False, "crashed"
-        if find_fluidsynth_input() and server_ready():
+        if find_fluidsynth_input() and shell_bound():
             return True, "ok"
         time.sleep(0.5)
     if fluidsynth_proc and fluidsynth_proc.poll() is not None:
         return False, "crashed"
-    if find_fluidsynth_input() and server_ready():
+    if find_fluidsynth_input() and shell_bound():
         return True, "ok"
     if fluidsynth_proc and fluidsynth_proc.poll() is None:
         return False, "loading"
@@ -169,11 +171,12 @@ def _reap_fluidsynth():
         except OSError:
             pass
     fluidsynth_log_fd = None
+    bind_shell(None)
     clear_soundfont_state()
 
 
 def _is_tabloza_fluidsynth_cmdline(cmdline: str) -> bool:
-    return "midi.autoconnect=false" in cmdline or "9800" in cmdline
+    return "midi.autoconnect=false" in cmdline
 
 
 def _stop_monitor_proc():
@@ -300,6 +303,10 @@ def fluidsynth_engine_running() -> bool:
     return fluidsynth_proc is not None and fluidsynth_proc.poll() is None
 
 
+def _process_alive() -> bool:
+    return fluidsynth_engine_running()
+
+
 def apply_soundfont_from_config() -> bool:
     """Carica o scarica il SoundFont indicato in config (non riavvia FluidSynth)."""
     config = load_config()
@@ -308,14 +315,14 @@ def apply_soundfont_from_config() -> bool:
     if not fluidsynth_engine_running():
         log.warning("Richiesto caricamento SF2 ma FluidSynth non è attivo")
         return False
-    if not server_ready():
-        log.warning("Server FluidSynth TCP non pronto")
+    if not shell_bound():
+        log.warning("Shell FluidSynth non collegata")
         return False
 
     with soundfont_load_lock:
         write_soundfont_state(selected=selected, loading=True, error=None)
         if not selected:
-            ok, detail = reset_synth()
+            ok, detail = reset_synth(_process_alive)
             if ok:
                 write_soundfont_state(loaded="", loading=False, error=None)
                 log.info("SoundFont scaricato (reset synth)")
@@ -325,7 +332,7 @@ def apply_soundfont_from_config() -> bool:
             return False
 
         path = SOUNDFONTS_DIR / selected
-        ok, detail = load_soundfont(path)
+        ok, detail = load_soundfont(path, _process_alive)
         if ok:
             write_soundfont_state(loaded=selected, loading=False, error=None)
             log.info("SoundFont caricato: %s", selected)

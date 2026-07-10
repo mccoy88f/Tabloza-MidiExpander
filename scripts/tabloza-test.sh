@@ -69,13 +69,19 @@ hdr "SoundFont"
 DATA="/var/lib/tabloza"
 if [[ -f "${DATA}/config.json" ]]; then
     ACTIVE=$(python3 -c "import json; print(json.load(open('${DATA}/config.json')).get('active_soundfont',''))" 2>/dev/null || true)
+    LOADED=$(python3 -c "import json; print(json.load(open('/run/tabloza/soundfont_state.json')).get('loaded',''))" 2>/dev/null || true)
+    LOADING=$(python3 -c "import json; print(json.load(open('/run/tabloza/soundfont_state.json')).get('loading',False))" 2>/dev/null || true)
     COUNT=$(find "${DATA}/soundfonts" -name '*.sf2' 2>/dev/null | wc -l | tr -d ' ')
-    if [[ -n "$ACTIVE" ]]; then
-        green "SF2 attivo: ${ACTIVE}"
+    if [[ -n "$LOADED" ]]; then
+        green "SF2 caricato in FluidSynth: ${LOADED}"
+    elif [[ "$LOADING" == "True" ]]; then
+        yellow "SF2 in caricamento: ${ACTIVE:-?}"
+    elif [[ -n "$ACTIVE" ]]; then
+        yellow "SF2 selezionato ma non caricato: ${ACTIVE} — premi Carica nel pannello web"
     elif [[ "$COUNT" -gt 0 ]]; then
-        yellow "SF2 in libreria (${COUNT}) ma nessuno selezionato — carica dal pannello web"
+        yellow "SF2 in libreria (${COUNT}) — seleziona e carica dal pannello web"
     else
-        yellow "Nessun SF2 — caricalo da http://$(hostname -I | awk '{print $1}')${WEB_PORT:+:${WEB_PORT}}"
+        yellow "Nessun SF2 — caricalo da http://$(hostname -I | awk '{print $1}')"
     fi
 else
     yellow "Config non trovata in ${DATA}"
@@ -144,7 +150,7 @@ while read -r pid; do
     fi
     line=$(ps -p "$pid" -o args= 2>/dev/null || true)
     echo "       ${pid} ${line}"
-    if [[ "$line" == *"/var/lib/tabloza/soundfonts/"* ]]; then
+    if [[ "$line" == *"midi.autoconnect=false"* ]] || [[ "$line" == *"/var/lib/tabloza/soundfonts/"* ]]; then
         FS_ALIVE=$((FS_ALIVE + 1))
     elif [[ "$line" == *fluidsynth* ]]; then
         yellow "FluidSynth di sistema in conflitto — arrestalo:"
