@@ -85,7 +85,9 @@ function renderMidiInputs(midi) {
   midi.sources.forEach((src) => {
     const li = document.createElement("li");
     li.className = "midi-item";
-    const name = src.type === "gpio" ? t("midiGpioName") : src.name;
+    const name = src.type === "gpio" ? t("midiGpioName") : (
+      src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name
+    );
     const badge = src.status === "planned"
       ? `<span class="badge badge-planned">${t("badgePlanned")}</span>`
       : src.status === "connected"
@@ -118,18 +120,27 @@ function renderActivity(activity, midi, synth, soundfont) {
   const valAudio = document.getElementById("value-audio-out");
 
   const engineRunning = !!(synth?.engine_running);
-  dotSynth.className = "activity-dot " + (engineRunning ? "idle" : "off");
+  const midiReady = !!(synth?.midi_ready);
+  dotSynth.className = "activity-dot " + (
+    engineRunning ? (midiReady ? "idle" : "active pulse") : "off"
+  );
   valSynth.textContent = engineRunning
-    ? (synth?.midi_ready ? t("synthReady") : t("synthStarting"))
+    ? (midiReady ? t("synthReady") : t("synthMidiPending"))
     : t("synthStopped");
 
   const sf2Loaded = soundfont?.loaded || "";
   const sf2Loading = !!soundfont?.loading;
+  const sf2Error = soundfont?.error;
   dotSf2.className = "activity-dot " + (
-    sf2Loading ? "active pulse" : sf2Loaded ? "idle" : soundfont?.selected ? "off" : "off"
+    sf2Error ? "off"
+      : sf2Loading ? "active pulse"
+        : sf2Loaded ? "idle"
+          : "off"
   );
-  if (sf2Loading) {
-    valSf2.textContent = t("sf2Loading", { name: soundfont?.selected || "…" });
+  if (sf2Error) {
+    valSf2.textContent = sf2Error;
+  } else if (sf2Loading) {
+    valSf2.textContent = t("sf2LoadingLarge", { name: soundfont?.selected || "…" });
   } else if (sf2Loaded) {
     valSf2.textContent = sf2Loaded;
   } else if (soundfont?.selected) {

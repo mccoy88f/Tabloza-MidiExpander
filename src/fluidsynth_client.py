@@ -4,7 +4,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import IO
 
 log = logging.getLogger("tabloza.fluidsynth")
 
@@ -18,6 +17,7 @@ def _default_state() -> dict:
         "loaded": "",
         "loading": False,
         "error": None,
+        "load_started_at": None,
     }
 
 
@@ -78,7 +78,7 @@ def load_soundfont(path: Path, process_alive) -> tuple[bool, str]:
         return False, f"File non trovato: {path}"
     wait_sec = load_timeout_for(path)
     log.info("Caricamento SF2 %s (attesa %.0fs)", path.name, wait_sec)
-    ok, detail = send_command(f'load "{path}" reset')
+    ok, detail = send_command(f"load {path} reset")
     if not ok:
         return ok, detail
     deadline = time.time() + wait_sec

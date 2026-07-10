@@ -21,8 +21,10 @@ from fluidsynth_client import (
     bind_shell,
     clear_soundfont_state,
     load_soundfont,
+    load_timeout_for,
     read_soundfont_state,
     reset_synth,
+    send_command,
     shell_bound,
     write_soundfont_state,
 )
@@ -117,6 +119,7 @@ def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
         start_new_session=True,
     )
     bind_shell(proc.stdin)
+    send_command("gain 0.5")
     return proc
 
 
@@ -320,7 +323,10 @@ def apply_soundfont_from_config() -> bool:
         return False
 
     with soundfont_load_lock:
-        write_soundfont_state(selected=selected, loading=True, error=None)
+        write_soundfont_state(
+            selected=selected, loading=True, error=None,
+            load_started_at=time.time(),
+        )
         if not selected:
             ok, detail = reset_synth(_process_alive)
             if ok:
@@ -401,6 +407,28 @@ def handle_sigterm(signum, frame):
     stop_fluidsynth()
 
 
+def _check_soundfont_load_watchdog():
+    """Sblocca stato 'loading' se FluidSynth è morto o il caricamento è troppo lungo."""
+    state = read_soundfont_state()
+    if not state.get("loading"):
+        return
+    started = state.get("load_started_at")
+    selected = state.get("selected", "")
+    if not fluidsynth_engine_running():
+        write_soundfont_state(
+            loading=False, loaded="", error="FluidSynth terminato durante il caricamento",
+        )
+        return
+    if started and selected:
+        path = SOUNDFONTS_DIR / selected
+        max_wait = load_timeout_for(path) + 30 if path.is_file() else 300
+        if time.time() - float(started) > max_wait:
+            write_soundfont_state(
+                loading=False, loaded="",
+                error=f"Timeout caricamento {selected} ({int(max_wait)}s)",
+            )
+
+
 def main():
     signal.signal(signal.SIGHUP, handle_sighup)
     signal.signal(signal.SIGUSR1, handle_sigusr1)
@@ -424,6 +452,7 @@ def main():
             start_fluidsynth(load_config())
         else:
             route_rtpmidi_to_fluidsynth()
+            _check_soundfont_load_watchdog()
         time.sleep(ROUTING_INTERVAL)
 
     log.info("Orchestratore arrestato.")

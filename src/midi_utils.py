@@ -120,13 +120,17 @@ def get_midi_status() -> dict:
     rtp_sources = find_rtpmidid_outputs()
     active_routes = get_active_routes()
     routes = []
-    for src in rtp_sources:
-        connected = any(r["from"] == src["address"] for r in active_routes)
+    if rtp_sources:
+        any_connected = any(
+            any(r["from"] == src["address"] for r in active_routes)
+            for src in rtp_sources
+        )
         routes.append({
             "type": "rtpmidi",
-            "name": src["client"],
-            "address": src["address"],
-            "status": "connected" if connected else "available",
+            "name": "rtpmidid",
+            "address": rtp_sources[0]["address"],
+            "status": "connected" if any_connected else "available",
+            "port_count": len(rtp_sources),
         })
     routes.append({
         "type": "gpio",
