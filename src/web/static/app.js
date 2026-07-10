@@ -658,7 +658,7 @@ document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
       const div = document.createElement("div");
       div.className = "wifi-item";
       div.innerHTML = `<span>${escapeHtml(n.ssid)}</span><span class="wifi-signal">${n.signal}% ${n.security ? "🔒" : ""}</span>`;
-      div.addEventListener("click", () => showWifiForm(n.ssid));
+      div.addEventListener("click", () => showWifiForm(n.ssid, n.security || ""));
       list.appendChild(div);
     });
   } catch (err) {
@@ -668,23 +668,39 @@ document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   }
 });
 
-function showWifiForm(ssid) {
+function showWifiForm(ssid, security = "") {
+  const secured = !!(security && security !== "--");
   const list = document.getElementById("wifi-list");
   const form = document.createElement("div");
   form.className = "wifi-form";
-  form.innerHTML = `
+  form.innerHTML = secured
+    ? `
     <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong></p>
-    <input type="password" id="wifi-password" placeholder="${t("wifiPassword")}">
+    <input type="password" id="wifi-password" placeholder="${t("wifiPassword")}" required>
+    <button class="btn btn-primary" id="wifi-connect-btn">${t("connect")}</button>`
+    : `
+    <p>${t("connectTo")} <strong>${escapeHtml(ssid)}</strong> (${t("wifiOpen")})</p>
     <button class="btn btn-primary" id="wifi-connect-btn">${t("connect")}</button>`;
   list.prepend(form);
   document.getElementById("wifi-connect-btn").addEventListener("click", async () => {
-    const pw = document.getElementById("wifi-password").value;
+    const pwEl = document.getElementById("wifi-password");
+    const pw = pwEl ? pwEl.value : "";
+    if (secured && !pw) {
+      const msg = document.getElementById("wifi-msg");
+      msg.textContent = t("wifiPasswordRequired");
+      msg.className = "msg err";
+      msg.classList.remove("hidden");
+      return;
+    }
     const msg = document.getElementById("wifi-msg");
     msg.textContent = t("connecting");
     msg.className = "msg";
     msg.classList.remove("hidden");
     try {
-      await api("/api/wifi/connect", { method: "POST", body: JSON.stringify({ ssid, password: pw }) });
+      await api("/api/wifi/connect", {
+        method: "POST",
+        body: JSON.stringify({ ssid, password: pw, security }),
+      });
       msg.textContent = t("connectedWifi", { ssid });
       msg.className = "msg ok";
       refreshStatus();

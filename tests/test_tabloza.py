@@ -162,16 +162,34 @@ class TestWifiConnect(unittest.TestCase):
     def test_connect_with_password(self, mock_prepare, mock_run):
         mock_prepare.return_value = (True, "ok")
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        ok, err = connect_wifi_network("MyNet", "secret123")
+        ok, err = connect_wifi_network("MyNet", "secret123", "WPA2")
         self.assertTrue(ok)
         self.assertIsNone(err)
-        connect_cmd = mock_run.call_args_list[-3][0][0]
-        self.assertIn("device", connect_cmd)
-        self.assertIn("wifi", connect_cmd)
-        self.assertIn("connect", connect_cmd)
-        self.assertIn("MyNet", connect_cmd)
-        self.assertIn("password", connect_cmd)
-        self.assertIn("secret123", connect_cmd)
+        cmds = [c[0][0] for c in mock_run.call_args_list]
+        add_cmd = next(c for c in cmds if "add" in c)
+        up_cmd = next(c for c in cmds if "up" in c and "connection" in c)
+        self.assertIn("wifi-sec.psk", add_cmd)
+        self.assertIn("secret123", add_cmd)
+        self.assertIn("up", up_cmd)
+
+    @patch("wifi_utils.prepare_wifi_scan")
+    def test_connect_secured_without_password(self, mock_prepare):
+        mock_prepare.return_value = (True, "ok")
+        ok, err = connect_wifi_network("MyNet", "", "WPA2")
+        self.assertFalse(ok)
+        self.assertIn("Password", err or "")
+
+    @patch("wifi_utils._run")
+    @patch("wifi_utils.prepare_wifi_scan")
+    def test_connect_open_network(self, mock_prepare, mock_run):
+        mock_prepare.return_value = (True, "ok")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = connect_wifi_network("OpenNet", "", "")
+        self.assertTrue(ok)
+        cmds = [c[0][0] for c in mock_run.call_args_list]
+        add_cmd = next(c for c in cmds if "add" in c)
+        self.assertIn("wifi-sec.key-mgmt", add_cmd)
+        self.assertIn("none", add_cmd)
 
 
 class TestUpdateUtils(unittest.TestCase):

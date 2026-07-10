@@ -467,10 +467,11 @@ def api_wifi_connect():
     data = request.get_json(silent=True) or {}
     ssid = data.get("ssid", "").strip()
     password = data.get("password", "")
+    security = data.get("security", "")
     if not ssid:
         return jsonify({"error": "SSID richiesto"}), 400
 
-    ok, err = connect_wifi_network(ssid, password)
+    ok, err = connect_wifi_network(ssid, password, security)
     if not ok:
         return jsonify({"error": f"Connessione fallita: {err}"}), 500
 

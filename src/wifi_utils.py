@@ -123,11 +123,35 @@ def _safe_conn_name(ssid: str) -> str:
     return f"tabloza-wifi-{safe}"
 
 
-def connect_wifi_network(ssid: str, password: str = "") -> tuple[bool, str | None]:
+def _delete_wifi_profiles_for_ssid(ssid: str) -> None:
+    """Remove saved NM profiles for this SSID so connect does not reuse stale secrets."""
+    result = _run(
+        ["nmcli", "-t", "-f", "NAME,802-11-wireless.ssid", "connection", "show"],
+        timeout=10,
+    )
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if len(fields) >= 2 and fields[1] == ssid and fields[0] != HOTSPOT_CONN:
+            _run(["nmcli", "connection", "delete", fields[0]], timeout=10)
+
+
+def _ssid_requires_password(security: str) -> bool:
+    sec = (security or "").strip()
+    return bool(sec and sec != "--")
+
+
+def connect_wifi_network(
+    ssid: str,
+    password: str = "",
+    security: str = "",
+) -> tuple[bool, str | None]:
     """Connect wlan0 to an infrastructure WiFi network (stores credentials in NM)."""
     ssid = ssid.strip()
     if not ssid:
         return False, "SSID richiesto"
+
+    if _ssid_requires_password(security) and not password:
+        return False, "Password WiFi richiesta per questa rete"
 
     ok, detail = prepare_wifi_scan()
     if not ok:
@@ -137,17 +161,27 @@ def connect_wifi_network(ssid: str, password: str = "") -> tuple[bool, str | Non
     _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=15)
 
     conn_name = _safe_conn_name(ssid)
+    _delete_wifi_profiles_for_ssid(ssid)
     _run(["nmcli", "connection", "delete", conn_name], timeout=10)
 
-    cmd = [
-        "nmcli", "--wait", "45", "device", "wifi", "connect", ssid,
+    add_cmd = [
+        "nmcli", "connection", "add", "type", "wifi",
+        "con-name", conn_name,
         "ifname", WLAN_IFACE,
-        "name", conn_name,
+        "ssid", ssid,
     ]
     if password:
-        cmd += ["password", password]
+        add_cmd += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", password]
+    else:
+        add_cmd += ["wifi-sec.key-mgmt", "none"]
 
-    result = _run(cmd, timeout=60)
+    add_result = _run(add_cmd, timeout=30)
+    if add_result.returncode != 0:
+        err = (add_result.stderr or add_result.stdout or "creazione profilo fallita").strip()
+        log_event("wifi", f"Connessione fallita: {err}", "error")
+        return False, err
+
+    result = _run(["nmcli", "--wait", "45", "connection", "up", conn_name], timeout=60)
     if result.returncode != 0:
         err = (result.stderr or result.stdout or "connessione fallita").strip()
         log_event("wifi", f"Connessione fallita: {err}", "error")
