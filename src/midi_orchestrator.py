@@ -98,10 +98,12 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
     from midi_utils import volume_to_gain
     vol = normalize_volume(config.get("volume", 100))
     initial_gain = volume_to_gain(vol, max_gain)
+    from audio_utils import resolve_audio_device
+    audio_dev = resolve_audio_device(fs_cfg.get("audio_device", "plughw:0,0"))
     return [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
-        "-o", f"audio.alsa.device={fs_cfg.get('audio_device', 'plughw:0,0')}",
+        "-o", f"audio.alsa.device={audio_dev}",
         "-r", str(fs_cfg.get("sample_rate", 44100)),
         "-z", str(fs_cfg.get("period_size", 512)),
         "-c", str(fs_cfg.get("period_count", 6)),

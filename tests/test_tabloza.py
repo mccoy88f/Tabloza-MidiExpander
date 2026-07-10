@@ -19,9 +19,11 @@ if "alsaaudio" not in sys.modules:
         sys.modules["alsaaudio"] = MagicMock()
 
 from audio_utils import (  # noqa: E402
+    alsa_device_for_card,
     card_from_audio_device,
     list_playback_devices,
     normalize_volume,
+    resolve_audio_device,
     volume_to_alsa_percent,
 )
 from event_log import clear_events, log_event, read_events  # noqa: E402
@@ -68,15 +70,25 @@ class TestAudioUtils(unittest.TestCase):
         self.assertEqual(volume_to_alsa_percent(100), 100)
         self.assertEqual(volume_to_alsa_percent(64), 64)
 
+    def test_alsa_device_hdmi_uses_plughw(self):
+        self.assertEqual(alsa_device_for_card(2, 0, "vc4hdmi0"), "plughw:2,0")
+        self.assertEqual(alsa_device_for_card(1, 0, "USB AUDIO"), "hw:1,0")
+        self.assertEqual(alsa_device_for_card(0, 0, "Headphones"), "plughw:0,0")
+
+    def test_resolve_audio_device_hdmi(self):
+        with patch("audio_utils._card_names", return_value=["Headphones", "USB", "vc4hdmi0"]):
+            self.assertEqual(resolve_audio_device("hw:2,0"), "plughw:2,0")
+
     @patch("audio_utils.alsaaudio.cards")
     def test_list_playback_devices(self, mock_cards):
-        mock_cards.return_value = ["Headphones", "USB Audio Device"]
+        mock_cards.return_value = ["Headphones", "USB Audio Device", "vc4hdmi0"]
         devices = list_playback_devices()
-        self.assertEqual(len(devices), 2)
+        self.assertEqual(len(devices), 3)
         self.assertEqual(devices[0]["id"], "plughw:0,0")
         self.assertEqual(devices[1]["id"], "hw:1,0")
         self.assertEqual(devices[1]["sample_rate"], 48000)
-        self.assertIn("USB Audio Device", devices[1]["name"])
+        self.assertEqual(devices[2]["id"], "plughw:2,0")
+        self.assertIn("vc4hdmi0", devices[2]["name"])
 
 
 class TestStartupSoundfont(unittest.TestCase):

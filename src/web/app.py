@@ -23,6 +23,7 @@ from audio_utils import (  # noqa: E402
     device_label,
     list_playback_devices,
     play_stereo_tone,
+    resolve_audio_device,
     sample_rate_for_device,
 )
 from fluidsynth_client import read_soundfont_state  # noqa: E402
@@ -160,7 +161,7 @@ def api_status():
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
         "audio": {
-            "device": config.get("fluidsynth", {}).get("audio_device", "plughw:0,0"),
+            "device": resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")),
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
         },
     })
@@ -295,7 +296,7 @@ def api_volume():
 @require_auth
 def api_audio_devices():
     config = load_config()
-    current = config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")
+    current = resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0"))
     devices = list_playback_devices()
     current_label = device_label(current, devices)
     if current and current not in {d["id"] for d in devices}:
@@ -325,24 +326,25 @@ def api_audio_select():
 
     config = load_config()
     card = card_from_audio_device(device)
-    config.setdefault("fluidsynth", {})["audio_device"] = device
+    resolved = resolve_audio_device(device)
+    config.setdefault("fluidsynth", {})["audio_device"] = resolved
     config["fluidsynth"]["alsa_card"] = card
-    config["fluidsynth"]["sample_rate"] = sample_rate_for_device(device)
+    config["fluidsynth"]["sample_rate"] = sample_rate_for_device(resolved)
     save_config(config)
-    log_event("web", f"Uscita audio → {device}")
+    log_event("web", f"Uscita audio → {resolved}")
     if not trigger_orchestrator_reload_fluidsynth():
         return jsonify({"error": "Orchestrator non attivo"}), 503
     if not wait_fluidsynth_midi_ready(50.0):
         return jsonify({
-            "error": "FluidSynth non ripartito con la nuova uscita — verifica il dispositivo USB e i log",
+            "error": "FluidSynth non ripartito con la nuova uscita — verifica dispositivo e log (HDMI richiede plughw)",
         }), 503
 
     ok_alsa, alsa_detail = apply_output_volume(config.get("volume", 100), config)
 
     return jsonify({
         "ok": True,
-        "device": device,
-        "label": device_label(device, devices),
+        "device": resolved,
+        "label": device_label(resolved, devices),
         "alsa_card": card,
         "alsa": alsa_detail,
         "alsa_ok": ok_alsa,
@@ -438,7 +440,7 @@ def api_audio_test():
 def api_audio_test_hardware():
     """Play a sine tone directly on the configured ALSA output (bypasses FluidSynth/MIDI)."""
     cfg = load_config().get("fluidsynth", {})
-    device = cfg.get("audio_device", "plughw:0,0")
+    device = resolve_audio_device(cfg.get("audio_device", "plughw:0,0"))
     rate = int(cfg.get("sample_rate", sample_rate_for_device(device)))
     label = device_label(device)
     try:

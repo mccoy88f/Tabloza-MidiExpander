@@ -18,11 +18,36 @@ def card_from_audio_device(device: str) -> int:
     return int(match.group(1)) if match else 0
 
 
-def alsa_device_for_card(card: int, device: int = 0) -> str:
-    """USB cards often need hw: at 48 kHz; built-in jack tolerates plughw:."""
+def _card_names() -> list[str]:
+    try:
+        return list(alsaaudio.cards())
+    except alsaaudio.ALSAAudioError:
+        return []
+
+
+def _needs_plughw(card: int, card_name: str = "") -> bool:
+    """Jack and HDMI (IEC958) need plughw; USB DACs often work with hw:."""
     if card == 0:
-        return f"plughw:{card},{device}"
-    return f"hw:{card},{device}"
+        return True
+    name = card_name.lower()
+    return "hdmi" in name or "vc4" in name
+
+
+def alsa_device_for_card(card: int, device: int = 0, card_name: str | None = None) -> str:
+    if card_name is None:
+        names = _card_names()
+        card_name = names[card] if card < len(names) else ""
+    prefix = "plughw" if _needs_plughw(card, card_name) else "hw"
+    return f"{prefix}:{card},{device}"
+
+
+def resolve_audio_device(device: str) -> str:
+    """Map stored device id to the ALSA id FluidSynth can open (e.g. hw:2,0 → plughw:2,0 for HDMI)."""
+    match = AUDIO_DEVICE_ID_RE.match(device.strip())
+    if not match:
+        return device.strip()
+    card, dev = int(match.group(1)), int(match.group(2))
+    return alsa_device_for_card(card, dev)
 
 
 def sample_rate_for_device(device: str, default: int = 44100) -> int:
@@ -52,7 +77,7 @@ def list_playback_devices() -> list[dict]:
     devices = []
     for card_i, name in enumerate(cards):
         dev_i = 0
-        device_id = alsa_device_for_card(card_i, dev_i)
+        device_id = alsa_device_for_card(card_i, dev_i, name)
         devices.append({
             "card": card_i,
             "device": dev_i,
