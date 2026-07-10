@@ -34,7 +34,7 @@ Lo script:
 2. Installa dipendenze di sistema
 3. Installa e configura `rtpmidid`, FluidSynth, NetworkManager
 4. Deploya servizi systemd e applicazione web
-5. Imposta hostname `tabloza-md` (mDNS: `tabloza-md.local`)
+5. Imposta hostname `tabloza-me` (mDNS: `tabloza-me.local`)
 6. Imposta password predefinita, secret key e dati persistenti
 7. Riavvia i servizi (reboot consigliato al termine)
 
@@ -58,8 +58,8 @@ Dispositivo headless: la resilienza di rete è critica.
 
 ### Identità di rete
 
-- **Hostname / mDNS:** `tabloza-md.local`
-- **RTP-MIDI:** visibile come `tabloza-md` via Avahi/mDNS
+- **Hostname / mDNS:** `tabloza-me.local`
+- **RTP-MIDI:** visibile come `tabloza-me` via Avahi/mDNS
 - **Monitor WiFi:** servizio continuo con riconnessione/hotspot ogni 30 s
 
 ---

@@ -2,7 +2,7 @@
 
 ## Accesso web
 
-### Non raggiungo tabloza-md.local
+### Non raggiungo tabloza-me.local
 
 1. Verifica che il dispositivo sia acceso e connesso alla stessa rete del telefono
 2. In modalità hotspot, connettiti a `Tabloza-MidiExpander` e apri `http://192.168.4.1`
@@ -27,7 +27,7 @@
 
 1. `systemctl status rtpmidid` — deve essere attivo
 2. `systemctl status avahi-daemon` — mDNS attivo
-3. Hostname: `tabloza-md.local`
+3. Hostname: `tabloza-me.local`
 4. Riavvia: `sudo systemctl restart rtpmidid avahi-daemon`
 
 ### MIDI di rete non produce suono

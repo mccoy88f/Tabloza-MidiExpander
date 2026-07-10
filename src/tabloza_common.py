@@ -7,7 +7,7 @@ from pathlib import Path
 
 import bcrypt
 
-HOSTNAME = "tabloza-md"
+HOSTNAME = "tabloza-me"
 MDNS_NAME = f"{HOSTNAME}.local"
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))

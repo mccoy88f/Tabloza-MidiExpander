@@ -10,7 +10,7 @@ SOUNDFONTS_DIR="${DATA_DIR}/soundfonts"
 CONFIG_FILE="${DATA_DIR}/config.json"
 AUTH_FILE="${DATA_DIR}/auth.json"
 DEFAULT_PASSWORD="tabloza"
-HOSTNAME="tabloza-md"
+HOSTNAME="tabloza-me"
 HOTSPOT_SSID="Tabloza-MidiExpander"
 HOTSPOT_IP="192.168.4.1"
 SECRET_FILE="${DATA_DIR}/secret.key"
@@ -101,7 +101,7 @@ if [[ ! -f "${SECRET_FILE}" ]]; then
     chmod 600 "${SECRET_FILE}"
 fi
 
-# --- Hostname e mDNS (tabloza-md.local) ---
+# --- Hostname e mDNS (tabloza-me.local) ---
 log "Configurazione hostname ${HOSTNAME} (mDNS: ${HOSTNAME}.local)..."
 hostnamectl set-hostname "${HOSTNAME}"
 sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts 2>/dev/null || \

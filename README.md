@@ -23,7 +23,7 @@ Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows)
 | Funzione | Descrizione |
 |----------|-------------|
 | **Sintesi SF2** | FluidSynth con libreria SoundFont gestibile da web |
-| **RTP-MIDI** | Visibile in rete come `tabloza-md.local` (rtpmidid + Avahi) |
+| **RTP-MIDI** | Visibile in rete come `tabloza-me.local` (rtpmidid + Avahi) |
 | **Pannello web** | UI responsive in italiano e inglese |
 | **Upload SF2** | Drag-and-drop con barra di progresso; auto-attivazione |
 | **Volume master** | Persistente tra reboot |
@@ -34,7 +34,7 @@ Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows)
 
 ### Interfaccia web (UI)
 
-Accesso: **http://tabloza-md.local** (o `http://192.168.4.1` in modalità hotspot)
+Accesso: **http://tabloza-me.local** (o `http://192.168.4.1` in modalità hotspot)
 
 La UI è **bilingue** (IT/EN): usa i pulsanti **IT** / **EN** in alto. La lingua scelta viene salvata nel browser.
 
@@ -63,7 +63,7 @@ sudo reboot
 ### Primo accesso
 
 1. Connettiti alla rete del dispositivo o all'hotspot `Tabloza-MidiExpander`
-2. Apri **http://tabloza-md.local**
+2. Apri **http://tabloza-me.local**
 3. Password: `tabloza`
 
 ### Dati persistenti
@@ -109,7 +109,7 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 | Feature | Description |
 |---------|-------------|
 | **SF2 synthesis** | FluidSynth with web-managed SoundFont library |
-| **RTP-MIDI** | Discoverable as `tabloza-md.local` (rtpmidid + Avahi) |
+| **RTP-MIDI** | Discoverable as `tabloza-me.local` (rtpmidid + Avahi) |
 | **Web panel** | Responsive UI in Italian and English |
 | **SF2 upload** | Drag-and-drop with progress bar; auto-activation |
 | **Master volume** | Persists across reboots |
@@ -120,7 +120,7 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 
 ### Web interface (UI)
 
-Access: **http://tabloza-md.local** (or `http://192.168.4.1` in hotspot mode)
+Access: **http://tabloza-me.local** (or `http://192.168.4.1` in hotspot mode)
 
 The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Language preference is saved in the browser.
 
@@ -149,7 +149,7 @@ sudo reboot
 ### First access
 
 1. Connect to the device network or hotspot `Tabloza-MidiExpander`
-2. Open **http://tabloza-md.local**
+2. Open **http://tabloza-me.local**
 3. Password: `tabloza`
 
 ### Persistent data
