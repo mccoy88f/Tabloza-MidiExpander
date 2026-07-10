@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Unit tests for Tabloza core helpers."""
 
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +16,9 @@ from audio_utils import (  # noqa: E402
     list_playback_devices,
     volume_to_alsa_percent,
 )
+from event_log import clear_events, log_event, read_events  # noqa: E402
 from soundfont_config import startup_soundfont_name  # noqa: E402
+from wifi_utils import parse_nmcli_terse_fields  # noqa: E402
 
 
 APLAY_SAMPLE = """\
@@ -71,6 +75,33 @@ class TestStartupSoundfont(unittest.TestCase):
         root = Path("/tmp/tabloza-test-sf2-missing")
         config = {"default_soundfont": "nope.sf2", "active_soundfont": "also.sf2"}
         self.assertEqual(startup_soundfont_name(config, root), "")
+
+
+class TestNmcliParse(unittest.TestCase):
+    def test_simple_fields(self):
+        self.assertEqual(parse_nmcli_terse_fields("Home:72:WPA2"), ["Home", "72", "WPA2"])
+
+    def test_escaped_colon_in_ssid(self):
+        self.assertEqual(
+            parse_nmcli_terse_fields(r"Foo\:Bar:55:WPA2"),
+            ["Foo:Bar", "55", "WPA2"],
+        )
+
+
+class TestEventLog(unittest.TestCase):
+    def test_log_and_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "console.log"
+            os.environ["TABLOZA_CONSOLE_LOG"] = str(log_path)
+            import importlib
+            import event_log as el
+
+            importlib.reload(el)
+            el.clear_events()
+            el.log_event("test", "hello")
+            lines = el.read_events()
+            self.assertEqual(len(lines), 1)
+            self.assertIn("hello", lines[0])
 
 
 if __name__ == "__main__":

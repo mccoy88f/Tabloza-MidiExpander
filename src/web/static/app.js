@@ -485,6 +485,41 @@ document.getElementById("btn-audio-apply").addEventListener("click", async () =>
   }
 });
 
+// --- Console ---
+let consoleTimer = null;
+
+async function refreshConsole() {
+  const out = document.getElementById("console-output");
+  if (!out) return;
+  try {
+    const { lines } = await api("/api/console");
+    out.textContent = lines?.length ? lines.join("\n") : t("consoleEmpty");
+    out.scrollTop = out.scrollHeight;
+  } catch {
+    out.textContent = t("consoleEmpty");
+  }
+}
+
+function setConsolePolling(enabled) {
+  clearInterval(consoleTimer);
+  if (enabled) {
+    refreshConsole();
+    consoleTimer = setInterval(refreshConsole, 2000);
+  }
+}
+
+const consoleSection = document.getElementById("console-section");
+if (consoleSection) {
+  consoleSection.addEventListener("toggle", () => {
+    setConsolePolling(consoleSection.open);
+  });
+}
+
+document.getElementById("btn-console-clear").addEventListener("click", async () => {
+  await api("/api/console/clear", { method: "POST" });
+  refreshConsole();
+});
+
 // --- WiFi ---
 document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   const msg = document.getElementById("wifi-msg");
@@ -494,10 +529,14 @@ document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   try {
     const { networks } = await api("/api/wifi/scan");
     msg.classList.add("hidden");
+    refreshConsole();
     const list = document.getElementById("wifi-list");
     list.innerHTML = "";
     if (!networks.length) {
       list.innerHTML = `<p class="muted">${t("noNetworks")}</p>`;
+      msg.textContent = t("noNetworks");
+      msg.className = "msg";
+      msg.classList.remove("hidden");
       return;
     }
     networks.forEach((n) => {
@@ -510,6 +549,7 @@ document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   } catch (err) {
     msg.textContent = err.message;
     msg.className = "msg err";
+    refreshConsole();
   }
 });
 
@@ -533,9 +573,11 @@ function showWifiForm(ssid) {
       msg.textContent = t("connectedWifi", { ssid });
       msg.className = "msg ok";
       refreshStatus();
+      refreshConsole();
     } catch (err) {
       msg.textContent = err.message;
       msg.className = "msg err";
+      refreshConsole();
     }
   });
 }

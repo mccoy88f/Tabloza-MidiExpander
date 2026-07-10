@@ -12,6 +12,7 @@ RestartSec=3
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/opt/tabloza/src
 Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
+RuntimeDirectory=tabloza
 
 [Install]
 WantedBy=multi-user.target

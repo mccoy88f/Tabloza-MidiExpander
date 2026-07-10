@@ -34,6 +34,7 @@ from midi_utils import (
     set_fluidsynth_output_level,
 )
 
+from event_log import log_event
 from soundfont_config import startup_soundfont_name
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
@@ -360,6 +361,7 @@ def apply_soundfont_from_config() -> bool:
         if ok:
             write_soundfont_state(loaded=selected, loading=False, error=None)
             log.info("SoundFont caricato: %s", selected)
+            log_event("orchestrator", f"SoundFont caricato: {selected}")
             apply_volume(config)
             route_rtpmidi_to_fluidsynth()
             return True
@@ -387,6 +389,7 @@ def schedule_startup_soundfont():
         selected=name, loaded="", loading=False, error=None, load_started_at=None,
     )
     log.info("Caricamento SF2 all'avvio: %s", name)
+    log_event("orchestrator", f"Caricamento SF2 all'avvio: {name}")
     threading.Thread(target=_load_soundfont_async, daemon=True).start()
 
 
@@ -456,6 +459,7 @@ def handle_sigusr2(signum, frame):
         RELOAD_FLUIDSYNTH_FLAG.unlink(missing_ok=True)
         reload_fluidsynth_pending = True
         log.info("SIGUSR2 — richiesto riavvio FluidSynth (nuova uscita audio)")
+        log_event("orchestrator", "Riavvio FluidSynth richiesto (cambio uscita audio)")
         return
     log.info("SIGUSR2 ricevuto — applica volume")
     apply_volume(load_config())
@@ -468,9 +472,11 @@ def _process_pending_fluidsynth_reload():
     reload_fluidsynth_pending = False
     config = load_config()
     if start_fluidsynth(config):
+        log_event("orchestrator", "FluidSynth riavviato")
         schedule_startup_soundfont()
     else:
         log.error("Riavvio FluidSynth fallito — controlla %s", FLUIDSYNTH_LOG)
+        log_event("orchestrator", f"Riavvio FluidSynth fallito — vedi {FLUIDSYNTH_LOG}", "error")
 
 
 def handle_sigterm(signum, frame):
@@ -510,6 +516,7 @@ def main():
     signal.signal(signal.SIGINT, handle_sigterm)
 
     config = load_config()
+    log_event("orchestrator", "Orchestrator avviato")
     started = start_fluidsynth(config)
     start_midi_monitor()
     if started:

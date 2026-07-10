@@ -14,6 +14,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
+from event_log import clear_events, log_event, read_events  # noqa: E402
 from audio_utils import (  # noqa: E402
     apply_output_volume,
     audio_device_available,
@@ -43,6 +44,7 @@ from tabloza_common import (  # noqa: E402
     verify_password,
 )
 from soundfont_config import startup_soundfont_name  # noqa: E402
+from wifi_utils import scan_wifi_networks  # noqa: E402
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = load_secret_key()
@@ -213,6 +215,7 @@ def api_default_soundfont():
     config = load_config()
     config["default_soundfont"] = name
     save_config(config)
+    log_event("web", f"SF2 predefinito: {name}")
     return jsonify({"ok": True, "default": name})
 
 
@@ -316,7 +319,7 @@ def api_audio_select():
     config.setdefault("fluidsynth", {})["audio_device"] = device
     config["fluidsynth"]["alsa_card"] = card
     save_config(config)
-
+    log_event("web", f"Uscita audio → {device}")
     if not trigger_orchestrator_reload_fluidsynth():
         return jsonify({"error": "Orchestrator non attivo"}), 503
     if not wait_fluidsynth_midi_ready(50.0):
@@ -343,30 +346,13 @@ def api_audio_select():
 @require_auth
 def api_wifi_scan():
     try:
-        subprocess.run(["nmcli", "device", "wifi", "rescan"], timeout=10, check=False)
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "device", "wifi", "list"],
-            capture_output=True, text=True, timeout=15,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return jsonify({"error": "Scan WiFi fallito"}), 500
+        networks, err = scan_wifi_networks()
+    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+        log_event("wifi", f"Scan WiFi eccezione: {exc}", "error")
+        return jsonify({"error": "Scan WiFi fallito — nmcli non disponibile?"}), 500
 
-    networks = []
-    seen = set()
-    for line in result.stdout.strip().splitlines():
-        parts = line.split(":")
-        if len(parts) < 2:
-            continue
-        ssid = parts[0]
-        if not ssid or ssid in seen:
-            continue
-        seen.add(ssid)
-        networks.append({
-            "ssid": ssid,
-            "signal": int(parts[1]) if parts[1].isdigit() else 0,
-            "security": parts[2] if len(parts) > 2 else "",
-        })
-    networks.sort(key=lambda n: n["signal"], reverse=True)
+    if err:
+        return jsonify({"error": err, "networks": networks}), 500
     return jsonify({"networks": networks})
 
 
@@ -379,6 +365,7 @@ def api_wifi_connect():
     if not ssid:
         return jsonify({"error": "SSID richiesto"}), 400
 
+    log_event("wifi", f"Connessione a «{ssid}»…")
     conn_name = f"tabloza-wifi-{ssid[:20]}"
     try:
         subprocess.run(
@@ -389,25 +376,44 @@ def api_wifi_connect():
             "nmcli", "connection", "add",
             "type", "wifi",
             "con-name", conn_name,
+            "ifname", "wlan0",
             "ssid", ssid,
             "wifi-sec.key-mgmt", "wpa-psk" if password else "none",
         ]
         if password:
             cmd += ["wifi-sec.psk", password]
-        subprocess.run(cmd, capture_output=True, timeout=10, check=True)
+        subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=True)
         subprocess.run(
             ["nmcli", "connection", "up", conn_name],
-            capture_output=True, timeout=30, check=True,
+            capture_output=True, text=True, timeout=45, check=True,
         )
         subprocess.run(
             ["nmcli", "connection", "down", "tabloza-hotspot"],
             capture_output=True, timeout=10, check=False,
         )
+        log_event("wifi", f"Connesso a «{ssid}»")
     except subprocess.CalledProcessError as e:
-        err = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or str(e))
+        err = (e.stderr or e.stdout or str(e)).strip()
+        log_event("wifi", f"Connessione fallita: {err}", "error")
         return jsonify({"error": f"Connessione fallita: {err}"}), 500
 
     return jsonify({"ok": True, "ssid": ssid})
+
+
+# --- Console ---
+
+@app.route("/api/console")
+@require_auth
+def api_console():
+    return jsonify({"lines": read_events(200)})
+
+
+@app.route("/api/console/clear", methods=["POST"])
+@require_auth
+def api_console_clear():
+    clear_events()
+    log_event("web", "Console svuotata")
+    return jsonify({"ok": True})
 
 
 # --- MIDI Reset ---
@@ -527,5 +533,6 @@ def _get_network_mode() -> str:
 
 if __name__ == "__main__":
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
+    log_event("web", "Pannello web avviato")
     port = int(os.environ.get("TABLOZA_WEB_PORT", "80"))
     app.run(host="0.0.0.0", port=port, debug=False)
