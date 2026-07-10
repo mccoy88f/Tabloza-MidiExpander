@@ -131,6 +131,12 @@ input[type="text"] {
   margin-top: 1rem;
 }
 
+@media (min-width: 480px) {
+  .activity-meters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .activity-meter {
   display: flex;
   align-items: center;
@@ -188,7 +194,9 @@ input[type="text"] {
 
 .sf2-item:last-child, .wifi-item:last-child { border-bottom: none; }
 .sf2-name { font-weight: 500; }
-.sf2-active { color: var(--accent); font-size: 0.8rem; }
+.sf2-active { color: var(--success); font-size: 0.8rem; }
+.sf2-selected { color: var(--accent); font-size: 0.8rem; }
+.sf2-loading { color: #f39c12; font-size: 0.8rem; }
 .sf2-actions { display: flex; gap: 0.5rem; }
 
 .upload-zone {

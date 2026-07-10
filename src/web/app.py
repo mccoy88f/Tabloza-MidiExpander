@@ -14,6 +14,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
+from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import get_midi_status, send_cc7, send_test_note, trigger_orchestrator_test_note  # noqa: E402
 from tabloza_common import (  # noqa: E402
     AUTHOR,
@@ -109,6 +110,8 @@ def api_change_password():
 def api_status():
     config = load_config()
     midi = get_midi_status()
+    sf_state = read_soundfont_state()
+    audio = get_audio_activity()
     return jsonify({
         "ip": _get_ip(),
         "hostname": MDNS_NAME,
@@ -116,7 +119,17 @@ def api_status():
         "midi": midi,
         "activity": {
             "midi": get_midi_activity(),
-            "audio": get_audio_activity(),
+            "audio": audio,
+        },
+        "synth": {
+            "engine_running": audio.get("fluidsynth_running", False),
+            "midi_ready": midi.get("fluidsynth") is not None,
+        },
+        "soundfont": {
+            "selected": config.get("active_soundfont", ""),
+            "loaded": sf_state.get("loaded", ""),
+            "loading": sf_state.get("loading", False),
+            "error": sf_state.get("error"),
         },
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
@@ -130,15 +143,26 @@ def api_status():
 def api_soundfonts():
     config = load_config()
     active = config.get("active_soundfont", "")
+    sf_state = read_soundfont_state()
+    loaded = sf_state.get("loaded", "")
+    loading = sf_state.get("loading", False)
     fonts = []
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
     for sf in sorted(SOUNDFONTS_DIR.glob("*.sf2")):
         fonts.append({
             "name": sf.name,
             "size": sf.stat().st_size,
+            "selected": sf.name == active,
+            "loaded": sf.name == loaded,
+            "loading": loading and sf.name == active,
             "active": sf.name == active,
         })
-    return jsonify({"soundfonts": fonts, "active": active})
+    return jsonify({
+        "soundfonts": fonts,
+        "active": active,
+        "loaded": loaded,
+        "loading": loading,
+    })
 
 
 @app.route("/api/soundfonts/select", methods=["POST"])
@@ -170,11 +194,7 @@ def api_upload_soundfont():
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
     dest = SOUNDFONTS_DIR / safe_name
     f.save(dest)
-    config = load_config()
-    config["active_soundfont"] = safe_name
-    save_config(config)
-    _reload_orchestrator()
-    return jsonify({"ok": True, "name": safe_name, "active": True})
+    return jsonify({"ok": True, "name": safe_name, "message": "Carica il file dalla libreria SoundFont"})
 
 
 @app.route("/api/soundfonts/<name>", methods=["DELETE"])

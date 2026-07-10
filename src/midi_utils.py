@@ -192,8 +192,12 @@ def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:
                 time.sleep(delay)
                 continue
             if not _fluidsynth_process_running():
-                return False, "FluidSynth non in esecuzione — carica un SF2 e riavvia l'orchestrator"
-            return False, "FluidSynth in caricamento o porta MIDI non pronta — attendi e riprova"
+                return False, "FluidSynth non in esecuzione"
+            from fluidsynth_client import read_soundfont_state
+            sf_state = read_soundfont_state()
+            if not sf_state.get("loaded"):
+                return False, "Nessun SoundFont caricato — seleziona e premi Carica nel pannello"
+            return False, "Porta MIDI FluidSynth non pronta — attendi e riprova"
         try:
             subprocess.run(
                 ["amidi", "-p", fs["address"], "-S", "90 3C 64"],

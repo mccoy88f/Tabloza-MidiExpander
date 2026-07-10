@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Tabloza MidiExpander — MIDI/Audio orchestrator.
 
-Launches FluidSynth, routes RTP-MIDI (rtpmidid) ports to FluidSynth,
-reloads on SIGHUP when SoundFont changes.
+Avvia FluidSynth senza SoundFont; il caricamento SF2 avviene su richiesta (UI / SIGHUP).
 
 GPIO UART MIDI: planned — see docs/TODO.md
 """
@@ -18,6 +17,14 @@ import time
 from pathlib import Path
 
 from activity_status import touch_midi_activity
+from fluidsynth_client import (
+    clear_soundfont_state,
+    load_soundfont,
+    read_soundfont_state,
+    reset_synth,
+    server_ready,
+    write_soundfont_state,
+)
 from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7, send_test_note
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
@@ -26,6 +33,7 @@ SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
 FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
+FLUID_STARTUP_TIMEOUT = 15.0
 ROUTING_INTERVAL = 5
 
 logging.basicConfig(
@@ -39,6 +47,7 @@ fluidsynth_log_fd = None
 shutdown = False
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
+soundfont_load_lock = threading.Lock()
 
 
 def load_config() -> dict:
@@ -63,21 +72,10 @@ def load_config() -> dict:
     return defaults
 
 
-def find_soundfont(config: dict) -> Path | None:
-    active = config.get("active_soundfont", "")
-    if active:
-        path = SOUNDFONTS_DIR / active
-        if path.is_file():
-            return path
-    for sf in sorted(SOUNDFONTS_DIR.glob("*.sf2")):
-        return sf
-    gm = Path("/usr/share/sounds/sf2/FluidR3_GM.sf2")
-    return gm if gm.is_file() else None
-
-
-def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
+def build_fluidsynth_cmd(config: dict) -> list[str]:
+    """FluidSynth senza SF2 — caricamento dinamico via server TCP."""
     fs_cfg = config.get("fluidsynth", {})
-    cmd = [
+    return [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
         "-o", f"audio.alsa.device={fs_cfg.get('audio_device', 'plughw:0,0')}",
@@ -87,25 +85,10 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
         "-g", str(fs_cfg.get("gain", 0.5)),
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
+        "-o", "synth.dynamic-sample-loading=yes",
+        "-s", "-p", "9800",
         "-ni",
     ]
-    # SF2 grandi (>50 MB): carica campioni on-demand per evitare OOM su Pi
-    try:
-        if sf_path.stat().st_size > 50 * 1024 * 1024:
-            cmd.extend(["-o", "synth.dynamic-sample-loading=yes"])
-            log.info("SF2 grande (%.0f MB) — dynamic-sample-loading attivo", sf_path.stat().st_size / 1024 / 1024)
-    except OSError:
-        pass
-    cmd.append(str(sf_path))
-    return cmd
-
-
-def _startup_timeout_for(sf_path: Path) -> float:
-    try:
-        size_mb = sf_path.stat().st_size / (1024 * 1024)
-    except OSError:
-        size_mb = 10
-    return min(120.0, max(25.0, 20.0 + size_mb * 0.8))
 
 
 def _ensure_alsa_seq():
@@ -116,7 +99,6 @@ def _ensure_alsa_seq():
 
 
 def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
-    """Avvia FluidSynth con log su file (nessun PIPE che può bloccare)."""
     global fluidsynth_log_fd
     FLUIDSYNTH_LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(FLUIDSYNTH_LOG, "a", encoding="utf-8") as f:
@@ -137,17 +119,16 @@ def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
 
 
 def _wait_fluidsynth_ready(timeout_sec: float) -> tuple[bool, str]:
-    """Attende porta MIDI ALSA. Ritorna (ok, stato) con stato ok|crashed|loading."""
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
             return False, "crashed"
-        if find_fluidsynth_input():
+        if find_fluidsynth_input() and server_ready():
             return True, "ok"
         time.sleep(0.5)
     if fluidsynth_proc and fluidsynth_proc.poll() is not None:
         return False, "crashed"
-    if find_fluidsynth_input():
+    if find_fluidsynth_input() and server_ready():
         return True, "ok"
     if fluidsynth_proc and fluidsynth_proc.poll() is None:
         return False, "loading"
@@ -164,7 +145,6 @@ def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
 
 
 def _reap_fluidsynth():
-    """Reap child process (avoids zombies)."""
     global fluidsynth_proc, fluidsynth_log_fd
     if fluidsynth_proc:
         if fluidsynth_proc.poll() is None:
@@ -189,6 +169,11 @@ def _reap_fluidsynth():
         except OSError:
             pass
     fluidsynth_log_fd = None
+    clear_soundfont_state()
+
+
+def _is_tabloza_fluidsynth_cmdline(cmdline: str) -> bool:
+    return "midi.autoconnect=false" in cmdline or "9800" in cmdline
 
 
 def _stop_monitor_proc():
@@ -271,7 +256,6 @@ def apply_volume(config: dict):
 
 
 def stop_foreign_fluidsynth():
-    """Terminate fluidsynth processes not started by Tabloza (e.g. fluid-soundfont-gm)."""
     global fluidsynth_proc
     own_pid = (
         fluidsynth_proc.pid
@@ -293,16 +277,16 @@ def stop_foreign_fluidsynth():
         if own_pid and pid == own_pid:
             continue
         try:
-            state = Path(f"/proc/{pid}/status").read_text().splitlines()[1]
-            if "Z (zombie)" in state:
+            status = Path(f"/proc/{pid}/status").read_text()
+            if "zombie" in status.lower():
                 continue
-        except (OSError, IndexError):
+        except OSError:
             pass
         try:
             cmdline = Path(f"/proc/{pid}/cmdline").read_bytes().decode("latin-1")
         except OSError:
             cmdline = ""
-        if "/var/lib/tabloza/soundfonts/" in cmdline:
+        if _is_tabloza_fluidsynth_cmdline(cmdline):
             continue
         log.warning(
             "Arresto FluidSynth esterno PID %d (%s)",
@@ -312,22 +296,62 @@ def stop_foreign_fluidsynth():
     time.sleep(0.5)
 
 
+def fluidsynth_engine_running() -> bool:
+    return fluidsynth_proc is not None and fluidsynth_proc.poll() is None
+
+
+def apply_soundfont_from_config() -> bool:
+    """Carica o scarica il SoundFont indicato in config (non riavvia FluidSynth)."""
+    config = load_config()
+    selected = config.get("active_soundfont", "")
+
+    if not fluidsynth_engine_running():
+        log.warning("Richiesto caricamento SF2 ma FluidSynth non è attivo")
+        return False
+    if not server_ready():
+        log.warning("Server FluidSynth TCP non pronto")
+        return False
+
+    with soundfont_load_lock:
+        write_soundfont_state(selected=selected, loading=True, error=None)
+        if not selected:
+            ok, detail = reset_synth()
+            if ok:
+                write_soundfont_state(loaded="", loading=False, error=None)
+                log.info("SoundFont scaricato (reset synth)")
+                return True
+            write_soundfont_state(loaded="", loading=False, error=detail)
+            log.error("Reset synth fallito: %s", detail)
+            return False
+
+        path = SOUNDFONTS_DIR / selected
+        ok, detail = load_soundfont(path)
+        if ok:
+            write_soundfont_state(loaded=selected, loading=False, error=None)
+            log.info("SoundFont caricato: %s", selected)
+            apply_volume(config)
+            route_rtpmidi_to_fluidsynth()
+            return True
+        write_soundfont_state(loaded="", loading=False, error=detail)
+        log.error("Caricamento SF2 fallito: %s", detail)
+        return False
+
+
+def _load_soundfont_async():
+    apply_soundfont_from_config()
+
+
 def start_fluidsynth(config: dict) -> bool:
     global fluidsynth_proc
     _ensure_alsa_seq()
     stop_foreign_fluidsynth()
     stop_fluidsynth()
 
-    sf = find_soundfont(config)
-    if not sf:
-        log.error("Nessun SoundFont trovato in %s", SOUNDFONTS_DIR)
-        return False
-
-    cmd = build_fluidsynth_cmd(sf, config)
-    log.info("Avvio FluidSynth con %s (timeout %.0fs)", sf.name, _startup_timeout_for(sf))
+    cmd = build_fluidsynth_cmd(config)
+    log.info("Avvio FluidSynth (senza SoundFont)")
     fluidsynth_proc = _launch_fluidsynth(cmd)
 
-    ready, status = _wait_fluidsynth_ready(_startup_timeout_for(sf))
+    _, status = _wait_fluidsynth_ready(FLUID_STARTUP_TIMEOUT)
     if status == "crashed":
         code = fluidsynth_proc.poll() if fluidsynth_proc else None
         log.error("FluidSynth terminato durante l'avvio (exit=%s)", code)
@@ -336,23 +360,26 @@ def start_fluidsynth(config: dict) -> bool:
         _reap_fluidsynth()
         return False
     if status == "loading":
-        log.warning(
-            "FluidSynth in caricamento SF2 — processo attivo, porta MIDI non ancora pronta"
-        )
+        log.warning("FluidSynth avviato ma porta MIDI/server non ancora pronti")
         return True
+
+    write_soundfont_state(selected=config.get("active_soundfont", ""), loaded="", loading=False)
     route_rtpmidi_to_fluidsynth()
-    apply_volume(config)
+    log.info("FluidSynth pronto — seleziona un SoundFont dal pannello web")
     return True
 
 
 def handle_sighup(signum, frame):
-    log.info("SIGHUP ricevuto — reload SoundFont")
-    config = load_config()
-    start_fluidsynth(config)
+    log.info("SIGHUP ricevuto — caricamento SoundFont")
+    threading.Thread(target=_load_soundfont_async, daemon=True).start()
 
 
 def handle_sigusr1(signum, frame):
     log.info("SIGUSR1 ricevuto — nota di test")
+    state = read_soundfont_state()
+    if not state.get("loaded"):
+        log.warning("Nota di test ignorata — nessun SoundFont caricato")
+        return
     ok, detail = send_test_note()
     if ok:
         log.info("Nota di test OK (%s)", detail)

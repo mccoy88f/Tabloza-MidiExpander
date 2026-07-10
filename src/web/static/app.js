@@ -104,14 +104,39 @@ function renderMidiInputs(midi) {
   }
 }
 
-function renderActivity(activity, midi) {
+function renderActivity(activity, midi, synth, soundfont) {
   const midiAct = activity?.midi || {};
   const audioAct = activity?.audio || {};
 
+  const dotSynth = document.getElementById("dot-synth");
+  const valSynth = document.getElementById("value-synth");
+  const dotSf2 = document.getElementById("dot-sf2");
+  const valSf2 = document.getElementById("value-sf2");
   const dotMidi = document.getElementById("dot-midi-in");
   const valMidi = document.getElementById("value-midi-in");
   const dotAudio = document.getElementById("dot-audio-out");
   const valAudio = document.getElementById("value-audio-out");
+
+  const engineRunning = !!(synth?.engine_running);
+  dotSynth.className = "activity-dot " + (engineRunning ? "idle" : "off");
+  valSynth.textContent = engineRunning
+    ? (synth?.midi_ready ? t("synthReady") : t("synthStarting"))
+    : t("synthStopped");
+
+  const sf2Loaded = soundfont?.loaded || "";
+  const sf2Loading = !!soundfont?.loading;
+  dotSf2.className = "activity-dot " + (
+    sf2Loading ? "active pulse" : sf2Loaded ? "idle" : soundfont?.selected ? "off" : "off"
+  );
+  if (sf2Loading) {
+    valSf2.textContent = t("sf2Loading", { name: soundfont?.selected || "…" });
+  } else if (sf2Loaded) {
+    valSf2.textContent = sf2Loaded;
+  } else if (soundfont?.selected) {
+    valSf2.textContent = t("sf2SelectedNotLoaded", { name: soundfont.selected });
+  } else {
+    valSf2.textContent = t("sf2NotLoaded");
+  }
 
   const midiReceiving = !!midiAct.receiving;
   dotMidi.className = "activity-dot " + (midiReceiving ? "active pulse" : midi?.routing_ok ? "idle" : "off");
@@ -122,12 +147,11 @@ function renderActivity(activity, midi) {
       : t("midiNoRoute");
 
   const audioPlaying = !!audioAct.output_active;
-  const fsRunning = !!audioAct.fluidsynth_running;
-  dotAudio.className = "activity-dot " + (audioPlaying ? "active pulse" : fsRunning ? "idle" : "off");
+  dotAudio.className = "activity-dot " + (audioPlaying ? "active pulse" : engineRunning ? "idle" : "off");
   valAudio.textContent = audioPlaying
     ? t("audioPlaying")
-    : fsRunning
-      ? t("audioIdle")
+    : engineRunning
+      ? (sf2Loaded ? t("audioIdle") : t("audioNoSf2"))
       : t("audioStopped");
 }
 
@@ -139,11 +163,13 @@ async function refreshStatus() {
     s.network_mode === "hotspot" ? t("networkHotspot")
       : s.network_mode === "client" ? t("networkWifi")
         : t("networkUnknown");
-  document.getElementById("status-sf2").textContent = s.active_soundfont || t("noSoundfont");
+  const sf2Label = s.soundfont?.loaded
+    || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
+  document.getElementById("status-sf2").textContent = sf2Label;
   document.getElementById("volume-slider").value = s.volume;
   document.getElementById("volume-value").textContent = s.volume;
   renderMidiInputs(s.midi);
-  renderActivity(s.activity, s.midi);
+  renderActivity(s.activity, s.midi, s.synth, s.soundfont);
 }
 
 document.getElementById("btn-audio-test").addEventListener("click", async () => {
@@ -191,7 +217,7 @@ document.getElementById("btn-midi-reset").addEventListener("click", async () => 
 
 // --- SoundFonts ---
 async function refreshSoundfonts() {
-  const { soundfonts } = await api("/api/soundfonts");
+  const { soundfonts, loading } = await api("/api/soundfonts");
   const list = document.getElementById("sf2-list");
   list.innerHTML = "";
   if (!soundfonts.length) {
@@ -202,14 +228,21 @@ async function refreshSoundfonts() {
     const div = document.createElement("div");
     div.className = "sf2-item";
     const sizeMB = (sf.size / 1024 / 1024).toFixed(1);
+    const statusBadge = sf.loaded
+      ? `<span class="sf2-active"> ${t("sf2LoadedBadge")}</span>`
+      : sf.loading
+        ? `<span class="sf2-loading"> ${t("sf2LoadingBadge")}</span>`
+        : sf.selected
+          ? `<span class="sf2-selected"> ${t("sf2SelectedBadge")}</span>`
+          : "";
     div.innerHTML = `
       <div>
         <span class="sf2-name">${escapeHtml(sf.name)}</span>
         <span class="muted" style="font-size:0.8rem;margin-left:0.5rem">${sizeMB} MB</span>
-        ${sf.active ? `<span class="sf2-active"> ${t("sf2Active")}</span>` : ""}
+        ${statusBadge}
       </div>
       <div class="sf2-actions">
-        ${!sf.active ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${t("load")}</button>` : ""}
+        ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? t("loading") : t("load")}</button>` : ""}
         <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;
     list.appendChild(div);
