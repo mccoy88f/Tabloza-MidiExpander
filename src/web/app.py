@@ -14,9 +14,13 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
-from audio_utils import play_stereo_tone  # noqa: E402
+from audio_utils import apply_output_volume, play_stereo_tone  # noqa: E402
 from fluidsynth_client import read_soundfont_state  # noqa: E402
-from midi_utils import get_midi_status, send_cc7, trigger_orchestrator_test_note  # noqa: E402
+from midi_utils import (
+    get_midi_status,
+    trigger_orchestrator_apply_volume,
+    trigger_orchestrator_test_note,
+)  # noqa: E402
 from tabloza_common import (  # noqa: E402
     AUTHOR,
     GITHUB_URL,
@@ -228,8 +232,15 @@ def api_volume():
     config = load_config()
     config["volume"] = vol
     save_config(config)
-    send_cc7(vol)
-    return jsonify({"ok": True, "volume": vol})
+    ok_alsa, alsa_detail = apply_output_volume(vol, config)
+    if not trigger_orchestrator_apply_volume():
+        return jsonify({"error": "Impossibile sincronizzare FluidSynth (orchestrator non attivo)"}), 503
+    return jsonify({
+        "ok": True,
+        "volume": vol,
+        "alsa": alsa_detail,
+        "alsa_ok": ok_alsa,
+    })
 
 
 # --- WiFi ---
@@ -366,8 +377,7 @@ def api_midi_reset():
             capture_output=True, timeout=15, check=True,
         )
         time.sleep(3)
-        config = load_config()
-        send_cc7(config.get("volume", 100))
+        trigger_orchestrator_apply_volume()
         midi = get_midi_status()
         return jsonify({
             "ok": True,

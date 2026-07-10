@@ -113,9 +113,11 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "audio_driver": "alsa",
     "audio_device": "plughw:0,0",
     "sample_rate": 44100,
-    "period_size": 256,
-    "period_count": 4,
-    "gain": 0.5
+    "period_size": 512,
+    "period_count": 6,
+    "gain": 2.0,
+    "alsa_card": 0,
+    "alsa_mixer_control": "PCM"
   }
 }
 EOF
@@ -156,6 +158,20 @@ log "Configurazione priorità audio real-time..."
 bash "${INSTALL_DIR}/scripts/configure-audio-rt.sh"
 install -m 644 "${INSTALL_DIR}/config/modules-load/tabloza.conf" /etc/modules-load.d/tabloza.conf
 modprobe snd-seq 2>/dev/null || true
+
+# --- Volume ALSA iniziale (jack cuffie) ---
+if command -v amixer >/dev/null; then
+    log "Impostazione volume ALSA iniziale..."
+    python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}/src')
+from tabloza_common import load_config
+from audio_utils import apply_output_volume
+cfg = load_config()
+ok, detail = apply_output_volume(cfg.get('volume', 100), cfg)
+print('ALSA:', detail if ok else 'non disponibile — ' + detail)
+" || warn "Volume ALSA non impostato (mixer assente o card diversa)"
+fi
 
 # --- Comandi di sistema ---
 log "Installazione comandi tabloza-test e tabloza-uninstall..."

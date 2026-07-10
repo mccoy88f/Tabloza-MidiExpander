@@ -27,7 +27,12 @@ from fluidsynth_client import (
     shell_bound,
     write_soundfont_state,
 )
-from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7, send_test_note
+from midi_utils import (
+    find_fluidsynth_input,
+    route_rtpmidi_to_fluidsynth,
+    send_test_note,
+    set_fluidsynth_output_level,
+)
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -60,9 +65,11 @@ def load_config() -> dict:
             "audio_driver": "alsa",
             "audio_device": "plughw:0,0",
             "sample_rate": 44100,
-            "period_size": 256,
-            "period_count": 4,
-            "gain": 0.5,
+            "period_size": 512,
+            "period_count": 6,
+            "gain": 2.0,
+            "alsa_card": 0,
+            "alsa_mixer_control": "PCM",
         },
     }
     if CONFIG_FILE.exists():
@@ -77,14 +84,16 @@ def load_config() -> dict:
 def build_fluidsynth_cmd(config: dict) -> list[str]:
     """FluidSynth senza SF2 — caricamento dinamico via server TCP."""
     fs_cfg = config.get("fluidsynth", {})
+    max_gain = fs_cfg.get("gain", 2.0)
+    initial_gain = max_gain if config.get("volume", 100) > 0 else 0.0
     return [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
         "-o", f"audio.alsa.device={fs_cfg.get('audio_device', 'plughw:0,0')}",
         "-r", str(fs_cfg.get("sample_rate", 44100)),
-        "-z", str(fs_cfg.get("period_size", 256)),
-        "-c", str(fs_cfg.get("period_count", 4)),
-        "-g", str(fs_cfg.get("gain", 0.5)),
+        "-z", str(fs_cfg.get("period_size", 512)),
+        "-c", str(fs_cfg.get("period_count", 6)),
+        "-g", str(initial_gain),
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
         "-o", "synth.default-soundfont=",
@@ -255,8 +264,14 @@ def stop_fluidsynth():
 
 
 def apply_volume(config: dict):
+    from audio_utils import apply_output_volume
+
     vol = config.get("volume", 100)
-    send_cc7(vol)
+    ok, detail = apply_output_volume(vol, config)
+    if not ok:
+        log.warning("Volume ALSA non impostato: %s", detail)
+    max_gain = config.get("fluidsynth", {}).get("gain", 2.0)
+    set_fluidsynth_output_level(vol, max_gain=max_gain)
 
 
 def stop_foreign_fluidsynth():
@@ -389,6 +404,7 @@ def start_fluidsynth(config: dict) -> bool:
         load_started_at=None,
     )
     route_rtpmidi_to_fluidsynth()
+    apply_volume(config)
     log.info("FluidSynth avviato — seleziona e carica un SoundFont dal pannello web")
     return True
 
@@ -409,6 +425,11 @@ def handle_sigusr1(signum, frame):
         log.info("Nota di test OK (%s)", detail)
     else:
         log.warning("Nota di test fallita: %s", detail)
+
+
+def handle_sigusr2(signum, frame):
+    log.info("SIGUSR2 ricevuto — applica volume")
+    apply_volume(load_config())
 
 
 def handle_sigterm(signum, frame):
@@ -443,6 +464,7 @@ def _check_soundfont_load_watchdog():
 def main():
     signal.signal(signal.SIGHUP, handle_sighup)
     signal.signal(signal.SIGUSR1, handle_sigusr1)
+    signal.signal(signal.SIGUSR2, handle_sigusr2)
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
 

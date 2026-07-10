@@ -196,21 +196,62 @@ def route_rtpmidi_to_fluidsynth() -> int:
     return count
 
 
-def send_cc7(volume: int, retries: int = 5, delay: float = 1.0) -> bool:
-    """Send MIDI CC7 (channel 1) to FluidSynth via shell. Retries until available."""
+def volume_to_gain(volume: int, max_gain: float = 2.0) -> float:
+    vol = max(0, min(127, int(volume)))
+    return round((vol / 127.0) * max_gain, 3)
+
+
+def set_fluidsynth_output_level(
+    volume: int,
+    max_gain: float = 2.0,
+    retries: int = 5,
+    delay: float = 0.5,
+) -> bool:
+    """Keep FluidSynth at full internal level; ALSA mixer handles loudness."""
     from fluidsynth_client import send_command, shell_bound
 
-    midi_value = max(0, min(127, int(volume)))
+    gain = max_gain if max(0, min(127, int(volume))) > 0 else 0.0
     for attempt in range(retries):
         if shell_bound() and find_fluidsynth_input():
-            ok, _ = send_command(f"cc 0 7 {midi_value}")
-            if ok:
-                log.info("Volume CC7=%d inviato via shell FluidSynth", midi_value)
+            ok_gain, _ = send_command(f"gain {gain}")
+            if ok_gain:
+                log.info("FluidSynth gain=%.3f (volume master via ALSA)", gain)
                 return True
         if attempt < retries - 1:
             time.sleep(delay)
-    log.warning("Impossibile inviare CC7 (volume=%d)", volume)
+    log.warning("Impossibile impostare gain FluidSynth (volume=%d)", volume)
     return False
+
+
+def set_master_volume(
+    volume: int,
+    max_gain: float = 2.0,
+    retries: int = 5,
+    delay: float = 0.5,
+) -> bool:
+    """Backward-compatible alias — only adjusts FluidSynth gain."""
+    return set_fluidsynth_output_level(volume, max_gain=max_gain, retries=retries, delay=delay)
+
+
+def send_cc7(volume: int, retries: int = 5, delay: float = 1.0) -> bool:
+    """Backward-compatible alias for set_master_volume."""
+    return set_master_volume(volume, max_gain=2.0, retries=retries, delay=delay)
+
+
+def trigger_orchestrator_apply_volume() -> bool:
+    """Ask tabloza-orchestrator to apply volume from config (SIGUSR2)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
 
 
 def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:

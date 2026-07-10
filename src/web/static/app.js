@@ -178,8 +178,10 @@ async function refreshStatus() {
   const sf2Label = s.soundfont?.loaded
     || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
   document.getElementById("status-sf2").textContent = sf2Label;
-  document.getElementById("volume-slider").value = s.volume;
-  document.getElementById("volume-value").textContent = s.volume;
+  if (!volumeAdjusting) {
+    document.getElementById("volume-slider").value = s.volume;
+    document.getElementById("volume-value").textContent = s.volume;
+  }
   renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
   const sf = s.soundfont || {};
@@ -385,11 +387,17 @@ function showUploadStatus(msg, isError, isOk) {
 
 // --- Volume ---
 let volumeTimer;
-document.getElementById("volume-slider").addEventListener("input", (e) => {
+let volumeAdjusting = false;
+const volumeSlider = document.getElementById("volume-slider");
+volumeSlider.addEventListener("pointerdown", () => { volumeAdjusting = true; });
+volumeSlider.addEventListener("pointerup", () => { volumeAdjusting = false; });
+volumeSlider.addEventListener("pointercancel", () => { volumeAdjusting = false; });
+volumeSlider.addEventListener("input", (e) => {
   document.getElementById("volume-value").textContent = e.target.value;
   clearTimeout(volumeTimer);
   volumeTimer = setTimeout(async () => {
     await api("/api/volume", { method: "POST", body: JSON.stringify({ volume: parseInt(e.target.value) }) });
+    volumeAdjusting = false;
   }, 200);
 });
 
