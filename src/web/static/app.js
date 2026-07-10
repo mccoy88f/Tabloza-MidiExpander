@@ -345,6 +345,11 @@ function uploadFile(file) {
     showUploadStatus(t("sf2Only"), true);
     return;
   }
+  const maxBytes = 2 * 1024 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    showUploadStatus(t("uploadTooLarge", { max: "2 GB" }), true);
+    return;
+  }
 
   const prog = document.getElementById("upload-progress");
   const bar = document.getElementById("upload-progress-bar");
@@ -493,12 +498,38 @@ async function refreshConsole() {
   const out = document.getElementById("console-output");
   if (!out) return;
   try {
-    const { lines } = await api("/api/console");
+    const { lines, memory } = await api("/api/console");
     out.textContent = lines?.length ? lines.join("\n") : t("consoleEmpty");
     out.scrollTop = out.scrollHeight;
+    renderMemoryStats(memory);
   } catch {
     out.textContent = t("consoleEmpty");
   }
+}
+
+function renderMemoryStats(memory) {
+  const statsEl = document.getElementById("memory-stats");
+  const barEl = document.getElementById("memory-bar-fill");
+  if (!statsEl || !barEl || !memory) return;
+  const pct = Math.min(100, Math.max(0, memory.used_percent || 0));
+  barEl.style.width = `${pct}%`;
+  barEl.className = "memory-bar-fill" + (pct >= 90 ? " critical" : pct >= 75 ? " warn" : "");
+  const parts = [
+    t("memoryUsed", {
+      used: memory.used_mb,
+      total: memory.total_mb,
+      pct,
+    }),
+    t("memoryAvailable", { mb: memory.available_mb }),
+  ];
+  if (memory.fluidsynth_mb != null) {
+    parts.push(t("memoryFluidSynth", { mb: memory.fluidsynth_mb }));
+  }
+  if (memory.disk_free_mb != null) {
+    parts.push(t("memoryDiskFree", { mb: memory.disk_free_mb }));
+  }
+  parts.push(t("memorySf2Max", { mb: memory.sf2_max_upload_mb }));
+  statsEl.textContent = parts.join(" · ");
 }
 
 function setConsolePolling(enabled) {

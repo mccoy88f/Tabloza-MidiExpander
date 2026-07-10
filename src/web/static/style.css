@@ -262,6 +262,31 @@ input[type="text"] {
   margin: 0.75rem 0 0.5rem;
 }
 .console-hint { font-size: 0.8rem; }
+.console-memory {
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.memory-bar {
+  height: 6px;
+  background: #2a2d3a;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.45rem;
+}
+.memory-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.memory-bar-fill.warn { background: #f39c12; }
+.memory-bar-fill.critical { background: var(--danger); }
+.memory-stats { font-size: 0.78rem; line-height: 1.4; margin: 0; }
+.upload-limit { font-size: 0.8rem; margin: 0.25rem 0 0.5rem; }
 .console-output {
   margin: 0;
   max-height: 16rem;

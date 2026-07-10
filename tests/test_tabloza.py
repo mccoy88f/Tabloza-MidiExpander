@@ -29,6 +29,28 @@ from soundfont_config import startup_soundfont_name  # noqa: E402
 from wifi_utils import connect_wifi_network, parse_nmcli_terse_fields  # noqa: E402
 
 
+class TestSystemStats(unittest.TestCase):
+    @patch("system_stats._read_meminfo_kb")
+    @patch("system_stats._process_rss_mb")
+    def test_get_memory_stats(self, mock_rss, mock_mem):
+        mock_mem.return_value = {
+            "MemTotal": 4 * 1024 * 1024,
+            "MemAvailable": 2 * 1024 * 1024,
+            "SwapTotal": 1024 * 1024,
+            "SwapFree": 512 * 1024,
+        }
+        mock_rss.side_effect = lambda *a, **k: 120 if a[0] == "fluidsynth" else 40
+        from system_stats import get_memory_stats
+
+        stats = get_memory_stats()
+        self.assertEqual(stats["total_mb"], 4096)
+        self.assertEqual(stats["available_mb"], 2048)
+        self.assertEqual(stats["used_mb"], 2048)
+        self.assertEqual(stats["used_percent"], 50)
+        self.assertEqual(stats["sf2_max_upload_mb"], 2048)
+        self.assertEqual(stats["fluidsynth_mb"], 120)
+
+
 class TestAudioUtils(unittest.TestCase):
     def test_card_from_audio_device(self):
         self.assertEqual(card_from_audio_device("plughw:1,0"), 1)

@@ -115,6 +115,7 @@
         <div id="sf2-list" class="sf2-list"></div>
         <div class="upload-zone" id="upload-zone">
           <p data-i18n="uploadDrag">Trascina un file .sf2 qui</p>
+          <p class="muted upload-limit" data-i18n="uploadMaxSize">Max 2 GB per file</p>
           <input type="file" id="sf2-upload" accept=".sf2" hidden>
           <button type="button" class="btn btn-secondary" id="btn-choose-file" data-i18n="chooseFile">Scegli file</button>
           <div id="upload-progress" class="progress hidden">
@@ -139,6 +140,10 @@
           <div class="console-toolbar">
             <button type="button" id="btn-console-clear" class="btn btn-small btn-secondary" data-i18n="consoleClear">Svuota</button>
             <span class="console-hint muted" data-i18n="consoleHint">Aggiornamento automatico mentre aperta</span>
+          </div>
+          <div id="console-memory" class="console-memory" aria-live="polite">
+            <div class="memory-bar" title="RAM"><div id="memory-bar-fill" class="memory-bar-fill"></div></div>
+            <p id="memory-stats" class="memory-stats muted">—</p>
           </div>
           <pre id="console-output" class="console-output" aria-live="polite"></pre>
         </details>

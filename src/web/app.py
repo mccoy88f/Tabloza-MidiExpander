@@ -46,15 +46,22 @@ from tabloza_common import (  # noqa: E402
     verify_password,
 )
 from soundfont_config import startup_soundfont_name  # noqa: E402
+from system_stats import SF2_MAX_UPLOAD_BYTES, get_memory_stats  # noqa: E402
 from wifi_utils import connect_wifi_network, scan_wifi_networks  # noqa: E402
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = load_secret_key()
-app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = SF2_MAX_UPLOAD_BYTES
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\- ]+\.sf2$", re.IGNORECASE)
+
+
+@app.errorhandler(413)
+def request_entity_too_large(_e):
+    max_mb = SF2_MAX_UPLOAD_BYTES // (1024 * 1024)
+    return jsonify({"error": f"File troppo grande (max {max_mb} MB)"}), 413
 
 
 def require_auth(f):
@@ -380,7 +387,10 @@ def api_wifi_connect():
 @app.route("/api/console")
 @require_auth
 def api_console():
-    return jsonify({"lines": read_events(200)})
+    return jsonify({
+        "lines": read_events(200),
+        "memory": get_memory_stats(SOUNDFONTS_DIR),
+    })
 
 
 @app.route("/api/console/clear", methods=["POST"])
