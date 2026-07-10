@@ -13,3 +13,7 @@ install -m 644 "${SRC}" "${DEST}"
 install -d /var/run/rtpmidid
 
 echo "rtpmidid config installata: ${DEST}"
+if systemctl is-active --quiet rtpmidid 2>/dev/null; then
+    systemctl restart rtpmidid
+    echo "rtpmidid riavviato"
+fi

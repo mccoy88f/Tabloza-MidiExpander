@@ -54,6 +54,25 @@ curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/
 
 ## RTP-MIDI
 
+### Il Mac mostra tabloza-me, tabloza-me #1 e/o FluidSynth
+
+Cause tipiche (versioni precedenti a v1.3.22):
+
+1. **Doppio annuncio RTP-MIDI** — Avahi statico + rtpmidid (stesso nome → `#1` su macOS)
+2. **`alsa_announce` in rtpmidid** — espone FluidSynth come endpoint di rete separato
+
+**Fix sul Pi:**
+```bash
+sudo tabloza-update
+sudo bash /opt/tabloza/scripts/configure-rtpmidid.sh /opt/tabloza/config/rtpmidid/default.ini
+sudo bash /opt/tabloza/scripts/configure-avahi.sh /opt/tabloza
+sudo systemctl restart rtpmidid avahi-daemon
+```
+
+Sul Mac, in **Studio MIDI → Rete**, elimina sessioni vecchie verso il Pi e riconnetti solo a **`tabloza-me`**.
+
+Verifica (Pi): `avahi-browse -r _apple-midi._udp | grep -i tabloza` — deve comparire **una sola** sessione `tabloza-me` (niente Fluid Synth in rete).
+
 ### Il Mac non vede tabloza-me in Audio MIDI Setup (ma il web funziona)
 
 Il web (`http://tabloza-me.local`) e il MIDI wireless usano **servizi mDNS diversi**:
@@ -78,7 +97,7 @@ sudo tabloza-test
 **Su Mac — Configurazione Audio e MIDI:**
 1. Finestra → Mostra Studio MIDI → doppio clic **Rete**
 2. In **Le mie sessioni**: clic **+**, inserisci un nome, **attiva la spunta**
-3. In **Directory** cerca `tabloza-me` → **Connetti**
+3. In **Directory** cerca **`tabloza-me`** → **Connetti** (una sola voce; elimina sessioni vecchie se vedi duplicati)
 4. Se non compare: attendi 30s e riprova dopo i comandi sul Pi sopra
 
 ### Il Mac/iPad non vede il dispositivo

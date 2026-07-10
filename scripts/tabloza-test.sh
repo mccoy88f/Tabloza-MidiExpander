@@ -114,7 +114,15 @@ if command -v avahi-browse >/dev/null 2>&1; then
     MDNS_OUT=$(timeout 5 avahi-browse -r _apple-midi._udp 2>/dev/null || true)
     if echo "$MDNS_OUT" | grep -qi tabloza; then
         echo "$MDNS_OUT" | grep -iE 'tabloza|hostname' | head -5 | sed 's/^/       /'
-        green "Annuncio tabloza-me su mDNS"
+        TABLOZA_COUNT=$(echo "$MDNS_OUT" | grep -ci 'tabloza-me' || true)
+        if [[ "$TABLOZA_COUNT" -gt 2 ]]; then
+            yellow "Più annunci tabloza-me (atteso: 1) — esegui tabloza-update e riavvia rtpmidid"
+        else
+            green "Annuncio tabloza-me su mDNS"
+        fi
+        if echo "$MDNS_OUT" | grep -qi 'fluid synth'; then
+            yellow "FluidSynth annunciato in rete (non dovrebbe) — verifica /etc/rtpmidid/default.ini"
+        fi
     else
         yellow "Nessun annuncio Apple MIDI trovato via mDNS"
     fi

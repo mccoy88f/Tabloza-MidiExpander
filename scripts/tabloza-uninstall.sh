@@ -51,6 +51,7 @@ rm -f /usr/local/bin/tabloza-update
 
 log "Rimozione configurazioni..."
 rm -f /etc/avahi/services/tabloza-web.service
+rm -f /etc/avahi/services/tabloza-rtpmidi.service
 rm -f /etc/NetworkManager/system-connections/tabloza-hotspot.nmconnection
 rm -rf /etc/rtpmidid
 systemctl restart avahi-daemon 2>/dev/null || true
