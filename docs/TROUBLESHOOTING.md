@@ -2,6 +2,16 @@
 
 ## Accesso web
 
+### rtpmidid non si installa / `Unable to locate package rtpmidid`
+
+Normale su Raspberry Pi OS: `rtpmidid` **non è nei repository apt**. L'installer recente lo scarica automaticamente da [GitHub (davidmoreno/rtpmidid)](https://github.com/davidmoreno/rtpmidid/releases).
+
+Riesegui l'installazione aggiornata:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
+```
+
 ### Non raggiungo tabloza-me.local
 
 1. Verifica che il dispositivo sia acceso e connesso alla stessa rete del telefono

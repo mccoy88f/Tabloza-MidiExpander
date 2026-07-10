@@ -5,7 +5,7 @@ Wants=avahi-daemon.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rtpmidid -p 5004
+ExecStart=/usr/bin/rtpmidid
 Restart=always
 RestartSec=3
 

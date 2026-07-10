@@ -48,7 +48,6 @@ apt-get update -qq
 apt-get install -y -qq \
     git curl \
     fluidsynth fluid-soundfont-gm \
-    rtpmidid \
     avahi-daemon avahi-utils \
     network-manager \
     python3 python3-flask python3-bcrypt python3-venv \
@@ -68,6 +67,10 @@ else
     log "Download sorgenti da GitHub..."
     git clone --depth 1 "${REPO_URL}" "${INSTALL_DIR}"
 fi
+
+# --- rtpmidid (da GitHub, non nei repo Pi OS) ---
+log "Installazione rtpmidid..."
+bash "${INSTALL_DIR}/scripts/install-rtpmidid.sh"
 
 # --- Config persistente ---
 if [[ ! -f "${CONFIG_FILE}" ]]; then
