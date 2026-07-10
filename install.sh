@@ -154,6 +154,8 @@ bash "${INSTALL_DIR}/scripts/configure-network.sh" "${HOTSPOT_SSID}" "${HOTSPOT_
 # --- Permessi audio real-time ---
 log "Configurazione priorità audio real-time..."
 bash "${INSTALL_DIR}/scripts/configure-audio-rt.sh"
+install -m 644 "${INSTALL_DIR}/config/modules-load/tabloza.conf" /etc/modules-load.d/tabloza.conf
+modprobe snd-seq 2>/dev/null || true
 
 # --- Comandi di sistema ---
 log "Installazione comandi tabloza-test e tabloza-uninstall..."

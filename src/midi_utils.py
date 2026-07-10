@@ -193,7 +193,7 @@ def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:
                 continue
             if not _fluidsynth_process_running():
                 return False, "FluidSynth non in esecuzione — carica un SF2 e riavvia l'orchestrator"
-            return False, last_detail
+            return False, "FluidSynth in caricamento o porta MIDI non pronta — attendi e riprova"
         try:
             subprocess.run(
                 ["amidi", "-p", fs["address"], "-S", "90 3C 64"],
@@ -218,9 +218,17 @@ def _fluidsynth_process_running() -> bool:
     try:
         result = subprocess.run(
             ["pgrep", "-x", "fluidsynth"],
-            capture_output=True, timeout=3,
+            capture_output=True, text=True, timeout=3,
         )
-        return result.returncode == 0
+        for pid_str in result.stdout.split():
+            try:
+                status = Path(f"/proc/{pid_str}/status").read_text()
+            except OSError:
+                continue
+            if "zombie" in status.lower():
+                continue
+            return True
+        return False
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
 

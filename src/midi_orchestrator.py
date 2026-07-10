@@ -35,6 +35,7 @@ logging.basicConfig(
 log = logging.getLogger("tabloza.orchestrator")
 
 fluidsynth_proc: subprocess.Popen | None = None
+fluidsynth_log_fd = None
 shutdown = False
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
@@ -76,7 +77,7 @@ def find_soundfont(config: dict) -> Path | None:
 
 def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
     fs_cfg = config.get("fluidsynth", {})
-    return [
+    cmd = [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
         "-o", f"audio.alsa.device={fs_cfg.get('audio_device', 'plughw:0,0')}",
@@ -87,8 +88,24 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
         "-ni",
-        str(sf_path),
     ]
+    # SF2 grandi (>50 MB): carica campioni on-demand per evitare OOM su Pi
+    try:
+        if sf_path.stat().st_size > 50 * 1024 * 1024:
+            cmd.extend(["-o", "synth.dynamic-sample-loading=yes"])
+            log.info("SF2 grande (%.0f MB) — dynamic-sample-loading attivo", sf_path.stat().st_size / 1024 / 1024)
+    except OSError:
+        pass
+    cmd.append(str(sf_path))
+    return cmd
+
+
+def _startup_timeout_for(sf_path: Path) -> float:
+    try:
+        size_mb = sf_path.stat().st_size / (1024 * 1024)
+    except OSError:
+        size_mb = 10
+    return min(120.0, max(25.0, 20.0 + size_mb * 0.8))
 
 
 def _ensure_alsa_seq():
@@ -100,29 +117,41 @@ def _ensure_alsa_seq():
 
 def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
     """Avvia FluidSynth con log su file (nessun PIPE che può bloccare)."""
+    global fluidsynth_log_fd
     FLUIDSYNTH_LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(FLUIDSYNTH_LOG, "a", encoding="utf-8") as f:
         f.write(f"\n--- avvio {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
         f.write(" ".join(shlex.quote(part) for part in cmd) + "\n")
-    cmd_line = "exec " + " ".join(shlex.quote(part) for part in cmd)
+    if fluidsynth_log_fd:
+        try:
+            fluidsynth_log_fd.close()
+        except OSError:
+            pass
+    fluidsynth_log_fd = open(FLUIDSYNTH_LOG, "ab", buffering=0)
     return subprocess.Popen(
-        f"{cmd_line} >> {shlex.quote(str(FLUIDSYNTH_LOG))} 2>&1",
-        shell=True,
-        executable="/bin/bash",
+        cmd,
+        stdout=fluidsynth_log_fd,
+        stderr=subprocess.STDOUT,
         start_new_session=True,
     )
 
 
-def _wait_fluidsynth_ready(timeout_sec: float = 8.0) -> bool:
-    """Attende che FluidSynth esponga la porta MIDI ALSA."""
+def _wait_fluidsynth_ready(timeout_sec: float) -> tuple[bool, str]:
+    """Attende porta MIDI ALSA. Ritorna (ok, stato) con stato ok|crashed|loading."""
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
-            return False
+            return False, "crashed"
         if find_fluidsynth_input():
-            return True
+            return True, "ok"
         time.sleep(0.5)
-    return find_fluidsynth_input() is not None
+    if fluidsynth_proc and fluidsynth_proc.poll() is not None:
+        return False, "crashed"
+    if find_fluidsynth_input():
+        return True, "ok"
+    if fluidsynth_proc and fluidsynth_proc.poll() is None:
+        return False, "loading"
+    return False, "crashed"
 
 
 def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
@@ -136,7 +165,7 @@ def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
 
 def _reap_fluidsynth():
     """Reap child process (avoids zombies)."""
-    global fluidsynth_proc
+    global fluidsynth_proc, fluidsynth_log_fd
     if fluidsynth_proc:
         if fluidsynth_proc.poll() is None:
             try:
@@ -154,6 +183,12 @@ def _reap_fluidsynth():
         except ChildProcessError:
             pass
     fluidsynth_proc = None
+    if fluidsynth_log_fd:
+        try:
+            fluidsynth_log_fd.close()
+        except OSError:
+            pass
+    fluidsynth_log_fd = None
 
 
 def _stop_monitor_proc():
@@ -289,17 +324,22 @@ def start_fluidsynth(config: dict) -> bool:
         return False
 
     cmd = build_fluidsynth_cmd(sf, config)
-    log.info("Avvio FluidSynth con %s", sf.name)
+    log.info("Avvio FluidSynth con %s (timeout %.0fs)", sf.name, _startup_timeout_for(sf))
     fluidsynth_proc = _launch_fluidsynth(cmd)
 
-    if not _wait_fluidsynth_ready(12.0):
+    ready, status = _wait_fluidsynth_ready(_startup_timeout_for(sf))
+    if status == "crashed":
         code = fluidsynth_proc.poll() if fluidsynth_proc else None
-        log.error("FluidSynth non pronto (exit=%s)", code)
+        log.error("FluidSynth terminato durante l'avvio (exit=%s)", code)
         for line in _tail_fluidsynth_log():
             log.error("fluidsynth: %s", line)
         _reap_fluidsynth()
         return False
-
+    if status == "loading":
+        log.warning(
+            "FluidSynth in caricamento SF2 — processo attivo, porta MIDI non ancora pronta"
+        )
+        return True
     route_rtpmidi_to_fluidsynth()
     apply_volume(config)
     return True
@@ -348,7 +388,8 @@ def main():
             else:
                 log.warning("FluidSynth non attivo — tentativo avvio...")
             start_fluidsynth(load_config())
-        route_rtpmidi_to_fluidsynth()
+        else:
+            route_rtpmidi_to_fluidsynth()
         time.sleep(ROUTING_INTERVAL)
 
     log.info("Orchestratore arrestato.")
