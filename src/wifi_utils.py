@@ -310,6 +310,86 @@ def _connection_up(conn_name: str, password: str = "") -> subprocess.CompletedPr
                 pass
 
 
+def _eth_connected() -> bool:
+    result = _run(["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device", "status"], timeout=5)
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if len(fields) >= 3 and fields[1] == "ethernet" and fields[2] == "connected":
+            return True
+    return False
+
+
+def get_network_status() -> dict:
+    """Report ethernet/WiFi state for dashboard."""
+    eth = _eth_connected()
+    wlan_mode = "disconnected"
+    wifi_name = ""
+
+    wlan_state = _wlan_state()
+    if wlan_state == "connected":
+        wifi_name = _active_wifi_connection()
+        if wifi_name == HOTSPOT_CONN:
+            wlan_mode = "hotspot"
+        elif wifi_name:
+            wlan_mode = "client"
+
+    if eth and wlan_mode == "client":
+        network_mode = "lan_wifi"
+    elif eth:
+        network_mode = "ethernet"
+    elif wlan_mode == "hotspot":
+        network_mode = "hotspot"
+    elif wlan_mode == "client":
+        network_mode = "client"
+    else:
+        network_mode = "offline"
+
+    return {
+        "network_mode": network_mode,
+        "ethernet_connected": eth,
+        "wlan_mode": wlan_mode,
+        "wifi_connection": wifi_name,
+    }
+
+
+def start_hotspot() -> tuple[bool, str | None]:
+    """Start provisioning AP (optional when Pi is on Ethernet)."""
+    if not _wlan_device_present():
+        return False, f"Interfaccia {WLAN_IFACE} non disponibile"
+
+    with _WifiConnectLock():
+        log_event("wifi", "Avvio hotspot provisioning…")
+        _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
+        result = _run(["nmcli", "connection", "up", HOTSPOT_CONN], timeout=30)
+        if result.returncode != 0:
+            result = _run([
+                "nmcli", "device", "wifi", "hotspot",
+                "ifname", WLAN_IFACE,
+                "ssid", "Tabloza-MidiExpander",
+                "password", "",
+            ], timeout=30)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "hotspot fallito").strip()
+            log_event("wifi", f"Hotspot fallito: {err}", "error")
+            return False, err
+        log_event("wifi", "Hotspot Tabloza-MidiExpander attivo")
+        return True, None
+
+
+def stop_hotspot() -> tuple[bool, str | None]:
+    """Stop AP and leave wlan ready for client scan/connect."""
+    with _WifiConnectLock():
+        result = _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=15)
+        _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
+        if result.returncode != 0 and _wlan_state() == "connected":
+            active = _active_wifi_connection()
+            if active == HOTSPOT_CONN:
+                err = (result.stderr or result.stdout or "spegnimento hotspot fallito").strip()
+                return False, err
+        log_event("wifi", "Hotspot disattivato")
+        return True, None
+
+
 def connect_wifi_network(
     ssid: str,
     password: str = "",

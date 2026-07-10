@@ -7,6 +7,10 @@ TIMEOUT=20
 
 log() { logger -t tabloza-wifi "$*"; echo "[tabloza-wifi] $*"; }
 
+is_eth_connected() {
+    nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | grep -qE ':ethernet:connected'
+}
+
 # Attendi interfaccia wlan
 for i in $(seq 1 30); do
     nmcli -t -f DEVICE,TYPE device status | grep -q "^wlan0:wifi" && break
@@ -17,6 +21,12 @@ done
 ACTIVE=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null | grep ":802-11-wireless" | head -1 | cut -d: -f1)
 if [[ -n "$ACTIVE" && "$ACTIVE" != "$HOTSPOT_CONN" ]]; then
     log "Connesso a: ${ACTIVE}"
+    exit 0
+fi
+
+# Con Ethernet attiva: non forzare hotspot (wlan libero per scan/connect dal pannello web)
+if is_eth_connected; then
+    log "Ethernet attiva — configura WiFi dal pannello web (http://tabloza-me.local)"
     exit 0
 fi
 

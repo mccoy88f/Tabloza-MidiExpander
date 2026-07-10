@@ -8,6 +8,10 @@ FALLBACK_SCRIPT="/usr/local/bin/tabloza-wifi-fallback.sh"
 
 log() { logger -t tabloza-wifi "$*"; }
 
+is_eth_connected() {
+    nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null | grep -qE ':ethernet:connected'
+}
+
 is_wlan_connected() {
     local state
     state=$(nmcli -t -f DEVICE,STATE device 2>/dev/null | grep '^wlan0:' | cut -d: -f2 || true)
@@ -33,6 +37,10 @@ while true; do
     fi
 
     if is_hotspot_active; then
+        continue
+    fi
+
+    if is_eth_connected && ! is_wlan_connected; then
         continue
     fi
 

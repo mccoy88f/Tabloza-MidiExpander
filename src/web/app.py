@@ -52,7 +52,13 @@ from soundfont_config import startup_soundfont_name  # noqa: E402
 from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_memory_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
-from wifi_utils import connect_wifi_network, scan_wifi_networks  # noqa: E402
+from wifi_utils import (  # noqa: E402
+    connect_wifi_network,
+    get_network_status,
+    scan_wifi_networks,
+    start_hotspot,
+    stop_hotspot,
+)
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = load_secret_key()
@@ -143,10 +149,12 @@ def api_status():
     midi = get_midi_status()
     sf_state = read_soundfont_state()
     audio = get_audio_activity()
+    network = get_network_status()
     return jsonify({
         "ip": _get_ip(),
         "hostname": MDNS_NAME,
-        "network_mode": _get_network_mode(),
+        "network": network,
+        "network_mode": network["network_mode"],
         "midi": midi,
         "activity": {
             "midi": get_midi_activity(),
@@ -478,6 +486,24 @@ def api_wifi_connect():
     return jsonify({"ok": True, "ssid": ssid})
 
 
+@app.route("/api/wifi/hotspot/start", methods=["POST"])
+@require_auth
+def api_wifi_hotspot_start():
+    ok, err = start_hotspot()
+    if not ok:
+        return jsonify({"error": err or "Hotspot fallito"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/wifi/hotspot/stop", methods=["POST"])
+@require_auth
+def api_wifi_hotspot_stop():
+    ok, err = stop_hotspot()
+    if not ok:
+        return jsonify({"error": err or "Spegnimento hotspot fallito"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
 # --- Console ---
 
 @app.route("/api/console")
@@ -612,21 +638,6 @@ def _get_ip() -> str:
         return result.stdout.strip().split()[0] if result.stdout.strip() else "0.0.0.0"
     except (subprocess.TimeoutExpired, FileNotFoundError, IndexError):
         return "0.0.0.0"
-
-
-def _get_network_mode() -> str:
-    try:
-        result = subprocess.run(
-            ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show", "--active"],
-            capture_output=True, text=True, timeout=5,
-        )
-        for line in result.stdout.strip().splitlines():
-            name, ctype = line.split(":", 1)
-            if ctype == "802-11-wireless":
-                return "hotspot" if "hotspot" in name.lower() else "client"
-    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
-        pass
-    return "unknown"
 
 
 if __name__ == "__main__":

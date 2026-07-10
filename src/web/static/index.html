@@ -165,6 +165,11 @@
       <!-- WiFi -->
       <section class="card">
         <h2 data-i18n="sectionWifi">WiFi</h2>
+        <p id="wifi-hint" class="muted wifi-hint" data-i18n="wifiEthHint">Con cavo LAN: configura WiFi qui sotto. Hotspot opzionale per smartphone.</p>
+        <div class="wifi-hotspot-actions">
+          <button type="button" id="btn-hotspot-start" class="btn btn-secondary" data-i18n="startHotspot">Avvia hotspot</button>
+          <button type="button" id="btn-hotspot-stop" class="btn btn-secondary" data-i18n="stopHotspot">Spegni hotspot</button>
+        </div>
         <button id="btn-wifi-scan" class="btn btn-secondary" data-i18n="scanNetworks">Scansiona reti</button>
         <p id="wifi-msg" class="msg hidden"></p>
         <div id="wifi-list" class="wifi-list"></div>

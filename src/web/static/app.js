@@ -167,14 +167,26 @@ function renderActivity(activity, midi, synth, soundfont) {
       : t("audioStopped");
 }
 
+function networkModeLabel(mode) {
+  switch (mode) {
+    case "hotspot": return t("networkHotspot");
+    case "client": return t("networkWifi");
+    case "ethernet": return t("networkEthernet");
+    case "lan_wifi": return t("networkLanWifi");
+    case "offline": return t("networkOffline");
+    default: return t("networkUnknown");
+  }
+}
+
 async function refreshStatus() {
   const s = await api("/api/status");
   document.getElementById("status-hostname").textContent = s.hostname || "—";
   document.getElementById("status-ip").textContent = s.ip;
-  document.getElementById("status-network").textContent =
-    s.network_mode === "hotspot" ? t("networkHotspot")
-      : s.network_mode === "client" ? t("networkWifi")
-        : t("networkUnknown");
+  document.getElementById("status-network").textContent = networkModeLabel(s.network_mode);
+  const wifiHint = document.getElementById("wifi-hint");
+  if (wifiHint) {
+    wifiHint.classList.toggle("hidden", !(s.network?.ethernet_connected));
+  }
   const sf2Label = s.soundfont?.loaded
     || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
   document.getElementById("status-sf2").textContent = sf2Label;
@@ -636,6 +648,42 @@ document.getElementById("btn-console-clear").addEventListener("click", async () 
 });
 
 // --- WiFi ---
+document.getElementById("btn-hotspot-start")?.addEventListener("click", async () => {
+  const msg = document.getElementById("wifi-msg");
+  msg.textContent = t("startHotspot");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/wifi/hotspot/start", { method: "POST" });
+    msg.textContent = t("hotspotStarted");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
+document.getElementById("btn-hotspot-stop")?.addEventListener("click", async () => {
+  const msg = document.getElementById("wifi-msg");
+  msg.textContent = t("stopHotspot");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/wifi/hotspot/stop", { method: "POST" });
+    msg.textContent = t("hotspotStopped");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
 document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   const msg = document.getElementById("wifi-msg");
   msg.textContent = t("scanningWifi");
