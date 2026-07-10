@@ -157,42 +157,66 @@ class TestNmcliParse(unittest.TestCase):
 
 
 class TestWifiConnect(unittest.TestCase):
-    @patch("wifi_utils._connection_up")
+    def setUp(self):
+        import importlib
+        import wifi_utils as wu
+
+        self.lock_dir = tempfile.mkdtemp()
+        self.lock_path = os.path.join(self.lock_dir, "wifi-connecting")
+        os.environ["TABLOZA_WIFI_CONNECT_LOCK"] = self.lock_path
+        importlib.reload(wu)
+        self.wu = wu
+
+    def tearDown(self):
+        import importlib
+        import wifi_utils as wu
+
+        os.environ.pop("TABLOZA_WIFI_CONNECT_LOCK", None)
+        importlib.reload(wu)
+        if os.path.isfile(self.lock_path):
+            os.unlink(self.lock_path)
+
+    @patch("wifi_utils._connect_via_device_wifi")
+    @patch("wifi_utils._ssid_visible", return_value=True)
+    @patch("wifi_utils._ensure_wlan_client_ready")
     @patch("wifi_utils._run")
     @patch("wifi_utils.prepare_wifi_scan")
-    def test_connect_with_password(self, mock_prepare, mock_run, mock_up):
+    def test_connect_with_password(self, mock_prepare, mock_run, _ready, _visible, mock_device):
         mock_prepare.return_value = (True, "ok")
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        mock_up.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        ok, err = connect_wifi_network("MyNet", "secret123", "WPA2")
+        mock_device.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = self.wu.connect_wifi_network("MyNet", "secret123", "WPA2")
         self.assertTrue(ok)
         self.assertIsNone(err)
-        cmds = [c[0][0] for c in mock_run.call_args_list]
-        add_cmd = next(c for c in cmds if "add" in c)
-        modify_cmd = next(c for c in cmds if "modify" in c)
-        self.assertIn("wifi-sec.key-mgmt", add_cmd)
-        self.assertIn("wifi-sec.psk", modify_cmd)
-        self.assertIn("secret123", modify_cmd)
-        mock_up.assert_called_once_with("tabloza-wifi-MyNet", password="secret123")
+        mock_device.assert_called_once_with("MyNet", "secret123", "tabloza-wifi-MyNet")
 
     @patch("wifi_utils.prepare_wifi_scan")
     def test_connect_secured_without_password(self, mock_prepare):
         mock_prepare.return_value = (True, "ok")
-        ok, err = connect_wifi_network("MyNet", "", "WPA2")
+        ok, err = self.wu.connect_wifi_network("MyNet", "", "WPA2")
         self.assertFalse(ok)
         self.assertIn("Password", err or "")
 
+    @patch("wifi_utils._connection_up")
+    @patch("wifi_utils._ssid_visible", return_value=True)
+    @patch("wifi_utils._ensure_wlan_client_ready")
     @patch("wifi_utils._run")
     @patch("wifi_utils.prepare_wifi_scan")
-    def test_connect_open_network(self, mock_prepare, mock_run):
+    def test_connect_open_network(self, mock_prepare, mock_run, _ready, _visible, mock_up):
         mock_prepare.return_value = (True, "ok")
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        ok, err = connect_wifi_network("OpenNet", "", "")
+        mock_up.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = self.wu.connect_wifi_network("OpenNet", "", "")
         self.assertTrue(ok)
         cmds = [c[0][0] for c in mock_run.call_args_list]
         add_cmd = next(c for c in cmds if "add" in c)
         self.assertIn("wifi-sec.key-mgmt", add_cmd)
         self.assertIn("none", add_cmd)
+
+    def test_friendly_timeout_error(self):
+        msg = self.wu._friendly_connect_error("Error: Timeout expired (45 seconds)")
+        self.assertIn("Timeout", msg)
+        self.assertIn("90s", msg)
 
 
 class TestUpdateUtils(unittest.TestCase):

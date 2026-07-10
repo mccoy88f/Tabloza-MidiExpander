@@ -10,6 +10,8 @@ from event_log import log_event
 
 HOTSPOT_CONN = "tabloza-hotspot"
 WLAN_IFACE = "wlan0"
+WIFI_CONNECT_LOCK = os.environ.get("TABLOZA_WIFI_CONNECT_LOCK", "/run/tabloza/wifi-connecting")
+NM_WAIT_SEC = 90
 
 
 def _run(cmd: list[str], timeout: float = 15) -> subprocess.CompletedProcess:
@@ -156,6 +158,133 @@ def _wifi_key_mgmt(security: str) -> str:
     return "wpa-psk"
 
 
+def _wifi_key_mgmt_options(security: str) -> list[str]:
+    primary = _wifi_key_mgmt(security)
+    if primary == "sae":
+        return ["sae", "wpa-psk"]
+    return ["wpa-psk"]
+
+
+class _WifiConnectLock:
+    def __enter__(self):
+        os.makedirs(os.path.dirname(WIFI_CONNECT_LOCK), exist_ok=True)
+        with open(WIFI_CONNECT_LOCK, "w", encoding="utf-8") as fh:
+            fh.write(str(os.getpid()))
+        return self
+
+    def __exit__(self, *_args):
+        try:
+            os.unlink(WIFI_CONNECT_LOCK)
+        except OSError:
+            pass
+
+
+def _wlan_state() -> str:
+    result = _run(["nmcli", "-t", "-f", "DEVICE,STATE", "device"], timeout=5)
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if len(fields) >= 2 and fields[0] == WLAN_IFACE:
+            return fields[1]
+    return ""
+
+
+def _ensure_wlan_client_ready() -> None:
+    """Leave AP mode and wait until wlan0 can join an infrastructure network."""
+    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=20)
+    _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=20)
+    for _ in range(20):
+        state = _wlan_state()
+        if state in ("disconnected", "unavailable", ""):
+            break
+        if state == "connected":
+            active = _active_wifi_connection()
+            if active and active != HOTSPOT_CONN:
+                return
+            _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=20)
+        time.sleep(0.5)
+    _run(["nmcli", "radio", "wifi", "on"], timeout=5)
+    _run(["nmcli", "device", "wifi", "rescan"], timeout=15)
+    time.sleep(2.0)
+
+
+def _ssid_visible(ssid: str) -> bool:
+    result = _run(["nmcli", "-t", "-f", "SSID", "device", "wifi", "list"], timeout=15)
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if fields and fields[0].strip() == ssid:
+            return True
+    return False
+
+
+def _friendly_connect_error(err: str) -> str:
+    low = err.lower()
+    if "timeout" in low:
+        return (
+            "Timeout connessione (90s) — verifica password, avvicina il router "
+            "e ripeti la scansione"
+        )
+    if "secrets were required" in low or "no secrets" in low:
+        return "Password WiFi mancante o errata"
+    return err
+
+
+def _apply_autoconnect(conn_name: str) -> None:
+    _run([
+        "nmcli", "connection", "modify", conn_name,
+        "connection.autoconnect", "yes",
+        "connection.autoconnect-priority", "100",
+    ], timeout=10)
+    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=10)
+
+
+def _connect_via_device_wifi(
+    ssid: str,
+    password: str,
+    conn_name: str,
+) -> subprocess.CompletedProcess:
+    cmd = [
+        "nmcli", "--wait", str(NM_WAIT_SEC),
+        "device", "wifi", "connect", ssid,
+        "ifname", WLAN_IFACE,
+        "name", conn_name,
+    ]
+    if password:
+        cmd += ["password", password]
+    return _run(cmd, timeout=NM_WAIT_SEC + 15)
+
+
+def _connect_via_profile(
+    ssid: str,
+    password: str,
+    security: str,
+    conn_name: str,
+    key_mgmt: str,
+) -> subprocess.CompletedProcess | None:
+    _delete_wifi_profiles_for_ssid(ssid)
+    add_cmd = [
+        "nmcli", "connection", "add", "type", "wifi",
+        "con-name", conn_name,
+        "ifname", WLAN_IFACE,
+        "ssid", ssid,
+        "802-11-wireless.mode", "infrastructure",
+        "wifi-sec.key-mgmt", key_mgmt,
+    ]
+    add_result = _run(add_cmd, timeout=30)
+    if add_result.returncode != 0:
+        return add_result
+
+    if password:
+        mod_result = _run([
+            "nmcli", "connection", "modify", conn_name,
+            "wifi-sec.key-mgmt", key_mgmt,
+            "wifi-sec.psk", password,
+        ], timeout=10)
+        if mod_result.returncode != 0:
+            return mod_result
+
+    return _connection_up(conn_name, password=password)
+
+
 def _write_nm_passwd_file(password: str) -> str:
     """Temp file for nmcli connection up passwd-file (802-11-wireless-security.psk)."""
     fd, path = tempfile.mkstemp(prefix="tabloza-nm-passwd-")
@@ -166,13 +295,13 @@ def _write_nm_passwd_file(password: str) -> str:
 
 
 def _connection_up(conn_name: str, password: str = "") -> subprocess.CompletedProcess:
-    up_cmd = ["nmcli", "--wait", "45", "connection", "up", conn_name]
+    up_cmd = ["nmcli", "--wait", str(NM_WAIT_SEC), "connection", "up", conn_name]
     passwd_path = None
     if password:
         passwd_path = _write_nm_passwd_file(password)
         up_cmd += ["passwd-file", passwd_path]
     try:
-        return _run(up_cmd, timeout=60)
+        return _run(up_cmd, timeout=NM_WAIT_SEC + 15)
     finally:
         if passwd_path:
             try:
@@ -196,57 +325,52 @@ def connect_wifi_network(
 
     use_psk = bool(password) or _ssid_requires_password(security)
 
-    ok, detail = prepare_wifi_scan()
-    if not ok:
-        return False, detail
+    with _WifiConnectLock():
+        ok, detail = prepare_wifi_scan()
+        if not ok:
+            return False, detail
 
-    log_event("wifi", f"Connessione a «{ssid}»…")
-    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=15)
+        log_event("wifi", f"Connessione a «{ssid}»…")
+        _ensure_wlan_client_ready()
 
-    conn_name = _safe_conn_name(ssid)
-    _delete_wifi_profiles_for_ssid(ssid)
-    _run(["nmcli", "connection", "delete", conn_name], timeout=10)
+        if not _ssid_visible(ssid):
+            msg = f"Rete «{ssid}» non visibile — ripeti la scansione e riprova"
+            log_event("wifi", msg, "error")
+            return False, msg
 
-    add_cmd = [
-        "nmcli", "connection", "add", "type", "wifi",
-        "con-name", conn_name,
-        "ifname", WLAN_IFACE,
-        "ssid", ssid,
-        "802-11-wireless.mode", "infrastructure",
-    ]
-    if use_psk:
-        add_cmd += ["wifi-sec.key-mgmt", _wifi_key_mgmt(security)]
-    else:
-        add_cmd += ["wifi-sec.key-mgmt", "none"]
+        conn_name = _safe_conn_name(ssid)
+        _delete_wifi_profiles_for_ssid(ssid)
 
-    add_result = _run(add_cmd, timeout=30)
-    if add_result.returncode != 0:
-        err = (add_result.stderr or add_result.stdout or "creazione profilo fallita").strip()
-        log_event("wifi", f"Connessione fallita: {err}", "error")
-        return False, err
+        if use_psk or password:
+            result = _connect_via_device_wifi(ssid, password, conn_name)
+            if result.returncode == 0:
+                _apply_autoconnect(conn_name)
+                log_event("wifi", f"Connesso a «{ssid}»")
+                return True, None
+            err = (result.stderr or result.stdout or "connessione fallita").strip()
+            log_event("wifi", f"device wifi connect fallito: {err}")
 
-    if password:
-        mod_result = _run([
-            "nmcli", "connection", "modify", conn_name,
-            "wifi-sec.key-mgmt", _wifi_key_mgmt(security),
-            "wifi-sec.psk", password,
-        ], timeout=10)
-        if mod_result.returncode != 0:
-            err = (mod_result.stderr or mod_result.stdout or "salvataggio password fallito").strip()
+            for key_mgmt in _wifi_key_mgmt_options(security):
+                log_event("wifi", f"Tentativo profilo NM ({key_mgmt})…")
+                result = _connect_via_profile(ssid, password, security, conn_name, key_mgmt)
+                if result is not None and result.returncode == 0:
+                    _apply_autoconnect(conn_name)
+                    log_event("wifi", f"Connesso a «{ssid}»")
+                    return True, None
+                if result is not None:
+                    err = (result.stderr or result.stdout or err).strip()
+
             log_event("wifi", f"Connessione fallita: {err}", "error")
-            return False, err
+            return False, _friendly_connect_error(err)
 
-    result = _connection_up(conn_name, password=password)
-    if result.returncode != 0:
-        err = (result.stderr or result.stdout or "connessione fallita").strip()
+        result = _connect_via_profile(ssid, "", security, conn_name, "none")
+        if result is not None and result.returncode == 0:
+            _apply_autoconnect(conn_name)
+            log_event("wifi", f"Connesso a «{ssid}»")
+            return True, None
+
+        err = "connessione fallita"
+        if result is not None:
+            err = (result.stderr or result.stdout or err).strip()
         log_event("wifi", f"Connessione fallita: {err}", "error")
-        return False, err
-
-    _run([
-        "nmcli", "connection", "modify", conn_name,
-        "connection.autoconnect", "yes",
-        "connection.autoconnect-priority", "100",
-    ], timeout=10)
-    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=10)
-    log_event("wifi", f"Connesso a «{ssid}»")
-    return True, None
+        return False, _friendly_connect_error(err)

@@ -28,6 +28,10 @@ log "Avvio monitor WiFi"
 while true; do
     sleep "$CHECK_INTERVAL"
 
+    if [[ -f /run/tabloza/wifi-connecting ]]; then
+        continue
+    fi
+
     if is_hotspot_active; then
         continue
     fi
