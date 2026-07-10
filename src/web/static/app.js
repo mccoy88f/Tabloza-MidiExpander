@@ -203,6 +203,25 @@ document.getElementById("btn-audio-test").addEventListener("click", async () => 
   }
 });
 
+document.getElementById("btn-jack-test").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-jack-test");
+  const msg = document.getElementById("audio-test-msg");
+  btn.disabled = true;
+  msg.textContent = t("jackTestWorking");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    await api("/api/audio/test-hardware", { method: "POST" });
+    msg.textContent = t("jackTestDone");
+    msg.className = "msg ok";
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("btn-midi-reset").addEventListener("click", async () => {
   const btn = document.getElementById("btn-midi-reset");
   const msg = document.getElementById("midi-reset-msg");

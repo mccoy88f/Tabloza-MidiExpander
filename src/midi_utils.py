@@ -1,9 +1,12 @@
 """Tabloza MidiExpander — ALSA MIDI utilities."""
 
 import logging
+import os
 import re
+import signal
 import subprocess
 import time
+from pathlib import Path
 
 from activity_status import touch_midi_activity
 
@@ -68,9 +71,32 @@ def get_input_ports() -> list[dict]:
 
 
 def find_fluidsynth_input() -> dict | None:
-    for port in get_input_ports():
+    """Return FluidSynth ALSA port for routing MIDI into the synth.
+
+    FluidSynth 2.4 registers "Synth input port" as an output endpoint in
+    `aconnect -o`, not in `aconnect -i`. rtpmidid may mirror that name on its
+    own client — always prefer the real FluidSynth client.
+    """
+    def _is_fluidsynth_client(port: dict) -> bool:
+        return port["client"].lower().startswith("fluid synth")
+
+    def _is_fluidsynth_port(port: dict) -> bool:
         label = f"{port['client']} {port['name']}".lower()
-        if "fluid" in label:
+        if "rtpmidid" in label:
+            return False
+        return "fluid" in label or "synth input" in label
+
+    for port in get_output_ports():
+        if _is_fluidsynth_client(port):
+            return port
+    for port in get_input_ports():
+        if _is_fluidsynth_client(port):
+            return port
+    for port in get_output_ports():
+        if _is_fluidsynth_port(port):
+            return port
+    for port in get_input_ports():
+        if _is_fluidsynth_port(port):
             return port
     return None
 
@@ -102,15 +128,20 @@ def get_active_routes() -> list[dict]:
 
     routes = []
     fs_addr = fs["address"]
-    lines = output.splitlines()
-    for i, line in enumerate(lines):
-        if "Connected To:" not in line or fs_addr not in line:
+    in_fluid_client = False
+    for line in output.splitlines():
+        client_match = CLIENT_RE.match(line)
+        if client_match:
+            in_fluid_client = client_match.group(2).lower().startswith("fluid synth")
             continue
-        for j in range(i - 1, max(i - 4, -1), -1):
-            match = PORT_RE.search(lines[j])
-            if match and ("'" in lines[j] or "Connected" not in lines[j]):
-                routes.append({"from": match.group(1), "to": fs_addr})
-                break
+        if in_fluid_client and "Connected From:" in line:
+            for addr in PORT_RE.findall(line.split("Connected From:", 1)[1]):
+                routes.append({"from": addr, "to": fs_addr})
+            break
+        if in_fluid_client and "Connecting To:" in line and fs_addr in line:
+            for addr in PORT_RE.findall(line.split("Connecting To:", 1)[1]):
+                if addr != fs_addr:
+                    routes.append({"from": fs_addr, "to": addr})
     return routes
 
 
@@ -166,20 +197,16 @@ def route_rtpmidi_to_fluidsynth() -> int:
 
 
 def send_cc7(volume: int, retries: int = 5, delay: float = 1.0) -> bool:
-    """Send MIDI CC7 (channel 1) to FluidSynth. Retries until port is available."""
-    volume = max(0, min(127, int(volume)))
+    """Send MIDI CC7 (channel 1) to FluidSynth via shell. Retries until available."""
+    from fluidsynth_client import send_command, shell_bound
+
+    midi_value = max(0, min(127, int(volume)))
     for attempt in range(retries):
-        fs = find_fluidsynth_input()
-        if fs:
-            try:
-                subprocess.run(
-                    ["amidi", "-p", fs["address"], "-S", f"B0 07 {volume:02X}"],
-                    capture_output=True, timeout=3, check=True,
-                )
-                log.info("Volume CC7=%d inviato a %s", volume, fs["address"])
+        if shell_bound() and find_fluidsynth_input():
+            ok, _ = send_command(f"cc 0 7 {midi_value}")
+            if ok:
+                log.info("Volume CC7=%d inviato via shell FluidSynth", midi_value)
                 return True
-            except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
-                pass
         if attempt < retries - 1:
             time.sleep(delay)
     log.warning("Impossibile inviare CC7 (volume=%d)", volume)
@@ -187,7 +214,9 @@ def send_cc7(volume: int, retries: int = 5, delay: float = 1.0) -> bool:
 
 
 def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:
-    """Play a short C4 test note on FluidSynth via ALSA. Returns (ok, detail)."""
+    """Play a short C4 test note on FluidSynth via shell. Returns (ok, detail)."""
+    from fluidsynth_client import read_soundfont_state, send_command, shell_bound
+
     last_detail = "Porta MIDI FluidSynth non trovata"
     for attempt in range(retries):
         fs = find_fluidsynth_input()
@@ -197,26 +226,27 @@ def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:
                 continue
             if not _fluidsynth_process_running():
                 return False, "FluidSynth non in esecuzione"
-            from fluidsynth_client import read_soundfont_state
             sf_state = read_soundfont_state()
             if not sf_state.get("loaded"):
                 return False, "Nessun SoundFont caricato — seleziona e premi Carica nel pannello"
             return False, "Porta MIDI FluidSynth non pronta — attendi e riprova"
+        if not shell_bound():
+            last_detail = "Shell FluidSynth non collegata"
+            if attempt < retries - 1:
+                time.sleep(delay)
+                continue
+            return False, last_detail
         try:
-            subprocess.run(
-                ["amidi", "-p", fs["address"], "-S", "90 3C 64"],
-                capture_output=True, timeout=3, check=True,
-            )
+            ok, detail = send_command("noteon 0 60 100")
+            if not ok:
+                raise RuntimeError(detail)
             touch_midi_activity()
             time.sleep(0.35)
-            subprocess.run(
-                ["amidi", "-p", fs["address"], "-S", "80 3C 00"],
-                capture_output=True, timeout=3, check=True,
-            )
-            log.info("Nota di test inviata a %s", fs["address"])
+            send_command("noteoff 0 60")
+            log.info("Nota di test inviata via shell FluidSynth (%s)", fs["address"])
             return True, fs["address"]
-        except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError) as exc:
-            last_detail = f"amidi fallito su {fs['address']}: {exc}"
+        except (RuntimeError, OSError) as exc:
+            last_detail = str(exc)
             if attempt < retries - 1:
                 time.sleep(delay)
     return False, last_detail
@@ -242,12 +272,20 @@ def _fluidsynth_process_running() -> bool:
 
 
 def trigger_orchestrator_test_note() -> bool:
-    """Ask tabloza-orchestrator to play the test note (SIGUSR1)."""
+    """Ask tabloza-orchestrator main process to play the test note (SIGUSR1).
+
+    Must target MainPID only — systemctl kill would signal the whole cgroup
+    and kill FluidSynth too (SIGUSR1 = signal 10).
+    """
     try:
-        subprocess.run(
-            ["systemctl", "kill", "-USR1", "tabloza-orchestrator"],
-            capture_output=True, timeout=5, check=True,
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
         )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        os.kill(pid, signal.SIGUSR1)
         return True
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
         return False

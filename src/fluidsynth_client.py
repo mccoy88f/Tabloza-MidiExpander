@@ -44,7 +44,7 @@ def clear_soundfont_state() -> None:
     write_soundfont_state(**_default_state())
 
 
-def bind_shell(stdin: IO[bytes] | None) -> None:
+def bind_shell(stdin) -> None:
     global _shell_stdin
     _shell_stdin = stdin
 
@@ -73,15 +73,20 @@ def load_timeout_for(path: Path) -> float:
 
 
 def load_soundfont(path: Path, process_alive) -> tuple[bool, str]:
-    """Invia load e attende. process_alive: callable che ritorna True se fluidsynth è vivo."""
     if not path.is_file():
         return False, f"File non trovato: {path}"
+    try:
+        size_mb = path.stat().st_size / (1024 * 1024)
+    except OSError:
+        size_mb = 10
     wait_sec = load_timeout_for(path)
     log.info("Caricamento SF2 %s (attesa %.0fs)", path.name, wait_sec)
     ok, detail = send_command(f"load {path} reset")
     if not ok:
         return ok, detail
-    deadline = time.time() + wait_sec
+    settle = min(wait_sec, max(8.0, size_mb * 0.15))
+    log.info("Attesa stabilizzazione SF2 %.0fs", settle)
+    deadline = time.time() + settle
     while time.time() < deadline:
         if not process_alive():
             return False, "FluidSynth terminato durante il caricamento SF2"

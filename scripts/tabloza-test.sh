@@ -150,7 +150,7 @@ while read -r pid; do
     fi
     line=$(ps -p "$pid" -o args= 2>/dev/null || true)
     echo "       ${pid} ${line}"
-    if [[ "$line" == *"midi.autoconnect=false"* ]] || [[ "$line" == *"/var/lib/tabloza/soundfonts/"* ]]; then
+    if [[ "$line" == *"midi.autoconnect=false"* ]] || [[ "$line" == *"midi.autoconnect false"* ]] || [[ "$line" == *"synth.default-soundfont"* ]] || [[ "$line" == *"/var/lib/tabloza/soundfonts/"* ]]; then
         FS_ALIVE=$((FS_ALIVE + 1))
     elif [[ "$line" == *fluidsynth* ]]; then
         yellow "FluidSynth di sistema in conflitto — arrestalo:"
@@ -203,15 +203,17 @@ p = find_fluidsynth_input()
 print(p['address'] if p else '')
 " 2>/dev/null || true)
 if [[ -n "$FS_ADDR" ]]; then
-    echo "       →  sudo amidi -p $FS_ADDR -S '90 3C 64' && sleep 0.3 && sudo amidi -p $FS_ADDR -S '80 3C 00'"
-    if command -v amidi >/dev/null 2>&1; then
-        if amidi -p "$FS_ADDR" -S "90 3C 64" 2>/dev/null; then
-            sleep 0.3
-            amidi -p "$FS_ADDR" -S "80 3C 00" 2>/dev/null || true
-            green "Nota di test inviata a FluidSynth ($FS_ADDR)"
+    echo "       Porta FluidSynth: $FS_ADDR"
+    SF_LOADED=$(python3 -c "import json; print(json.load(open('/run/tabloza/soundfont_state.json')).get('loaded',''))" 2>/dev/null || true)
+    if [[ -n "$SF_LOADED" ]]; then
+        if systemctl kill -s USR1 tabloza-orchestrator 2>/dev/null; then
+            sleep 0.5
+            green "Nota di test richiesta via orchestrator (SIGUSR1)"
         else
-            yellow "amidi non ha potuto inviare la nota di test"
+            yellow "Impossibile inviare SIGUSR1 all'orchestrator"
         fi
+    else
+        yellow "Nessun SoundFont caricato — premi Carica nel pannello web prima del test suono"
     fi
 else
     yellow "Porta input FluidSynth non trovata"

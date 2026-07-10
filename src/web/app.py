@@ -15,7 +15,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
 from fluidsynth_client import read_soundfont_state  # noqa: E402
-from midi_utils import get_midi_status, send_cc7, send_test_note, trigger_orchestrator_test_note  # noqa: E402
+from midi_utils import get_midi_status, send_cc7, trigger_orchestrator_test_note  # noqa: E402
 from tabloza_common import (  # noqa: E402
     AUTHOR,
     GITHUB_URL,
@@ -309,17 +309,56 @@ def api_wifi_connect():
 @app.route("/api/audio/test", methods=["POST"])
 @require_auth
 def api_audio_test():
-    """Play a short test note directly on FluidSynth (bypasses RTP-MIDI)."""
-    ok, detail = send_test_note()
-    if ok:
-        return jsonify({"ok": True, "message": "Nota di test inviata", "port": detail})
-    if trigger_orchestrator_test_note():
+    """Play a short test note via orchestrator (shell FluidSynth bound there only)."""
+    sf_state = read_soundfont_state()
+    loaded = sf_state.get("loaded", "")
+    if not loaded:
+        config = load_config()
+        selected = config.get("active_soundfont", "")
+        if selected and sf_state.get("loading"):
+            return jsonify({"error": "SoundFont in caricamento — attendi qualche secondo"}), 503
+        if not selected:
+            return jsonify({
+                "error": "Nessun SoundFont caricato — seleziona un file e premi Carica",
+            }), 400
+        return jsonify({
+            "error": f"SoundFont {selected} selezionato ma non caricato — premi Carica",
+        }), 400
+    midi = get_midi_status()
+    if not midi.get("fluidsynth"):
+        return jsonify({"error": "FluidSynth non pronto — attendi qualche secondo"}), 503
+    if not trigger_orchestrator_test_note():
+        return jsonify({"error": "Orchestrator non raggiungibile"}), 503
+    return jsonify({
+        "ok": True,
+        "message": "Nota di test inviata",
+        "port": midi["fluidsynth"]["address"],
+    })
+
+
+@app.route("/api/audio/test-hardware", methods=["POST"])
+@require_auth
+def api_audio_test_hardware():
+    """Play a sine tone directly on the analog headphone jack (bypasses FluidSynth/MIDI)."""
+    device = load_config().get("fluidsynth", {}).get("audio_device", "plughw:0,0")
+    try:
+        subprocess.run(
+            [
+                "speaker-test", "-D", device,
+                "-t", "sine", "-f", "440",
+                "-c", "2", "-l", "1", "-s", "1",
+            ],
+            capture_output=True, timeout=12, check=True,
+        )
         return jsonify({
             "ok": True,
-            "message": "Nota di test inviata via orchestrator",
-            "port": detail,
+            "message": "Segnale 440 Hz inviato al jack cuffie",
+            "device": device,
         })
-    return jsonify({"error": f"Impossibile inviare nota di test: {detail}"}), 503
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": True, "message": "Test jack avviato", "device": device})
+    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+        return jsonify({"error": f"Test jack fallito: {exc}"}), 500
 
 
 @app.route("/api/midi/reset", methods=["POST"])

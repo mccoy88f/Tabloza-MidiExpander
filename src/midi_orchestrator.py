@@ -24,7 +24,6 @@ from fluidsynth_client import (
     load_timeout_for,
     read_soundfont_state,
     reset_synth,
-    send_command,
     shell_bound,
     write_soundfont_state,
 )
@@ -36,7 +35,7 @@ SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
 FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
-FLUID_STARTUP_TIMEOUT = 15.0
+FLUID_STARTUP_TIMEOUT = 25.0
 ROUTING_INTERVAL = 5
 
 logging.basicConfig(
@@ -89,6 +88,7 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
         "-o", "synth.dynamic-sample-loading=yes",
+        "-o", "synth.default-soundfont=",
     ]
 
 
@@ -119,7 +119,6 @@ def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
         start_new_session=True,
     )
     bind_shell(proc.stdin)
-    send_command("gain 0.5")
     return proc
 
 
@@ -128,12 +127,12 @@ def _wait_fluidsynth_ready(timeout_sec: float) -> tuple[bool, str]:
     while time.time() < deadline:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
             return False, "crashed"
-        if find_fluidsynth_input() and shell_bound():
+        if find_fluidsynth_input():
             return True, "ok"
         time.sleep(0.5)
     if fluidsynth_proc and fluidsynth_proc.poll() is not None:
         return False, "crashed"
-    if find_fluidsynth_input() and shell_bound():
+    if find_fluidsynth_input():
         return True, "ok"
     if fluidsynth_proc and fluidsynth_proc.poll() is None:
         return False, "loading"
@@ -373,12 +372,25 @@ def start_fluidsynth(config: dict) -> bool:
         _reap_fluidsynth()
         return False
     if status == "loading":
-        log.warning("FluidSynth avviato ma porta MIDI/server non ancora pronti")
+        log.warning("FluidSynth avviato ma porta MIDI non ancora pronta")
         return True
 
-    write_soundfont_state(selected=config.get("active_soundfont", ""), loaded="", loading=False)
+    if find_fluidsynth_input():
+        log.info("FluidSynth pronto (porta MIDI ALSA)")
+    else:
+        log.error("Porta MIDI FluidSynth non trovata dopo l'avvio")
+        for line in _tail_fluidsynth_log(10):
+            log.error("fluidsynth: %s", line)
+
+    write_soundfont_state(
+        selected=config.get("active_soundfont", ""),
+        loaded="",
+        loading=False,
+        error=None,
+        load_started_at=None,
+    )
     route_rtpmidi_to_fluidsynth()
-    log.info("FluidSynth pronto — seleziona un SoundFont dal pannello web")
+    log.info("FluidSynth avviato — seleziona e carica un SoundFont dal pannello web")
     return True
 
 
