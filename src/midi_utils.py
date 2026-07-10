@@ -237,11 +237,13 @@ def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:
                 continue
             return False, last_detail
         try:
-            ok, detail = send_command("noteon 0 60 100")
+            send_command("prog 0 0")
+            send_command("cc 0 7 127")
+            ok, detail = send_command("noteon 0 60 127")
             if not ok:
                 raise RuntimeError(detail)
             touch_midi_activity()
-            time.sleep(0.35)
+            time.sleep(1.2)
             send_command("noteoff 0 60")
             log.info("Nota di test inviata via shell FluidSynth (%s)", fs["address"])
             return True, fs["address"]

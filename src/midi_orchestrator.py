@@ -87,7 +87,6 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-g", str(fs_cfg.get("gain", 0.5)),
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
-        "-o", "synth.dynamic-sample-loading=yes",
         "-o", "synth.default-soundfont=",
     ]
 

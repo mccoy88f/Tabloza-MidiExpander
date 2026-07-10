@@ -1,5 +1,6 @@
 const API = "";
 const STATUS_REFRESH_MS = 2000;
+let lastSf2StateKey = "";
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -181,6 +182,12 @@ async function refreshStatus() {
   document.getElementById("volume-value").textContent = s.volume;
   renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
+  const sf = s.soundfont || {};
+  const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error].join("|");
+  if (sfKey !== lastSf2StateKey) {
+    lastSf2StateKey = sfKey;
+    refreshSoundfonts();
+  }
 }
 
 document.getElementById("btn-audio-test").addEventListener("click", async () => {

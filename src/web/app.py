@@ -14,6 +14,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
+from audio_utils import play_stereo_tone  # noqa: E402
 from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import get_midi_status, send_cc7, trigger_orchestrator_test_note  # noqa: E402
 from tabloza_common import (  # noqa: E402
@@ -342,22 +343,13 @@ def api_audio_test_hardware():
     """Play a sine tone directly on the analog headphone jack (bypasses FluidSynth/MIDI)."""
     device = load_config().get("fluidsynth", {}).get("audio_device", "plughw:0,0")
     try:
-        subprocess.run(
-            [
-                "speaker-test", "-D", device,
-                "-t", "sine", "-f", "440",
-                "-c", "2", "-l", "1", "-s", "1",
-            ],
-            capture_output=True, timeout=12, check=True,
-        )
+        play_stereo_tone(device)
         return jsonify({
             "ok": True,
-            "message": "Segnale 440 Hz inviato al jack cuffie",
+            "message": "Segnale stereo 440 Hz inviato al jack cuffie",
             "device": device,
         })
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": True, "message": "Test jack avviato", "device": device})
-    except (FileNotFoundError, subprocess.CalledProcessError) as exc:
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         return jsonify({"error": f"Test jack fallito: {exc}"}), 500
 
 
