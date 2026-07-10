@@ -1,5 +1,5 @@
 const API = "";
-const STATUS_REFRESH_MS = 10000;
+const STATUS_REFRESH_MS = 2000;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -88,9 +88,11 @@ function renderMidiInputs(midi) {
     const name = src.type === "gpio" ? t("midiGpioName") : src.name;
     const badge = src.status === "planned"
       ? `<span class="badge badge-planned">${t("badgePlanned")}</span>`
-      : src.status === "available"
-        ? `<span class="badge badge-ok">${t("badgeActive")}</span>`
-        : '<span class="badge">—</span>';
+      : src.status === "connected"
+        ? `<span class="badge badge-connected">${t("badgeConnected")}</span>`
+        : src.status === "available"
+          ? `<span class="badge badge-ok">${t("badgeActive")}</span>`
+          : '<span class="badge">—</span>';
     li.innerHTML = `<span>${escapeHtml(name)}</span>${badge}`;
     list.appendChild(li);
   });
@@ -100,6 +102,33 @@ function renderMidiInputs(midi) {
     li.innerHTML = `<span>FluidSynth (${midi.fluidsynth.address})</span><span class="badge badge-ok">${t("badgeSynth")}</span>`;
     list.appendChild(li);
   }
+}
+
+function renderActivity(activity, midi) {
+  const midiAct = activity?.midi || {};
+  const audioAct = activity?.audio || {};
+
+  const dotMidi = document.getElementById("dot-midi-in");
+  const valMidi = document.getElementById("value-midi-in");
+  const dotAudio = document.getElementById("dot-audio-out");
+  const valAudio = document.getElementById("value-audio-out");
+
+  const midiReceiving = !!midiAct.receiving;
+  dotMidi.className = "activity-dot " + (midiReceiving ? "active pulse" : midi?.routing_ok ? "idle" : "off");
+  valMidi.textContent = midiReceiving
+    ? t("midiReceiving")
+    : midi?.routing_ok
+      ? t("midiIdle")
+      : t("midiNoRoute");
+
+  const audioPlaying = !!audioAct.output_active;
+  const fsRunning = !!audioAct.fluidsynth_running;
+  dotAudio.className = "activity-dot " + (audioPlaying ? "active pulse" : fsRunning ? "idle" : "off");
+  valAudio.textContent = audioPlaying
+    ? t("audioPlaying")
+    : fsRunning
+      ? t("audioIdle")
+      : t("audioStopped");
 }
 
 async function refreshStatus() {
@@ -114,7 +143,28 @@ async function refreshStatus() {
   document.getElementById("volume-slider").value = s.volume;
   document.getElementById("volume-value").textContent = s.volume;
   renderMidiInputs(s.midi);
+  renderActivity(s.activity, s.midi);
 }
+
+document.getElementById("btn-audio-test").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-audio-test");
+  const msg = document.getElementById("audio-test-msg");
+  btn.disabled = true;
+  msg.textContent = t("audioTestWorking");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    await api("/api/audio/test", { method: "POST" });
+    msg.textContent = t("audioTestDone");
+    msg.className = "msg ok";
+    setTimeout(refreshStatus, 400);
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 document.getElementById("btn-midi-reset").addEventListener("click", async () => {
   const btn = document.getElementById("btn-midi-reset");

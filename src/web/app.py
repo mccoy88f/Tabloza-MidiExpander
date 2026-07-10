@@ -13,7 +13,8 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from midi_utils import get_midi_status, send_cc7  # noqa: E402
+from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
+from midi_utils import get_midi_status, send_cc7, send_test_note  # noqa: E402
 from tabloza_common import (  # noqa: E402
     AUTHOR,
     GITHUB_URL,
@@ -113,6 +114,10 @@ def api_status():
         "hostname": MDNS_NAME,
         "network_mode": _get_network_mode(),
         "midi": midi,
+        "activity": {
+            "midi": get_midi_activity(),
+            "audio": get_audio_activity(),
+        },
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
     })
@@ -280,6 +285,15 @@ def api_wifi_connect():
 
 
 # --- MIDI Reset ---
+
+@app.route("/api/audio/test", methods=["POST"])
+@require_auth
+def api_audio_test():
+    """Play a short test note directly on FluidSynth (bypasses RTP-MIDI)."""
+    if not send_test_note():
+        return jsonify({"error": "Impossibile inviare nota di test (FluidSynth non pronto)"}), 503
+    return jsonify({"ok": True, "message": "Nota di test inviata"})
+
 
 @app.route("/api/midi/reset", methods=["POST"])
 @require_auth

@@ -124,6 +124,57 @@ input[type="text"] {
 .status-grid { display: grid; gap: 0.5rem; }
 .status-grid .label { color: var(--muted); margin-right: 0.5rem; }
 
+.activity-meters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.activity-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.activity-meter .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.activity-value {
+  display: block;
+  font-size: 0.85rem;
+  margin-top: 0.15rem;
+}
+
+.activity-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #444;
+  flex-shrink: 0;
+}
+
+.activity-dot.idle { background: var(--success); opacity: 0.45; }
+.activity-dot.active { background: var(--success); }
+.activity-dot.off { background: var(--danger); opacity: 0.7; }
+
+.activity-dot.pulse {
+  animation: activity-pulse 1s ease-in-out infinite;
+}
+
+@keyframes activity-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+}
+
 #volume-slider { width: calc(100% - 3rem); vertical-align: middle; accent-color: var(--accent); }
 #volume-value { display: inline-block; width: 2.5rem; text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -162,9 +213,9 @@ input[type="text"] {
 .wifi-form input { margin-bottom: 0.5rem; }
 
 .midi-status { margin-top: 0.75rem; }
-.midi-actions { margin-top: 1rem; }
-.midi-actions .btn { width: 100%; }
-.midi-actions .msg { margin-top: 0.5rem; }
+.midi-actions { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.midi-actions .btn { flex: 1 1 calc(50% - 0.25rem); min-width: 8rem; }
+.midi-actions .msg { width: 100%; margin-top: 0.25rem; }
 .midi-list { list-style: none; margin-top: 0.5rem; }
 .midi-item {
   display: flex;
@@ -182,6 +233,7 @@ input[type="text"] {
   color: var(--muted);
 }
 .badge-ok { background: rgba(46,204,113,0.15); color: var(--success); }
+.badge-connected { background: rgba(52,152,219,0.15); color: #3498db; }
 .badge-planned { background: rgba(108,92,231,0.15); color: var(--accent); }
 
 .upload-status { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }

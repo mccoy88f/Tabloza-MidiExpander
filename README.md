@@ -79,11 +79,19 @@ Prerequisiti sul Pi: carica un file `.sf2` dal pannello web e verifica con `sudo
 
 1. Mac e Pi sulla **stessa rete WiFi/LAN**
 2. Apri **Configurazione Audio e MIDI** → **Finestra → Mostra Studio MIDI**
-3. Doppio clic su **Rete** (icona globo)
-4. In **Le mie sessioni**: clic **+**, attiva la spunta sulla sessione
-5. In **Directory** cerca **`tabloza-me`** → clic **Connetti**
+3. **macOS Sequoia / Tahoe (15+):** **Finestra → Configura driver di rete** (non più doppio clic su Rete)
+   - **macOS più vecchi:** doppio clic sull'icona **Rete** (globo)
+4. Crea una sessione **RTP** (pulsante **+** in «Le mie sessioni») e attiva la spunta
+5. In **Directory** cerca **`tabloza-me`** → **Connetti**
 6. Se non compare: **Connetti manualmente** con host `tabloza-me.local` (o IP del Pi) porta **5004**
 7. Nel DAW: uscita MIDI verso `tabloza-me`
+
+Verifica discovery dal Mac:
+```bash
+dns-sd -B _apple-midi._udp
+# oppure
+dns-sd -L tabloza-me _apple-midi._udp
+```
 
 #### Windows
 
@@ -94,9 +102,42 @@ Prerequisiti sul Pi: carica un file `.sf2` dal pannello web e verifica con `sudo
 
 #### Se non suona
 
-- Pannello web → verifica SF2 attivo e volume > 0
-- Pannello web → **MIDI Reset**
-- SSH: `sudo tabloza-test`
+Nel **pannello web** (sezione Stato):
+- **MIDI in** lampeggia verde quando arrivano note dal Mac
+- **Audio out** lampeggia quando FluidSynth sta effettivamente riproducendo
+- **Test suono** invia un Do direttamente al synth (bypassa RTP-MIDI)
+- Verifica SF2 attivo, volume > 0, badge **Collegato** su rtpmidid
+
+**Test rapidi SSH sul Pi:**
+
+```bash
+# 1. Diagnostica completa
+sudo tabloza-test
+
+# 2. Hardware jack audio (dovresti sentire un beep)
+speaker-test -t wav -c 2 -l 1
+
+# 3. FluidSynth e routing MIDI
+pgrep -a fluidsynth
+aconnect -l | grep -E 'fluidsynth|rtpmidid|Connected'
+
+# 4. Nota di test diretta (senza Mac)
+FS=$(aconnect -i | grep -i fluidsynth | head -1 | awk '{print $2}')
+sudo amidi -p "$FS" -S "90 3C 64" && sleep 0.3 && sudo amidi -p "$FS" -S "80 3C 00"
+
+# 5. Log in tempo reale mentre suoni dal Mac
+sudo journalctl -u tabloza-orchestrator -f
+```
+
+**Interpretazione:**
+| Test suono (web) | MIDI in (web) | Probabile causa |
+|------------------|---------------|-----------------|
+| Si sente | No lampeggia | Mac non invia MIDI o routing RTP → FluidSynth rotto → **MIDI Reset** |
+| Non si sente | — | Problema audio ALSA / jack / SF2 → `speaker-test`, verifica SF2 |
+| Si sente | Lampeggia | Audio OK, controlla volume Mac/DAW e canale MIDI |
+
+- Pannello web → **MIDI Reset** dopo ogni nuova connessione Mac
+- SSH: `sudo systemctl restart tabloza-orchestrator rtpmidid`
 
 ### Comandi utili (SSH)
 
@@ -233,11 +274,19 @@ Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza
 
 1. Mac and Pi on the **same WiFi/LAN**
 2. Open **Audio MIDI Setup** → **Window → Show MIDI Studio**
-3. Double-click **Network** (globe icon)
-4. Under **My Sessions**: click **+**, enable the session checkbox
-5. Under **Directory** find **`tabloza-me`** → click **Connect**
+3. **macOS Sequoia / Tahoe (15+):** **Window → Configure Network Driver** (no longer double-click Network)
+   - **Older macOS:** double-click the **Network** globe icon
+4. Create an **RTP** session (**+** under My Sessions) and enable the checkbox
+5. Under **Directory** find **`tabloza-me`** → **Connect**
 6. If missing: connect manually to host `tabloza-me.local` (or Pi IP) port **5004**
 7. In your DAW: MIDI output to `tabloza-me`
+
+Verify discovery from the Mac:
+```bash
+dns-sd -B _apple-midi._udp
+# or
+dns-sd -L tabloza-me _apple-midi._udp
+```
 
 #### Windows
 
@@ -248,9 +297,32 @@ Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza
 
 #### No sound?
 
-- Web panel → check active SF2 and volume > 0
-- Web panel → **MIDI Reset**
-- SSH: `sudo tabloza-test`
+In the **web panel** (Status section):
+- **MIDI in** pulses green when notes arrive from the Mac
+- **Audio out** pulses when FluidSynth is actually playing
+- **Sound test** sends middle C directly to the synth (bypasses RTP-MIDI)
+- Check active SF2, volume > 0, **Connected** badge on rtpmidid
+
+**Quick SSH tests on the Pi:**
+
+```bash
+sudo tabloza-test
+speaker-test -t wav -c 2 -l 1
+pgrep -a fluidsynth
+aconnect -l | grep -E 'fluidsynth|rtpmidid|Connected'
+FS=$(aconnect -i | grep -i fluidsynth | head -1 | awk '{print $2}')
+sudo amidi -p "$FS" -S "90 3C 64" && sleep 0.3 && sudo amidi -p "$FS" -S "80 3C 00"
+sudo journalctl -u tabloza-orchestrator -f
+```
+
+| Web sound test | MIDI in (web) | Likely cause |
+|----------------|---------------|--------------|
+| Heard | No pulse | Mac not sending MIDI or RTP → FluidSynth routing broken → **MIDI Reset** |
+| Silent | — | ALSA / jack / SF2 issue → `speaker-test`, check SF2 |
+| Heard | Pulsing | Audio OK — check Mac/DAW volume and MIDI channel |
+
+- Web panel → **MIDI Reset** after each new Mac connection
+- SSH: `sudo systemctl restart tabloza-orchestrator rtpmidid`
 
 ### Useful commands (SSH)
 

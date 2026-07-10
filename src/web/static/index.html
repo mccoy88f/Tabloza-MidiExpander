@@ -47,12 +47,30 @@
           <div><span class="label" data-i18n="labelNetwork">Rete</span><span id="status-network">—</span></div>
           <div><span class="label" data-i18n="labelActiveSf2">SF2 attivo</span><span id="status-sf2">—</span></div>
         </div>
+        <div class="activity-meters">
+          <div class="activity-meter" id="meter-midi-in">
+            <span class="activity-dot" id="dot-midi-in"></span>
+            <div>
+              <span class="label" data-i18n="labelMidiIn">MIDI in</span>
+              <span class="activity-value" id="value-midi-in">—</span>
+            </div>
+          </div>
+          <div class="activity-meter" id="meter-audio-out">
+            <span class="activity-dot" id="dot-audio-out"></span>
+            <div>
+              <span class="label" data-i18n="labelAudioOut">Audio out</span>
+              <span class="activity-value" id="value-audio-out">—</span>
+            </div>
+          </div>
+        </div>
         <div class="midi-status">
           <span class="label" data-i18n="labelMidiInputs">Ingressi MIDI</span>
           <ul id="midi-inputs-list" class="midi-list"></ul>
         </div>
         <div class="midi-actions">
+          <button id="btn-audio-test" class="btn btn-secondary" data-i18n="audioTest">Test suono</button>
           <button id="btn-midi-reset" class="btn btn-secondary" data-i18n="midiReset">MIDI Reset</button>
+          <p id="audio-test-msg" class="msg hidden"></p>
           <p id="midi-reset-msg" class="msg hidden"></p>
         </div>
       </section>

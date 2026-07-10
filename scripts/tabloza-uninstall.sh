@@ -12,6 +12,9 @@ warn() { echo -e "\033[1;33m[Tabloza]\033[0m $*"; }
 
 [[ $EUID -eq 0 ]] || { red "Esegui come root: sudo tabloza-uninstall"; exit 1; }
 
+# Evita shell con cwd in /opt/tabloza dopo la rimozione (getcwd error al reinstall).
+cd / || cd /root || true
+
 echo ""
 echo "╔══════════════════════════════════════════════╗"
 echo "║   Disinstallazione Tabloza MidiExpander      ║"

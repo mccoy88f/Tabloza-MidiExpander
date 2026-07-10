@@ -5,6 +5,8 @@ import re
 import subprocess
 import time
 
+from activity_status import touch_midi_activity
+
 log = logging.getLogger("tabloza.midi")
 
 PORT_RE = re.compile(r"(\d+:\d+)")
@@ -68,17 +70,47 @@ def find_rtpmidid_outputs() -> list[dict]:
     return sources
 
 
+def get_active_routes() -> list[dict]:
+    """Return rtpmidid → fluidsynth connections from `aconnect -l`."""
+    try:
+        result = subprocess.run(
+            ["aconnect", "-l"],
+            capture_output=True, text=True, timeout=5,
+        )
+        output = result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+
+    fs = find_fluidsynth_input()
+    if not fs:
+        return []
+
+    fs_addr = fs["address"]
+    lines = output.splitlines()
+    for i, line in enumerate(lines):
+        if "Connected To:" not in line or fs_addr not in line:
+            continue
+        for j in range(i - 1, max(i - 4, -1), -1):
+            match = PORT_RE.search(lines[j])
+            if match and ("'" in lines[j] or "Connected" not in lines[j]):
+                routes.append({"from": match.group(1), "to": fs_addr})
+                break
+    return routes
+
+
 def get_midi_status() -> dict:
     """Return structured MIDI routing status for API/frontend."""
     fs = find_fluidsynth_input()
     rtp_sources = find_rtpmidid_outputs()
+    active_routes = get_active_routes()
     routes = []
     for src in rtp_sources:
+        connected = any(r["from"] == src["address"] for r in active_routes)
         routes.append({
             "type": "rtpmidi",
             "name": src["client"],
             "address": src["address"],
-            "status": "available",
+            "status": "connected" if connected else "available",
         })
     routes.append({
         "type": "gpio",
@@ -89,7 +121,8 @@ def get_midi_status() -> dict:
     return {
         "fluidsynth": fs,
         "sources": routes,
-        "routing_ok": fs is not None and len(rtp_sources) > 0,
+        "active_routes": active_routes,
+        "routing_ok": fs is not None and len(active_routes) > 0,
     }
 
 
@@ -131,3 +164,25 @@ def send_cc7(volume: int, retries: int = 5, delay: float = 1.0) -> bool:
             time.sleep(delay)
     log.warning("Impossibile inviare CC7 (volume=%d)", volume)
     return False
+
+
+def send_test_note() -> bool:
+    """Play a short C4 test note on FluidSynth via ALSA."""
+    fs = find_fluidsynth_input()
+    if not fs:
+        return False
+    try:
+        subprocess.run(
+            ["amidi", "-p", fs["address"], "-S", "90 3C 64"],
+            capture_output=True, timeout=3, check=True,
+        )
+        touch_midi_activity()
+        time.sleep(0.35)
+        subprocess.run(
+            ["amidi", "-p", fs["address"], "-S", "80 3C 00"],
+            capture_output=True, timeout=3, check=True,
+        )
+        log.info("Nota di test inviata a %s", fs["address"])
+        return True
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False

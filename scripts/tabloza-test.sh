@@ -128,8 +128,60 @@ fi
 hdr "Audio"
 if pgrep -x fluidsynth >/dev/null 2>&1; then
     green "FluidSynth in esecuzione (PID $(pgrep -x fluidsynth))"
+    pgrep -a fluidsynth | sed 's/^/       /'
 else
     red "FluidSynth non in esecuzione"
+fi
+
+if command -v aplay >/dev/null 2>&1; then
+    echo "       Dispositivi ALSA playback:"
+    aplay -l 2>/dev/null | sed 's/^/       /' || yellow "aplay -l fallito"
+else
+    yellow "aplay non disponibile"
+fi
+
+PCM_RUNNING=false
+for st in /proc/asound/card*/pcm*p/sub*/status; do
+  if [[ -f "$st" ]] && grep -q "state: RUNNING" "$st" 2>/dev/null; then
+    PCM_RUNNING=true
+    echo "       PCM attivo: $st"
+  fi
+done
+if $PCM_RUNNING; then
+    green "ALSA playback in stato RUNNING (audio in uscita)"
+else
+    yellow "Nessun PCM in RUNNING — normale se silenzio; suona una nota e riprova"
+fi
+
+if [[ -f /var/lib/tabloza/config.json ]]; then
+    SF=$(python3 -c "import json; print(json.load(open('/var/lib/tabloza/config.json')).get('active_soundfont',''))" 2>/dev/null || true)
+    VOL=$(python3 -c "import json; print(json.load(open('/var/lib/tabloza/config.json')).get('volume',100))" 2>/dev/null || true)
+    echo "       SF2 attivo: ${SF:-nessuno}  Volume: ${VOL:-?}"
+    [[ -n "$SF" && -f "/var/lib/tabloza/soundfonts/$SF" ]] && green "File SF2 presente" || yellow "SF2 mancante o non selezionato"
+fi
+
+echo "       Test hardware jack (1 ciclo beep, Ctrl+C per saltare):"
+echo "       →  speaker-test -t wav -c 2 -l 1"
+echo "       Test nota FluidSynth:"
+FS_ADDR=$(aconnect -i 2>/dev/null | grep -i fluidsynth | head -1 | awk '{print $2}' | tr -d "'")
+if [[ -n "$FS_ADDR" ]]; then
+    echo "       →  sudo amidi -p $FS_ADDR -S '90 3C 64' && sleep 0.3 && sudo amidi -p $FS_ADDR -S '80 3C 00'"
+    if command -v amidi >/dev/null 2>&1; then
+        if amidi -p "$FS_ADDR" -S "90 3C 64" 2>/dev/null; then
+            sleep 0.3
+            amidi -p "$FS_ADDR" -S "80 3C 00" 2>/dev/null || true
+            green "Nota di test inviata a FluidSynth ($FS_ADDR)"
+        else
+            yellow "amidi non ha potuto inviare la nota di test"
+        fi
+    fi
+else
+    yellow "Porta input FluidSynth non trovata"
+fi
+
+if [[ -f /run/tabloza/last_midi_event ]]; then
+    AGO=$(python3 -c "import time; print(round(time.time()-float(open('/run/tabloza/last_midi_event').read()),1))" 2>/dev/null || echo "?")
+    echo "       Ultimo evento MIDI: ${AGO}s fa (monitor orchestrator)"
 fi
 
 # --- Mac / Windows ---
@@ -137,12 +189,12 @@ hdr "Come connettersi da Mac"
 IP=$(hostname -I | awk '{print $1}')
 cat <<EOF
   1. Stessa rete WiFi/LAN del Pi (${IP})
-  2. macOS → Configurazione Audio e MIDI → Studio MIDI → Rete
-  3. In "Le mie sessioni": clic + , attiva la sessione (spunta)
-  4. In "Directory" cerca: tabloza-me
-     Se non compare → Connetti manualmente a host: ${IP}  porta: 5004
-  5. Nel DAW scegli uscita MIDI verso tabloza-me
-  6. Verifica SF2 caricato e volume > 0 nel pannello web
+  2. macOS Sequoia/Tahoe: Configurazione Audio e MIDI → Finestra → Configura driver di rete
+     (macOS vecchi: Studio MIDI → doppio clic Rete)
+  3. Sessione RTP con + , attiva la spunta
+  4. Directory → tabloza-me (o manuale: ${IP}:5004)
+  5. Nel DAW: uscita MIDI verso tabloza-me
+  6. Pannello web: MIDI in / Audio out + pulsante Test suono
 EOF
 
 # --- Riepilogo ---

@@ -21,6 +21,10 @@ die()  { echo -e "\033[1;31m[Tabloza] ERRORE:\033[0m $*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "Esegui come root: curl -fsSL ... | sudo bash"
 
+# La cwd può essere invalida se l'utente ha lanciato l'installer dopo tabloza-uninstall
+# da dentro /opt/tabloza (getcwd: cannot access parent directories).
+cd / || cd /root || true
+
 # --- Verifica piattaforma ---
 [[ "$(uname -m)" == "aarch64" ]] || die "Richiesto Raspberry Pi OS 64-bit (aarch64)."
 

@@ -12,10 +12,12 @@ import logging
 import os
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
 
-from midi_utils import route_rtpmidi_to_fluidsynth, send_cc7
+from activity_status import touch_midi_activity
+from midi_utils import find_fluidsynth_input, route_rtpmidi_to_fluidsynth, send_cc7
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -32,6 +34,8 @@ log = logging.getLogger("tabloza.orchestrator")
 
 fluidsynth_proc: subprocess.Popen | None = None
 shutdown = False
+midi_monitor_proc: subprocess.Popen | None = None
+midi_monitor_thread: threading.Thread | None = None
 
 
 def load_config() -> dict:
@@ -86,8 +90,77 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
     ]
 
 
+def _stop_monitor_proc():
+    global midi_monitor_proc
+    if midi_monitor_proc and midi_monitor_proc.poll() is None:
+        midi_monitor_proc.terminate()
+        try:
+            midi_monitor_proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            midi_monitor_proc.kill()
+    midi_monitor_proc = None
+
+
+def stop_midi_monitor():
+    global midi_monitor_thread
+    _stop_monitor_proc()
+    if (
+        midi_monitor_thread
+        and midi_monitor_thread.is_alive()
+        and threading.current_thread() is not midi_monitor_thread
+    ):
+        midi_monitor_thread.join(timeout=2)
+    midi_monitor_thread = None
+
+
+def _midi_monitor_loop():
+    global midi_monitor_proc, shutdown
+    monitored_port = None
+    while not shutdown:
+        fs = find_fluidsynth_input()
+        if not fs:
+            _stop_monitor_proc()
+            monitored_port = None
+            time.sleep(2)
+            continue
+        if monitored_port != fs["address"]:
+            _stop_monitor_proc()
+            monitored_port = fs["address"]
+            try:
+                midi_monitor_proc = subprocess.Popen(
+                    ["aseqdump", "-p", fs["address"]],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                )
+                log.info("Monitor MIDI su porta %s", fs["address"])
+            except (OSError, FileNotFoundError):
+                time.sleep(2)
+                continue
+        if not midi_monitor_proc or midi_monitor_proc.poll() is not None:
+            monitored_port = None
+            time.sleep(1)
+            continue
+        line = midi_monitor_proc.stdout.readline()
+        if not line:
+            continue
+        if line.startswith("Waiting") or line.startswith("Source"):
+            continue
+        if line.strip():
+            touch_midi_activity()
+
+
+def start_midi_monitor():
+    global midi_monitor_thread
+    if midi_monitor_thread and midi_monitor_thread.is_alive():
+        return
+    midi_monitor_thread = threading.Thread(target=_midi_monitor_loop, daemon=True)
+    midi_monitor_thread.start()
+
+
 def stop_fluidsynth():
     global fluidsynth_proc
+    stop_midi_monitor()
     if fluidsynth_proc and fluidsynth_proc.poll() is None:
         log.info("Arresto FluidSynth (PID %d)", fluidsynth_proc.pid)
         fluidsynth_proc.terminate()
@@ -144,6 +217,7 @@ def main():
 
     config = load_config()
     start_fluidsynth(config)
+    start_midi_monitor()
 
     while not shutdown:
         if fluidsynth_proc and fluidsynth_proc.poll() is not None:
