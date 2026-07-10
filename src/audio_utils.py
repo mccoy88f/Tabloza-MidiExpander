@@ -185,11 +185,10 @@ def set_alsa_output_volume(
 
     try:
         if _mixer_has_volume(mix):
-            channels = mix.getvolume()
             if percent == 0:
                 mix.setvolume(0)
             else:
-                mix.setvolume([percent] * len(channels))
+                mix.setvolume(percent)
             detail = f"{target}={percent}% (card {card})"
             log.info("Volume ALSA: %s", detail)
             return True, detail
