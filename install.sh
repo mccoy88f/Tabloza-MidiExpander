@@ -121,7 +121,12 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "period_count": 6,
     "gain": 2.0,
     "alsa_card": 0,
-    "alsa_mixer_control": "PCM"
+    "alsa_mixer_control": "PCM",
+    "audio_preset": "standard",
+    "polyphony": 256,
+    "reverb": true,
+    "chorus": true,
+    "dynamic_sample_loading": false
   }
 }
 EOF

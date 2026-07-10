@@ -18,6 +18,7 @@ from pathlib import Path
 
 from activity_status import touch_midi_activity
 from fluidsynth_client import (
+    apply_runtime_synth_settings,
     bind_shell,
     clear_soundfont_state,
     load_soundfont,
@@ -36,6 +37,7 @@ from midi_utils import (
 
 from event_log import log_event
 from soundfont_config import startup_soundfont_name
+from synth_config import merge_fluidsynth_config, fluidsynth_startup_options
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
@@ -44,6 +46,8 @@ SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
 FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
 RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
+APPLY_SYNTH_SETTINGS_FLAG = Path("/run/tabloza/apply_synth_settings")
+STOP_SYNTH_NOTES_FLAG = Path("/run/tabloza/synth_stop_notes")
 FLUID_STARTUP_TIMEOUT = 35.0
 ROUTING_INTERVAL = 5
 
@@ -67,23 +71,13 @@ def load_config() -> dict:
         "active_soundfont": "",
         "default_soundfont": "",
         "volume": 100,
-        "fluidsynth": {
-            "audio_driver": "alsa",
-            "audio_device": "plughw:0,0",
-            "sample_rate": 44100,
-            "period_size": 512,
-            "period_count": 6,
-            "gain": 2.0,
-            "alsa_card": 0,
-            "alsa_mixer_control": "PCM",
-        },
+        "fluidsynth": merge_fluidsynth_config({}),
     }
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
             stored = json.load(f)
         defaults.update(stored)
-        if "fluidsynth" in stored:
-            defaults["fluidsynth"].update(stored["fluidsynth"])
+        defaults["fluidsynth"] = merge_fluidsynth_config(stored.get("fluidsynth"))
         if "volume" in defaults:
             from audio_utils import normalize_volume
             defaults["volume"] = normalize_volume(defaults["volume"])
@@ -91,16 +85,16 @@ def load_config() -> dict:
 
 
 def build_fluidsynth_cmd(config: dict) -> list[str]:
-    """FluidSynth senza SF2 — caricamento dinamico via server TCP."""
-    fs_cfg = config.get("fluidsynth", {})
+    """FluidSynth senza SF2 — caricamento dinamico via shell."""
+    fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
     max_gain = fs_cfg.get("gain", 2.0)
-    from audio_utils import normalize_volume
+    from audio_utils import normalize_volume, resolve_audio_device
     from midi_utils import volume_to_gain
+
     vol = normalize_volume(config.get("volume", 100))
     initial_gain = volume_to_gain(vol, max_gain)
-    from audio_utils import resolve_audio_device
     audio_dev = resolve_audio_device(fs_cfg.get("audio_device", "plughw:0,0"))
-    return [
+    cmd = [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
         "-o", f"audio.alsa.device={audio_dev}",
@@ -112,6 +106,9 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-o", "midi.autoconnect=false",
         "-o", "synth.default-soundfont=",
     ]
+    for opt in fluidsynth_startup_options(fs_cfg):
+        cmd.extend(["-o", opt])
+    return cmd
 
 
 def _ensure_alsa_seq():
@@ -439,6 +436,9 @@ def start_fluidsynth(config: dict) -> bool:
     )
     route_rtpmidi_to_fluidsynth()
     apply_volume(config)
+    ok, detail = apply_runtime_synth_settings(config.get("fluidsynth", {}))
+    if not ok:
+        log.warning("Impostazioni synth runtime non applicate: %s", detail)
     log.info("FluidSynth avviato — seleziona e carica un SoundFont dal pannello web")
     return True
 
@@ -449,6 +449,19 @@ def handle_sighup(signum, frame):
 
 
 def handle_sigusr1(signum, frame):
+    if STOP_SYNTH_NOTES_FLAG.is_file():
+        STOP_SYNTH_NOTES_FLAG.unlink(missing_ok=True)
+        log.info("SIGUSR1 — stop note (reset synth)")
+        if not fluidsynth_engine_running() or not shell_bound():
+            log.warning("Stop note ignorato — FluidSynth non pronto")
+            return
+        ok, detail = reset_synth(_process_alive)
+        if ok:
+            log.info("Tutte le note silenziate")
+            log_event("orchestrator", "Note silenziate (reset synth)")
+        else:
+            log.warning("Reset synth fallito: %s", detail)
+        return
     log.info("SIGUSR1 ricevuto — nota di test")
     state = read_soundfont_state()
     if not state.get("loaded"):
@@ -469,8 +482,26 @@ def handle_sigusr2(signum, frame):
         log.info("SIGUSR2 — richiesto riavvio FluidSynth (nuova uscita audio)")
         log_event("orchestrator", "Riavvio FluidSynth richiesto (cambio uscita audio)")
         return
+    if APPLY_SYNTH_SETTINGS_FLAG.is_file():
+        APPLY_SYNTH_SETTINGS_FLAG.unlink(missing_ok=True)
+        log.info("SIGUSR2 — applica impostazioni synth")
+        _apply_runtime_synth_settings()
+        return
     log.info("SIGUSR2 ricevuto — applica volume")
     apply_volume(load_config())
+
+
+def _apply_runtime_synth_settings():
+    if not fluidsynth_engine_running() or not shell_bound():
+        log.warning("Impostazioni synth non applicate — FluidSynth non pronto")
+        return
+    config = load_config()
+    ok, detail = apply_runtime_synth_settings(config.get("fluidsynth", {}))
+    if ok:
+        log.info("Impostazioni synth applicate")
+        log_event("orchestrator", "Impostazioni motore synth aggiornate")
+    else:
+        log.warning("Impostazioni synth fallite: %s", detail)
 
 
 def _process_pending_fluidsynth_reload():

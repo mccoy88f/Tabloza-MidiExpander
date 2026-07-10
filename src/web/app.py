@@ -29,8 +29,10 @@ from audio_utils import (  # noqa: E402
 from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import (
     get_midi_status,
+    trigger_orchestrator_apply_synth_settings,
     trigger_orchestrator_apply_volume,
     trigger_orchestrator_reload_fluidsynth,
+    trigger_orchestrator_stop_notes,
     trigger_orchestrator_test_note,
     wait_fluidsynth_midi_ready,
 )  # noqa: E402
@@ -47,6 +49,7 @@ from tabloza_common import (  # noqa: E402
     verify_password,
 )
 from soundfont_config import startup_soundfont_name  # noqa: E402
+from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_memory_stats  # noqa: E402
 from wifi_utils import connect_wifi_network, scan_wifi_networks  # noqa: E402
 
@@ -164,7 +167,56 @@ def api_status():
             "device": resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")),
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
         },
+        "synth": synth_settings_for_api(config),
     })
+
+
+# --- Synth engine ---
+
+@app.route("/api/synth/settings")
+@require_auth
+def api_synth_settings_get():
+    return jsonify(synth_settings_for_api(load_config()))
+
+
+@app.route("/api/synth/settings", methods=["POST"])
+@require_auth
+def api_synth_settings_post():
+    data = request.get_json(silent=True) or {}
+    config = load_config()
+    try:
+        fs_cfg, needs_restart = parse_synth_settings_update(data, config)
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    config["fluidsynth"] = fs_cfg
+    save_config(config)
+    log_event("web", f"Motore synth → preset {fs_cfg.get('audio_preset', 'standard')}")
+
+    if needs_restart:
+        if not trigger_orchestrator_reload_fluidsynth():
+            return jsonify({"error": "Orchestrator non attivo"}), 503
+        if not wait_fluidsynth_midi_ready(50.0):
+            return jsonify({
+                "error": "FluidSynth non ripartito — verifica log orchestrator",
+            }), 503
+    elif not trigger_orchestrator_apply_synth_settings():
+        return jsonify({"error": "Impossibile applicare impostazioni synth"}), 503
+
+    return jsonify({
+        "ok": True,
+        "restarted": needs_restart,
+        "settings": synth_settings_for_api(config),
+    })
+
+
+@app.route("/api/synth/stop-notes", methods=["POST"])
+@require_auth
+def api_synth_stop_notes():
+    if not trigger_orchestrator_stop_notes():
+        return jsonify({"error": "Orchestrator non raggiungibile"}), 503
+    log_event("web", "Stop note synth")
+    return jsonify({"ok": True, "message": "Note silenziate"})
 
 
 # --- SoundFonts ---

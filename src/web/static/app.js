@@ -185,6 +185,7 @@ async function refreshStatus() {
   }
   renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
+  if (s.synth) renderSynthSettings(s.synth);
   const sf = s.soundfont || {};
   const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error].join("|");
   if (sfKey !== lastSf2StateKey) {
@@ -614,6 +615,131 @@ function showWifiForm(ssid) {
   });
 }
 
+// --- Synth engine ---
+const PRESET_I18N = {
+  standard: "presetStandard",
+  low_latency: "presetLowLatency",
+  stable: "presetStable",
+};
+
+function presetLabel(id) {
+  return t(PRESET_I18N[id] || id);
+}
+
+function updateSynthPresetHint(presetId, settings) {
+  const hint = document.getElementById("synth-preset-hint");
+  if (!hint) return;
+  const preset = (settings?.presets || []).find((p) => p.id === presetId);
+  const size = preset?.period_size ?? settings?.period_size ?? "—";
+  const count = preset?.period_count ?? settings?.period_count ?? "—";
+  hint.textContent = t("synthPresetHint", { size, count });
+}
+
+function renderSynthSettings(settings) {
+  if (!settings) return;
+  const presetSelect = document.getElementById("synth-preset");
+  if (!presetSelect) return;
+
+  presetSelect.innerHTML = "";
+  (settings.presets || []).forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = presetLabel(p.id);
+    if (p.id === settings.audio_preset) opt.selected = true;
+    presetSelect.appendChild(opt);
+  });
+
+  document.getElementById("synth-polyphony").value = settings.polyphony;
+  document.getElementById("synth-polyphony-value").textContent = settings.polyphony;
+  document.getElementById("synth-reverb").checked = !!settings.reverb;
+  document.getElementById("synth-chorus").checked = !!settings.chorus;
+  document.getElementById("synth-dynamic").checked = !!settings.dynamic_sample_loading;
+  updateSynthPresetHint(settings.audio_preset, settings);
+}
+
+async function refreshSynthSettings() {
+  try {
+    const settings = await api("/api/synth/settings");
+    renderSynthSettings(settings);
+  } catch {
+    /* ignore */
+  }
+}
+
+function collectSynthSettingsPayload() {
+  return {
+    audio_preset: document.getElementById("synth-preset").value,
+    polyphony: parseInt(document.getElementById("synth-polyphony").value, 10),
+    reverb: document.getElementById("synth-reverb").checked,
+    chorus: document.getElementById("synth-chorus").checked,
+    dynamic_sample_loading: document.getElementById("synth-dynamic").checked,
+  };
+}
+
+document.getElementById("synth-polyphony")?.addEventListener("input", (e) => {
+  document.getElementById("synth-polyphony-value").textContent = e.target.value;
+});
+
+document.getElementById("synth-preset")?.addEventListener("change", async (e) => {
+  try {
+    const settings = await api("/api/synth/settings");
+    updateSynthPresetHint(e.target.value, settings);
+  } catch {
+    updateSynthPresetHint(e.target.value, null);
+  }
+});
+
+document.getElementById("btn-synth-apply")?.addEventListener("click", async () => {
+  const msg = document.getElementById("synth-msg");
+  const btn = document.getElementById("btn-synth-apply");
+  btn.disabled = true;
+  msg.textContent = t("synthApplying");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const res = await api("/api/synth/settings", {
+      method: "POST",
+      body: JSON.stringify(collectSynthSettingsPayload()),
+    });
+    renderSynthSettings(res.settings);
+    msg.textContent = res.restarted ? t("synthAppliedRestart") : t("synthApplied");
+    msg.className = "msg ok";
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-synth-standard")?.addEventListener("click", async () => {
+  document.getElementById("synth-preset").value = "standard";
+  document.getElementById("synth-polyphony").value = 256;
+  document.getElementById("synth-polyphony-value").textContent = "256";
+  document.getElementById("synth-reverb").checked = true;
+  document.getElementById("synth-chorus").checked = true;
+  document.getElementById("synth-dynamic").checked = false;
+  updateSynthPresetHint("standard", { presets: [{ id: "standard", period_size: 512, period_count: 6 }] });
+  document.getElementById("btn-synth-apply").click();
+});
+
+document.getElementById("btn-synth-stop-notes")?.addEventListener("click", async () => {
+  const msg = document.getElementById("synth-msg");
+  try {
+    await api("/api/synth/stop-notes", { method: "POST" });
+    msg.textContent = t("synthStopNotesDone");
+    msg.className = "msg ok";
+    msg.classList.remove("hidden");
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+    msg.classList.remove("hidden");
+  }
+});
+
 // --- Password ---
 document.getElementById("change-password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -642,6 +768,7 @@ function refreshAll() {
     refreshStatus();
     refreshSoundfonts();
     refreshAudioDevices();
+    refreshSynthSettings();
   }
 }
 

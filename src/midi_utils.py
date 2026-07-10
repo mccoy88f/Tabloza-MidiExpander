@@ -13,6 +13,8 @@ from activity_status import touch_midi_activity
 log = logging.getLogger("tabloza.midi")
 
 RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
+APPLY_SYNTH_SETTINGS_FLAG = Path("/run/tabloza/apply_synth_settings")
+STOP_SYNTH_NOTES_FLAG = Path("/run/tabloza/synth_stop_notes")
 
 PORT_RE = re.compile(r"(\d+:\d+)")
 CLIENT_RE = re.compile(r"^client (\d+):\s*'([^']*)'")
@@ -274,6 +276,42 @@ def trigger_orchestrator_reload_fluidsynth() -> bool:
         RELOAD_FLUIDSYNTH_FLAG.parent.mkdir(parents=True, exist_ok=True)
         RELOAD_FLUIDSYNTH_FLAG.write_text("1")
         os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def trigger_orchestrator_apply_synth_settings() -> bool:
+    """Ask orchestrator to apply runtime synth settings (SIGUSR2 + flag)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        APPLY_SYNTH_SETTINGS_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        APPLY_SYNTH_SETTINGS_FLAG.write_text("1")
+        os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def trigger_orchestrator_stop_notes() -> bool:
+    """Silence all notes via orchestrator (SIGUSR1 + flag)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        STOP_SYNTH_NOTES_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        STOP_SYNTH_NOTES_FLAG.write_text("1")
+        os.kill(pid, signal.SIGUSR1)
         return True
     except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
         return False

@@ -53,6 +53,35 @@ class TestSystemStats(unittest.TestCase):
         self.assertEqual(stats["fluidsynth_mb"], 120)
 
 
+class TestSynthConfig(unittest.TestCase):
+    def test_merge_defaults_standard_preset(self):
+        from synth_config import merge_fluidsynth_config
+
+        fs = merge_fluidsynth_config({})
+        self.assertEqual(fs["audio_preset"], "standard")
+        self.assertEqual(fs["period_size"], 512)
+        self.assertEqual(fs["period_count"], 6)
+        self.assertEqual(fs["polyphony"], 256)
+        self.assertTrue(fs["reverb"])
+        self.assertTrue(fs["chorus"])
+
+    def test_parse_update_needs_restart_on_preset(self):
+        from synth_config import merge_fluidsynth_config, parse_synth_settings_update
+
+        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        fs, restart = parse_synth_settings_update({"audio_preset": "stable"}, cfg)
+        self.assertTrue(restart)
+        self.assertEqual(fs["period_size"], 1024)
+
+    def test_parse_update_runtime_only(self):
+        from synth_config import merge_fluidsynth_config, parse_synth_settings_update
+
+        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        fs, restart = parse_synth_settings_update({"reverb": False}, cfg)
+        self.assertFalse(restart)
+        self.assertFalse(fs["reverb"])
+
+
 class TestAudioUtils(unittest.TestCase):
     def test_card_from_audio_device(self):
         self.assertEqual(card_from_audio_device("plughw:1,0"), 1)

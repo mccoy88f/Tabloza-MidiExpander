@@ -286,6 +286,12 @@ input[type="text"] {
 .memory-bar-fill.warn { background: #f39c12; }
 .memory-bar-fill.critical { background: var(--danger); }
 .memory-stats { font-size: 0.78rem; line-height: 1.4; margin: 0; }
+.synth-form { display: flex; flex-direction: column; gap: 0.85rem; margin-top: 0.5rem; }
+.synth-field { display: flex; flex-direction: column; gap: 0.35rem; }
+.synth-hint { font-size: 0.8rem; margin: 0; }
+.synth-toggles { display: flex; flex-direction: column; gap: 0.45rem; }
+.synth-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
+.synth-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .upload-limit { font-size: 0.8rem; margin: 0.25rem 0 0.5rem; }
 .console-output {
   margin: 0;
