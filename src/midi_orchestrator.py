@@ -10,6 +10,7 @@ GPIO UART MIDI: planned — see docs/TODO.md
 import json
 import logging
 import os
+import shlex
 import signal
 import subprocess
 import threading
@@ -34,7 +35,6 @@ logging.basicConfig(
 log = logging.getLogger("tabloza.orchestrator")
 
 fluidsynth_proc: subprocess.Popen | None = None
-fluidsynth_log_handle = None
 shutdown = False
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
@@ -91,6 +91,40 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
     ]
 
 
+def _ensure_alsa_seq():
+    try:
+        subprocess.run(["modprobe", "snd-seq"], capture_output=True, timeout=5, check=False)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+
+def _launch_fluidsynth(cmd: list[str]) -> subprocess.Popen:
+    """Avvia FluidSynth con log su file (nessun PIPE che può bloccare)."""
+    FLUIDSYNTH_LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(FLUIDSYNTH_LOG, "a", encoding="utf-8") as f:
+        f.write(f"\n--- avvio {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n")
+        f.write(" ".join(shlex.quote(part) for part in cmd) + "\n")
+    cmd_line = "exec " + " ".join(shlex.quote(part) for part in cmd)
+    return subprocess.Popen(
+        f"{cmd_line} >> {shlex.quote(str(FLUIDSYNTH_LOG))} 2>&1",
+        shell=True,
+        executable="/bin/bash",
+        start_new_session=True,
+    )
+
+
+def _wait_fluidsynth_ready(timeout_sec: float = 8.0) -> bool:
+    """Attende che FluidSynth esponga la porta MIDI ALSA."""
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        if fluidsynth_proc and fluidsynth_proc.poll() is not None:
+            return False
+        if find_fluidsynth_input():
+            return True
+        time.sleep(0.5)
+    return find_fluidsynth_input() is not None
+
+
 def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
     if not FLUIDSYNTH_LOG.is_file():
         return []
@@ -101,23 +135,25 @@ def _tail_fluidsynth_log(lines: int = 15) -> list[str]:
 
 
 def _reap_fluidsynth():
-    """Reap child process and close log handle (avoids zombies)."""
-    global fluidsynth_proc, fluidsynth_log_handle
+    """Reap child process (avoids zombies)."""
+    global fluidsynth_proc
     if fluidsynth_proc:
+        if fluidsynth_proc.poll() is None:
+            try:
+                os.killpg(os.getpgid(fluidsynth_proc.pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                fluidsynth_proc.terminate()
         try:
-            fluidsynth_proc.wait(timeout=1)
+            fluidsynth_proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
-            fluidsynth_proc.kill()
+            try:
+                os.killpg(os.getpgid(fluidsynth_proc.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                fluidsynth_proc.kill()
             fluidsynth_proc.wait(timeout=2)
         except ChildProcessError:
             pass
     fluidsynth_proc = None
-    if fluidsynth_log_handle:
-        try:
-            fluidsynth_log_handle.close()
-        except OSError:
-            pass
-    fluidsynth_log_handle = None
 
 
 def _stop_monitor_proc():
@@ -191,9 +227,6 @@ def start_midi_monitor():
 def stop_fluidsynth():
     global fluidsynth_proc
     stop_midi_monitor()
-    if fluidsynth_proc and fluidsynth_proc.poll() is None:
-        log.info("Arresto FluidSynth (PID %d)", fluidsynth_proc.pid)
-        fluidsynth_proc.terminate()
     _reap_fluidsynth()
 
 
@@ -244,41 +277,32 @@ def stop_foreign_fluidsynth():
     time.sleep(0.5)
 
 
-def start_fluidsynth(config: dict):
-    global fluidsynth_proc, fluidsynth_log_handle
+def start_fluidsynth(config: dict) -> bool:
+    global fluidsynth_proc
+    _ensure_alsa_seq()
     stop_foreign_fluidsynth()
     stop_fluidsynth()
 
     sf = find_soundfont(config)
     if not sf:
         log.error("Nessun SoundFont trovato in %s", SOUNDFONTS_DIR)
-        return
-
-    FLUIDSYNTH_LOG.parent.mkdir(parents=True, exist_ok=True)
-    fluidsynth_log_handle = open(FLUIDSYNTH_LOG, "a", encoding="utf-8", buffering=1)
-    fluidsynth_log_handle.write(f"\n--- avvio {time.strftime('%Y-%m-%d %H:%M:%S')} {sf.name} ---\n")
+        return False
 
     cmd = build_fluidsynth_cmd(sf, config)
     log.info("Avvio FluidSynth con %s", sf.name)
-    fluidsynth_proc = subprocess.Popen(
-        cmd,
-        stdout=fluidsynth_log_handle,
-        stderr=subprocess.STDOUT,
-    )
-    time.sleep(3)
-    if fluidsynth_proc.poll() is not None:
-        code = fluidsynth_proc.returncode
-        _reap_fluidsynth()
-        log.error("FluidSynth terminato subito (exit %s)", code)
+    fluidsynth_proc = _launch_fluidsynth(cmd)
+
+    if not _wait_fluidsynth_ready(12.0):
+        code = fluidsynth_proc.poll() if fluidsynth_proc else None
+        log.error("FluidSynth non pronto (exit=%s)", code)
         for line in _tail_fluidsynth_log():
             log.error("fluidsynth: %s", line)
-        return
-    if not find_fluidsynth_input():
-        log.warning("Porta MIDI ALSA non trovata — ultimo log FluidSynth:")
-        for line in _tail_fluidsynth_log(8):
-            log.warning("fluidsynth: %s", line)
+        _reap_fluidsynth()
+        return False
+
     route_rtpmidi_to_fluidsynth()
     apply_volume(config)
+    return True
 
 
 def handle_sighup(signum, frame):
@@ -314,14 +338,16 @@ def main():
     start_midi_monitor()
 
     while not shutdown:
-        if fluidsynth_proc and fluidsynth_proc.poll() is not None:
-            code = fluidsynth_proc.returncode
-            log.warning("FluidSynth terminato inaspettatamente (exit %s), riavvio...", code)
-            for line in _tail_fluidsynth_log(8):
-                log.warning("fluidsynth: %s", line)
-            _reap_fluidsynth()
-            config = load_config()
-            start_fluidsynth(config)
+        if fluidsynth_proc is None or fluidsynth_proc.poll() is not None:
+            if fluidsynth_proc and fluidsynth_proc.poll() is not None:
+                code = fluidsynth_proc.returncode
+                log.warning("FluidSynth terminato (exit %s), riavvio...", code)
+                for line in _tail_fluidsynth_log(8):
+                    log.warning("fluidsynth: %s", line)
+                _reap_fluidsynth()
+            else:
+                log.warning("FluidSynth non attivo — tentativo avvio...")
+            start_fluidsynth(load_config())
         route_rtpmidi_to_fluidsynth()
         time.sleep(ROUTING_INTERVAL)
 

@@ -10,9 +10,8 @@ WorkingDirectory=/opt/tabloza/src/web
 Restart=always
 RestartSec=3
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/tabloza/src
 Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
-RuntimeDirectory=tabloza
-SupplementaryGroups=audio
 
 [Install]
 WantedBy=multi-user.target

@@ -46,6 +46,9 @@ elif ss -tlnp 2>/dev/null | grep -q ':8080 '; then
     yellow "Web UI sulla porta 8080 (aggiorna: sudo git -C /opt/tabloza pull && sudo systemctl restart tabloza-web)"
 else
     red "Nessun server web su porta 80 o 8080"
+    echo "       Log tabloza-web:"
+    journalctl -u tabloza-web -n 8 --no-pager 2>/dev/null | sed 's/^/       /' || true
+    echo "       → sudo systemctl restart tabloza-web"
 fi
 
 if [[ -n "$WEB_PORT" ]]; then

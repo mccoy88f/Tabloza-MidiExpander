@@ -87,6 +87,11 @@ for unit in fluidsynth fluidsynth.service; do
 done
 pkill -f '/usr/share/sounds/sf3/default-GM' 2>/dev/null || true
 pkill -f '/usr/share/sounds/sf2/FluidR3_GM' 2>/dev/null || true
+for unit in nginx apache2 lighttpd; do
+    systemctl stop "$unit" 2>/dev/null || true
+    systemctl disable "$unit" 2>/dev/null || true
+    systemctl mask "$unit" 2>/dev/null || true
+done
 
 # --- Directory dati persistenti ---
 log "Configurazione directory dati in ${DATA_DIR}..."
