@@ -127,11 +127,11 @@ def start_lan_direct() -> tuple[bool, str | None]:
     return True, None
 
 
-def stop_lan_direct() -> tuple[bool, str | None]:
+def stop_lan_direct(skip_reconnect: bool = False) -> tuple[bool, str | None]:
     device = get_primary_ethernet_device()
     result = _run(["nmcli", "connection", "down", LAN_DIRECT_CONN], timeout=15)
     _run(["nmcli", "connection", "delete", LAN_DIRECT_CONN], timeout=10)
-    if device:
+    if device and not skip_reconnect and _ethernet_carrier_up(device):
         _run(["nmcli", "device", "connect", device], timeout=30)
     if result.returncode != 0 and is_lan_direct_active():
         err = (result.stderr or result.stdout or "spegnimento fallito").strip()
@@ -149,7 +149,7 @@ def manage_ethernet_auto() -> None:
 
     if not _ethernet_carrier_up(device):
         if is_lan_direct_active():
-            stop_lan_direct()
+            stop_lan_direct(skip_reconnect=True)
         _clear_carrier_since()
         return
 

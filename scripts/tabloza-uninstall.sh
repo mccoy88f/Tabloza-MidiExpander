@@ -47,6 +47,7 @@ log "Rimozione script di sistema..."
 rm -f /usr/local/bin/tabloza-wifi-fallback.sh
 rm -f /usr/local/bin/tabloza-wifi-monitor.sh
 rm -f /usr/local/bin/tabloza-lan-monitor.sh
+rm -f /usr/local/bin/tabloza-network-common.sh
 rm -f /usr/local/bin/tabloza-test
 rm -f /usr/local/bin/tabloza-uninstall
 rm -f /usr/local/bin/tabloza-update

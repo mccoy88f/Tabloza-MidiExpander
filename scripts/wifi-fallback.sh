@@ -4,16 +4,16 @@ set -euo pipefail
 
 HOTSPOT_CONN="tabloza-hotspot"
 TIMEOUT=20
+TABLOZA_COMMON="${TABLOZA_NETWORK_COMMON:-/usr/local/bin/tabloza-network-common.sh}"
+if [[ -f "$TABLOZA_COMMON" ]]; then
+    # shellcheck source=/dev/null
+    source "$TABLOZA_COMMON"
+else
+    # shellcheck source=network-common.sh
+    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/network-common.sh"
+fi
 
 log() { logger -t tabloza-wifi "$*"; echo "[tabloza-wifi] $*"; }
-
-is_eth_connected() {
-    local dev ip
-    dev=$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | grep ':ethernet' | head -1 | cut -d: -f1)
-    [[ -z "$dev" ]] && return 1
-    ip=$(nmcli -g IP4.ADDRESS device show "$dev" 2>/dev/null | head -1 | cut -d/ -f1)
-    [[ -n "$ip" && "$ip" != "--" && ! "$ip" =~ ^169\.254\. ]]
-}
 
 # Attendi interfaccia wlan
 for i in $(seq 1 30); do
@@ -28,8 +28,8 @@ if [[ -n "$ACTIVE" && "$ACTIVE" != "$HOTSPOT_CONN" ]]; then
     exit 0
 fi
 
-# Con Ethernet attiva: non forzare hotspot (wlan libero per scan/connect dal pannello web)
-if is_eth_connected; then
+# Con Ethernet attiva (cavo + IP): non forzare hotspot
+if tabloza_eth_has_link; then
     log "Ethernet attiva — configura WiFi dal pannello web (http://tabloza-me.local)"
     exit 0
 fi
@@ -59,5 +59,12 @@ fi
 
 # Fallback hotspot
 log "Nessuna rete disponibile. Avvio hotspot ${HOTSPOT_CONN}..."
-nmcli connection up "$HOTSPOT_CONN" 2>/dev/null || nmcli device wifi hotspot ssid "Tabloza-MidiExpander" password ""
-log "Hotspot attivo."
+if ! nmcli connection up "$HOTSPOT_CONN" 2>/dev/null; then
+    nmcli device wifi hotspot ifname wlan0 ssid "Tabloza-MidiExpander" password "" 2>/dev/null || true
+fi
+if nmcli -t -f NAME connection show --active 2>/dev/null | grep -q "^${HOTSPOT_CONN}$"; then
+    log "Hotspot attivo."
+else
+    log "Avvio hotspot fallito — riprova tra poco"
+    exit 1
+fi

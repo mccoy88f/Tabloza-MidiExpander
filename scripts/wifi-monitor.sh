@@ -5,16 +5,16 @@ set -euo pipefail
 HOTSPOT_CONN="tabloza-hotspot"
 CHECK_INTERVAL=30
 FALLBACK_SCRIPT="/usr/local/bin/tabloza-wifi-fallback.sh"
+TABLOZA_COMMON="${TABLOZA_NETWORK_COMMON:-/usr/local/bin/tabloza-network-common.sh}"
+if [[ -f "$TABLOZA_COMMON" ]]; then
+    # shellcheck source=/dev/null
+    source "$TABLOZA_COMMON"
+else
+    # shellcheck source=network-common.sh
+    source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/network-common.sh"
+fi
 
 log() { logger -t tabloza-wifi "$*"; }
-
-is_eth_connected() {
-    local dev ip
-    dev=$(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | grep ':ethernet' | head -1 | cut -d: -f1)
-    [[ -z "$dev" ]] && return 1
-    ip=$(nmcli -g IP4.ADDRESS device show "$dev" 2>/dev/null | head -1 | cut -d/ -f1)
-    [[ -n "$ip" && "$ip" != "--" && ! "$ip" =~ ^169\.254\. ]]
-}
 
 is_wlan_connected() {
     local state
@@ -44,7 +44,7 @@ while true; do
         continue
     fi
 
-    if is_eth_connected && ! is_wlan_connected; then
+    if tabloza_eth_has_link && ! is_wlan_connected; then
         continue
     fi
 
