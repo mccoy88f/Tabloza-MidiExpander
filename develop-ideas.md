@@ -5,7 +5,7 @@
 ## 1. Panoramica
 
 Sintetizzatore MIDI headless basato su **Raspberry Pi** con Raspberry Pi OS Lite **64-bit**.
-Il dispositivo riceve MIDI da due sorgenti simultanee — **porta MIDI IN fisica (GPIO UART)** e **RTP-MIDI di rete** — e sintetizza audio in tempo reale con **FluidSynth** e file SoundFont (`.sf2`), uscendo su jack analogico ALSA.
+Il dispositivo riceve MIDI da **RTP-MIDI di rete** (attivo) e in futuro da **porta MIDI IN fisica (GPIO UART)** — vedi [docs/TODO.md](docs/TODO.md).
 
 Tutto è gestibile da **interfaccia web responsive** (smartphone): upload/selezione SF2, monitoraggio connettività, volume master, configurazione WiFi.
 
@@ -32,11 +32,13 @@ curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/
 Lo script:
 1. Verifica Pi OS 64-bit e architettura ARM
 2. Installa dipendenze di sistema
-3. Configura UART MIDI a 31250 bps
-4. Installa e configura `rtpmidid`, FluidSynth, NetworkManager
-5. Deploya servizi systemd e applicazione web
-6. Imposta password predefinita e dati persistenti
+3. Installa e configura `rtpmidid`, FluidSynth, NetworkManager
+4. Deploya servizi systemd e applicazione web
+5. Imposta hostname `tabloza-md` (mDNS: `tabloza-md.local`)
+6. Imposta password predefinita, secret key e dati persistenti
 7. Riavvia i servizi (reboot consigliato al termine)
+
+> MIDI GPIO UART: pianificato, non attivo all'install. Script pronto in `scripts/configure-midi-uart.sh`.
 
 ---
 
@@ -56,19 +58,21 @@ Dispositivo headless: la resilienza di rete è critica.
 
 ### Identità di rete
 
-- **Hostname / mDNS:** `tabloza-midi.local`
-- **RTP-MIDI:** visibile come `tabloza-midi` via Avahi/mDNS
+- **Hostname / mDNS:** `tabloza-md.local`
+- **RTP-MIDI:** visibile come `tabloza-md` via Avahi/mDNS
+- **Monitor WiFi:** servizio continuo con riconnessione/hotspot ogni 30 s
 
 ---
 
 ## 4. Hardware e I/O
 
-### MIDI fisico (GPIO)
+### MIDI fisico (GPIO) — PIANIFICATO
+
+> Stato: **non implementato**. Vedi `docs/TODO.md`.
 
 - **UART:** GPIO 14 (TX), GPIO 15 (RX)
-- **Baud rate:** 31250 bps (`init_uart_clock` in `/boot/firmware/config.txt`)
+- **Baud rate:** 31250 bps (`scripts/configure-midi-uart.sh` pronto ma non eseguito)
 - **Isolamento:** optoisolatore MIDI standard (es. 6N138) su RX
-- Console seriale Linux (`ttyAMA0` / `serial0`) completamente disabilitata
 
 ### MIDI di rete (RTP-MIDI)
 

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tabloza MidiExpander — MIDI/Audio orchestrator.
 
-Launches FluidSynth, routes hardware serial MIDI and rtpmidid ports,
+Launches FluidSynth, routes RTP-MIDI (rtpmidid) ports to FluidSynth,
 reloads on SIGHUP when SoundFont changes.
+
+GPIO UART MIDI: planned — see docs/TODO.md
 """
 
 import json
@@ -10,17 +12,17 @@ import logging
 import os
 import signal
 import subprocess
-import sys
 import time
 from pathlib import Path
+
+from midi_utils import route_rtpmidi_to_fluidsynth, send_cc7
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
 SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
-SERIAL_PORT = "/dev/serial0"
-ROUTING_INTERVAL = 5  # seconds between aconnect retries
+ROUTING_INTERVAL = 5
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,6 +51,8 @@ def load_config() -> dict:
         with open(CONFIG_FILE) as f:
             stored = json.load(f)
         defaults.update(stored)
+        if "fluidsynth" in stored:
+            defaults["fluidsynth"].update(stored["fluidsynth"])
     return defaults
 
 
@@ -58,7 +62,6 @@ def find_soundfont(config: dict) -> Path | None:
         path = SOUNDFONTS_DIR / active
         if path.is_file():
             return path
-    # Fallback: first .sf2 in library, then system GM
     for sf in sorted(SOUNDFONTS_DIR.glob("*.sf2")):
         return sf
     gm = Path("/usr/share/sounds/sf2/FluidR3_GM.sf2")
@@ -67,7 +70,7 @@ def find_soundfont(config: dict) -> Path | None:
 
 def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
     fs_cfg = config.get("fluidsynth", {})
-    cmd = [
+    return [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),
         "-o", f"audio.alsa.device={fs_cfg.get('audio_device', 'plughw:0,0')}",
@@ -81,7 +84,6 @@ def build_fluidsynth_cmd(sf_path: Path, config: dict) -> list[str]:
         "-ni",
         str(sf_path),
     ]
-    return cmd
 
 
 def stop_fluidsynth():
@@ -94,6 +96,11 @@ def stop_fluidsynth():
         except subprocess.TimeoutExpired:
             fluidsynth_proc.kill()
     fluidsynth_proc = None
+
+
+def apply_volume(config: dict):
+    vol = config.get("volume", 100)
+    send_cc7(vol)
 
 
 def start_fluidsynth(config: dict):
@@ -112,83 +119,9 @@ def start_fluidsynth(config: dict):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-
-
-def get_midi_ports() -> tuple[list[str], list[str]]:
-    """Return (input_ports, output_ports) from aconnect -o."""
-    try:
-        result = subprocess.run(
-            ["aconnect", "-o"],
-            capture_output=True, text=True, timeout=5,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return [], []
-
-    inputs, outputs = [], []
-    section = None
-    for line in result.stdout.splitlines():
-        if "client" in line.lower() and "input" in line.lower():
-            section = "in"
-            continue
-        if "client" in line.lower() and "output" in line.lower():
-            section = "out"
-            continue
-        if line.strip().startswith("'") and section:
-            port = line.strip().split()[0]
-            if section == "in":
-                inputs.append(port)
-            else:
-                outputs.append(port)
-    return inputs, outputs
-
-
-def find_fluidsynth_input() -> str | None:
-    _, outputs = get_midi_ports()
-    for port in outputs:
-        if "fluidsynth" in port.lower():
-            return port
-    return None
-
-
-def find_source_ports() -> list[str]:
-    """Find serial MIDI and rtpmidid output ports."""
-    _, outputs = get_midi_ports()
-    sources = []
-    for port in outputs:
-        low = port.lower()
-        if "serial" in low or "rtpmidid" in low or "midi" in low:
-            if "fluidsynth" not in low:
-                sources.append(port)
-    return sources
-
-
-def route_midi():
-    fs_port = find_fluidsynth_input()
-    if not fs_port:
-        return
-
-    for src in find_source_ports():
-        try:
-            subprocess.run(
-                ["aconnect", src, fs_port],
-                capture_output=True, timeout=3, check=False,
-            )
-            log.info("Routed %s → %s", src, fs_port)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-
-def setup_serial_midi():
-    """Expose hardware UART as ALSA sequencer port via aconnect/snd-rtmidi if available."""
-    if not Path(SERIAL_PORT).exists():
-        return
-    try:
-        subprocess.run(
-            ["stty", "-F", SERIAL_PORT, "31250", "raw", "-echo"],
-            capture_output=True, timeout=3, check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    time.sleep(2)
+    route_rtpmidi_to_fluidsynth()
+    apply_volume(config)
 
 
 def handle_sighup(signum, frame):
@@ -209,7 +142,6 @@ def main():
     signal.signal(signal.SIGTERM, handle_sigterm)
     signal.signal(signal.SIGINT, handle_sigterm)
 
-    setup_serial_midi()
     config = load_config()
     start_fluidsynth(config)
 
@@ -218,7 +150,7 @@ def main():
             log.warning("FluidSynth terminato inaspettatamente, riavvio...")
             config = load_config()
             start_fluidsynth(config)
-        route_midi()
+        route_rtpmidi_to_fluidsynth()
         time.sleep(ROUTING_INTERVAL)
 
     log.info("Orchestratore arrestato.")

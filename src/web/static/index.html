@@ -32,9 +32,14 @@
       <section class="card" id="status-section">
         <h2>Stato</h2>
         <div class="status-grid">
+          <div><span class="label">Indirizzo</span><span id="status-hostname">—</span></div>
           <div><span class="label">IP</span><span id="status-ip">—</span></div>
           <div><span class="label">Rete</span><span id="status-network">—</span></div>
           <div><span class="label">SF2 attivo</span><span id="status-sf2">—</span></div>
+        </div>
+        <div class="midi-status">
+          <span class="label">Ingressi MIDI</span>
+          <ul id="midi-inputs-list" class="midi-list"></ul>
         </div>
       </section>
 
@@ -53,7 +58,10 @@
           <p>Trascina un file .sf2 qui</p>
           <input type="file" id="sf2-upload" accept=".sf2" hidden>
           <button class="btn btn-secondary" onclick="document.getElementById('sf2-upload').click()">Scegli file</button>
-          <div id="upload-progress" class="progress hidden"><div class="progress-bar"></div></div>
+          <div id="upload-progress" class="progress hidden">
+            <div class="progress-bar" id="upload-progress-bar"></div>
+          </div>
+          <p id="upload-status" class="upload-status hidden"></p>
         </div>
       </section>
 
@@ -61,6 +69,7 @@
       <section class="card">
         <h2>WiFi</h2>
         <button id="btn-wifi-scan" class="btn btn-secondary">Scansiona reti</button>
+        <p id="wifi-msg" class="msg hidden"></p>
         <div id="wifi-list" class="wifi-list"></div>
       </section>
 

@@ -9,8 +9,9 @@ ExecStart=/usr/bin/python3 /opt/tabloza/src/midi_orchestrator.py
 WorkingDirectory=/opt/tabloza/src
 Restart=always
 RestartSec=3
-WatchdogSec=30
 Environment=PYTHONUNBUFFERED=1
+Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
+SupplementaryGroups=audio
 
 [Install]
 WantedBy=multi-user.target

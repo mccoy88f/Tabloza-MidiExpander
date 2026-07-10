@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Tabloza MidiExpander — Flask web API and dashboard."""
 
-import json
 import os
 import re
 import signal
@@ -13,22 +12,23 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from midi_utils import get_midi_status, send_cc7  # noqa: E402
 from tabloza_common import (  # noqa: E402
+    MDNS_NAME,
     SOUNDFONTS_DIR,
     change_password,
     load_config,
+    load_secret_key,
     save_config,
     verify_password,
 )
 
 app = Flask(__name__, static_folder="static")
-app.secret_key = os.environ.get(
-    "TABLOZA_SECRET_KEY",
-    "tabloza-change-me-in-production",
-)
-app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024  # 512 MB SF2 upload
+app.secret_key = load_secret_key()
+app.config["MAX_CONTENT_LENGTH"] = 512 * 1024 * 1024
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
-ORCHESTRATOR_PID_FILE = "/run/tabloza-orchestrator.pid"
 SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\- ]+\.sf2$", re.IGNORECASE)
 
 
@@ -94,14 +94,12 @@ def api_change_password():
 @require_auth
 def api_status():
     config = load_config()
-    ip = _get_ip()
-    mode = _get_network_mode()
-    midi_inputs = _get_midi_inputs()
+    midi = get_midi_status()
     return jsonify({
-        "ip": ip,
-        "hostname": "tabloza-midi.local",
-        "network_mode": mode,
-        "midi_inputs": midi_inputs,
+        "ip": _get_ip(),
+        "hostname": MDNS_NAME,
+        "network_mode": _get_network_mode(),
+        "midi": midi,
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
     })
@@ -154,7 +152,11 @@ def api_upload_soundfont():
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
     dest = SOUNDFONTS_DIR / safe_name
     f.save(dest)
-    return jsonify({"ok": True, "name": safe_name})
+    config = load_config()
+    config["active_soundfont"] = safe_name
+    save_config(config)
+    _reload_orchestrator()
+    return jsonify({"ok": True, "name": safe_name, "active": True})
 
 
 @app.route("/api/soundfonts/<name>", methods=["DELETE"])
@@ -187,7 +189,7 @@ def api_volume():
     config = load_config()
     config["volume"] = vol
     save_config(config)
-    _send_cc7(vol)
+    send_cc7(vol)
     return jsonify({"ok": True, "volume": vol})
 
 
@@ -253,13 +255,13 @@ def api_wifi_connect():
             ["nmcli", "connection", "up", conn_name],
             capture_output=True, timeout=30, check=True,
         )
-        # Disattiva hotspot se attivo
         subprocess.run(
             ["nmcli", "connection", "down", "tabloza-hotspot"],
             capture_output=True, timeout=10, check=False,
         )
     except subprocess.CalledProcessError as e:
-        return jsonify({"error": f"Connessione fallita: {e.stderr}"}), 500
+        err = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or str(e))
+        return jsonify({"error": f"Connessione fallita: {err}"}), 500
 
     return jsonify({"ok": True, "ssid": ssid})
 
@@ -279,16 +281,6 @@ def _reload_orchestrator():
             ["systemctl", "restart", "tabloza-orchestrator"],
             timeout=10, check=False,
         )
-
-
-def _send_cc7(volume: int):
-    try:
-        subprocess.run(
-            ["amidi", "-p", "128:0", "-S", f"B0 07 {volume:02X}"],
-            capture_output=True, timeout=3, check=False,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
 
 
 def _get_ip() -> str:
@@ -315,21 +307,6 @@ def _get_network_mode() -> str:
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
     return "unknown"
-
-
-def _get_midi_inputs() -> list[str]:
-    try:
-        result = subprocess.run(
-            ["aconnect", "-o"],
-            capture_output=True, text=True, timeout=5,
-        )
-        ports = []
-        for line in result.stdout.splitlines():
-            if "fluidsynth" in line.lower() or "rtpmidid" in line.lower() or "serial" in line.lower():
-                ports.append(line.strip())
-        return ports
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return []
 
 
 if __name__ == "__main__":

@@ -10,9 +10,10 @@ SOUNDFONTS_DIR="${DATA_DIR}/soundfonts"
 CONFIG_FILE="${DATA_DIR}/config.json"
 AUTH_FILE="${DATA_DIR}/auth.json"
 DEFAULT_PASSWORD="tabloza"
-HOSTNAME="tabloza-midi"
+HOSTNAME="tabloza-md"
 HOTSPOT_SSID="Tabloza-MidiExpander"
 HOTSPOT_IP="192.168.4.1"
+SECRET_FILE="${DATA_DIR}/secret.key"
 
 log()  { echo -e "\033[1;32m[Tabloza]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[Tabloza]\033[0m $*"; }
@@ -94,19 +95,23 @@ if [[ ! -f "${AUTH_FILE}" ]]; then
     chmod 600 "${AUTH_FILE}"
 fi
 
-# --- Hostname e mDNS ---
-log "Configurazione hostname ${HOSTNAME}..."
-hostnamectl set-hostname "${HOSTNAME}"
-if ! grep -q "${HOSTNAME}" /etc/hosts; then
-    sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts 2>/dev/null || \
-        echo -e "127.0.1.1\t${HOSTNAME}" >> /etc/hosts
+if [[ ! -f "${SECRET_FILE}" ]]; then
+    log "Generazione secret key Flask..."
+    python3 -c "import secrets; print(secrets.token_hex(32))" > "${SECRET_FILE}"
+    chmod 600 "${SECRET_FILE}"
 fi
+
+# --- Hostname e mDNS (tabloza-md.local) ---
+log "Configurazione hostname ${HOSTNAME} (mDNS: ${HOSTNAME}.local)..."
+hostnamectl set-hostname "${HOSTNAME}"
+sed -i "s/127.0.1.1.*/127.0.1.1\t${HOSTNAME}/" /etc/hosts 2>/dev/null || \
+    echo -e "127.0.1.1\t${HOSTNAME}" >> /etc/hosts
 systemctl enable avahi-daemon
 systemctl restart avahi-daemon
 
-# --- UART MIDI 31250 bps ---
-log "Configurazione UART MIDI (31250 bps)..."
-bash "${INSTALL_DIR}/scripts/configure-midi-uart.sh"
+# --- MIDI GPIO UART: funzione pianificata (non attiva) ---
+warn "MIDI GPIO fisico: funzione pianificata, non ancora attiva."
+warn "Vedi docs/TODO.md — per ora solo RTP-MIDI (rtpmidid)."
 
 # --- NetworkManager hotspot fallback ---
 log "Configurazione WiFi hotspot fallback..."
@@ -140,6 +145,7 @@ log "  Installazione completata!"
 log "============================================"
 log ""
 log "  Web UI:    http://${HOSTNAME}.local"
+log "  mDNS:      ${HOSTNAME}.local"
 log "  Hotspot:   ${HOTSPOT_SSID} → http://${HOTSPOT_IP}"
 log "  Password:  ${DEFAULT_PASSWORD}"
 log ""

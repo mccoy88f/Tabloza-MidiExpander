@@ -1,4 +1,5 @@
 const API = "";
+const STATUS_REFRESH_MS = 10000;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -16,6 +17,7 @@ async function api(path, opts = {}) {
 }
 
 function showLogin() {
+  stopStatusRefresh();
   document.getElementById("login-screen").classList.remove("hidden");
   document.getElementById("dashboard").classList.add("hidden");
 }
@@ -24,6 +26,19 @@ function showDashboard() {
   document.getElementById("login-screen").classList.add("hidden");
   document.getElementById("dashboard").classList.remove("hidden");
   refreshAll();
+  startStatusRefresh();
+}
+
+let statusTimer = null;
+
+function startStatusRefresh() {
+  stopStatusRefresh();
+  statusTimer = setInterval(refreshStatus, STATUS_REFRESH_MS);
+}
+
+function stopStatusRefresh() {
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = null;
 }
 
 // --- Login ---
@@ -47,14 +62,42 @@ document.getElementById("btn-logout").addEventListener("click", async () => {
 });
 
 // --- Status ---
+function renderMidiInputs(midi) {
+  const list = document.getElementById("midi-inputs-list");
+  list.innerHTML = "";
+  if (!midi || !midi.sources || !midi.sources.length) {
+    list.innerHTML = '<li class="midi-item muted">Nessun ingresso rilevato</li>';
+    return;
+  }
+  midi.sources.forEach((src) => {
+    const li = document.createElement("li");
+    li.className = "midi-item";
+    const badge = src.status === "planned"
+      ? '<span class="badge badge-planned">In arrivo</span>'
+      : src.status === "available"
+        ? '<span class="badge badge-ok">Attivo</span>'
+        : '<span class="badge">—</span>';
+    li.innerHTML = `<span>${src.name}</span>${badge}`;
+    list.appendChild(li);
+  });
+  if (midi.fluidsynth) {
+    const li = document.createElement("li");
+    li.className = "midi-item";
+    li.innerHTML = `<span>FluidSynth (${midi.fluidsynth.address})</span><span class="badge badge-ok">Synth</span>`;
+    list.appendChild(li);
+  }
+}
+
 async function refreshStatus() {
   const s = await api("/api/status");
+  document.getElementById("status-hostname").textContent = s.hostname || "—";
   document.getElementById("status-ip").textContent = s.ip;
   document.getElementById("status-network").textContent =
     s.network_mode === "hotspot" ? "Hotspot" : s.network_mode === "client" ? "WiFi" : "—";
   document.getElementById("status-sf2").textContent = s.active_soundfont || "Nessuno";
   document.getElementById("volume-slider").value = s.volume;
   document.getElementById("volume-value").textContent = s.volume;
+  renderMidiInputs(s.midi);
 }
 
 // --- SoundFonts ---
@@ -63,7 +106,7 @@ async function refreshSoundfonts() {
   const list = document.getElementById("sf2-list");
   list.innerHTML = "";
   if (!soundfonts.length) {
-    list.innerHTML = '<p style="color:var(--muted)">Nessun SoundFont caricato</p>';
+    list.innerHTML = '<p class="muted">Nessun SoundFont caricato</p>';
     return;
   }
   soundfonts.forEach((sf) => {
@@ -72,13 +115,13 @@ async function refreshSoundfonts() {
     const sizeMB = (sf.size / 1024 / 1024).toFixed(1);
     div.innerHTML = `
       <div>
-        <span class="sf2-name">${sf.name}</span>
-        <span style="color:var(--muted);font-size:0.8rem;margin-left:0.5rem">${sizeMB} MB</span>
+        <span class="sf2-name">${escapeHtml(sf.name)}</span>
+        <span class="muted" style="font-size:0.8rem;margin-left:0.5rem">${sizeMB} MB</span>
         ${sf.active ? '<span class="sf2-active"> ● attivo</span>' : ""}
       </div>
       <div class="sf2-actions">
-        ${!sf.active ? `<button class="btn btn-secondary" data-load="${sf.name}">Carica</button>` : ""}
-        <button class="btn btn-danger" data-del="${sf.name}">Elimina</button>
+        ${!sf.active ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">Carica</button>` : ""}
+        <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">Elimina</button>
       </div>`;
     list.appendChild(div);
   });
@@ -102,6 +145,12 @@ async function refreshSoundfonts() {
   });
 }
 
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 // --- Upload ---
 const uploadZone = document.getElementById("upload-zone");
 const fileInput = document.getElementById("sf2-upload");
@@ -115,21 +164,64 @@ uploadZone.addEventListener("drop", (e) => {
 });
 fileInput.addEventListener("change", () => { if (fileInput.files.length) uploadFile(fileInput.files[0]); });
 
-async function uploadFile(file) {
-  if (!file.name.toLowerCase().endsWith(".sf2")) return alert("Solo file .sf2");
+function uploadFile(file) {
+  if (!file.name.toLowerCase().endsWith(".sf2")) {
+    showUploadStatus("Solo file .sf2", true);
+    return;
+  }
+
   const prog = document.getElementById("upload-progress");
-  const bar = prog.querySelector(".progress-bar");
+  const bar = document.getElementById("upload-progress-bar");
   prog.classList.remove("hidden");
-  bar.style.width = "30%";
+  bar.style.width = "0%";
+  showUploadStatus(`Caricamento ${file.name}...`, false);
 
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/soundfonts/upload", { method: "POST", body: form, credentials: "same-origin" });
-  bar.style.width = "100%";
-  if (!res.ok) { const d = await res.json(); alert(d.error || "Upload fallito"); }
-  else refreshSoundfonts();
-  setTimeout(() => { prog.classList.add("hidden"); bar.style.width = "0%"; }, 1000);
-  fileInput.value = "";
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/soundfonts/upload");
+  xhr.withCredentials = true;
+
+  xhr.upload.addEventListener("progress", (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      bar.style.width = `${pct}%`;
+      showUploadStatus(`Caricamento ${pct}%`, false);
+    }
+  });
+
+  xhr.addEventListener("load", () => {
+    if (xhr.status === 401) { showLogin(); return; }
+    let data = {};
+    try { data = JSON.parse(xhr.responseText); } catch (_) {}
+    if (xhr.status >= 200 && xhr.status < 300) {
+      showUploadStatus(`${file.name} caricato e attivato`, false, true);
+      refreshAll();
+    } else {
+      showUploadStatus(data.error || "Upload fallito", true);
+    }
+    setTimeout(() => {
+      prog.classList.add("hidden");
+      bar.style.width = "0%";
+    }, 2000);
+    fileInput.value = "";
+  });
+
+  xhr.addEventListener("error", () => {
+    showUploadStatus("Errore di rete durante l'upload", true);
+    prog.classList.add("hidden");
+    fileInput.value = "";
+  });
+
+  xhr.send(form);
+}
+
+function showUploadStatus(msg, isError, isOk) {
+  const el = document.getElementById("upload-status");
+  el.textContent = msg;
+  el.className = "upload-status " + (isError ? "err" : isOk ? "ok" : "");
+  el.classList.remove("hidden");
 }
 
 // --- Volume ---
@@ -144,16 +236,30 @@ document.getElementById("volume-slider").addEventListener("input", (e) => {
 
 // --- WiFi ---
 document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
-  const { networks } = await api("/api/wifi/scan");
-  const list = document.getElementById("wifi-list");
-  list.innerHTML = "";
-  networks.forEach((n) => {
-    const div = document.createElement("div");
-    div.className = "wifi-item";
-    div.innerHTML = `<span>${n.ssid}</span><span class="wifi-signal">${n.signal}% ${n.security ? "🔒" : ""}</span>`;
-    div.addEventListener("click", () => showWifiForm(n.ssid));
-    list.appendChild(div);
-  });
+  const msg = document.getElementById("wifi-msg");
+  msg.textContent = "Scansione in corso...";
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const { networks } = await api("/api/wifi/scan");
+    msg.classList.add("hidden");
+    const list = document.getElementById("wifi-list");
+    list.innerHTML = "";
+    if (!networks.length) {
+      list.innerHTML = '<p class="muted">Nessuna rete trovata</p>';
+      return;
+    }
+    networks.forEach((n) => {
+      const div = document.createElement("div");
+      div.className = "wifi-item";
+      div.innerHTML = `<span>${escapeHtml(n.ssid)}</span><span class="wifi-signal">${n.signal}% ${n.security ? "🔒" : ""}</span>`;
+      div.addEventListener("click", () => showWifiForm(n.ssid));
+      list.appendChild(div);
+    });
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  }
 });
 
 function showWifiForm(ssid) {
@@ -161,17 +267,25 @@ function showWifiForm(ssid) {
   const form = document.createElement("div");
   form.className = "wifi-form";
   form.innerHTML = `
-    <p>Connetti a <strong>${ssid}</strong></p>
+    <p>Connetti a <strong>${escapeHtml(ssid)}</strong></p>
     <input type="password" id="wifi-password" placeholder="Password WiFi">
     <button class="btn btn-primary" id="wifi-connect-btn">Connetti</button>`;
   list.prepend(form);
   document.getElementById("wifi-connect-btn").addEventListener("click", async () => {
     const pw = document.getElementById("wifi-password").value;
+    const msg = document.getElementById("wifi-msg");
+    msg.textContent = "Connessione in corso...";
+    msg.className = "msg";
+    msg.classList.remove("hidden");
     try {
       await api("/api/wifi/connect", { method: "POST", body: JSON.stringify({ ssid, password: pw }) });
-      alert("Connesso! Il dispositivo si collegherà a questa rete al prossimo avvio.");
+      msg.textContent = `Connesso a ${ssid}. Al prossimo boot il dispositivo userà questa rete.`;
+      msg.className = "msg ok";
       refreshStatus();
-    } catch (err) { alert(err.message); }
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "msg err";
+    }
   });
 }
 
@@ -204,6 +318,10 @@ function refreshAll() {
 
 // --- Init ---
 (async () => {
-  const { authenticated } = await api("/api/auth/check");
-  authenticated ? showDashboard() : showLogin();
+  try {
+    const { authenticated } = await api("/api/auth/check");
+    authenticated ? showDashboard() : showLogin();
+  } catch {
+    showLogin();
+  }
 })();

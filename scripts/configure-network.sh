@@ -38,7 +38,8 @@ EOF
     chmod 600 "$NM_CONN"
 fi
 
-# Script WiFi fallback al boot
+# Script WiFi fallback + monitor continuo
 install -m 755 "$(dirname "$0")/wifi-fallback.sh" /usr/local/bin/tabloza-wifi-fallback.sh
+install -m 755 "$(dirname "$0")/wifi-monitor.sh"  /usr/local/bin/tabloza-wifi-monitor.sh
 
 echo "NetworkManager hotspot configurato: ${HOTSPOT_SSID} @ ${HOTSPOT_IP}"

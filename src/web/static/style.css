@@ -128,3 +128,27 @@ input[type="text"] {
 
 .wifi-form { padding: 0.75rem 0; }
 .wifi-form input { margin-bottom: 0.5rem; }
+
+.midi-status { margin-top: 0.75rem; }
+.midi-list { list-style: none; margin-top: 0.5rem; }
+.midi-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  font-size: 0.9rem;
+}
+.muted { color: var(--muted); }
+.badge {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  background: #2a2d3a;
+  color: var(--muted);
+}
+.badge-ok { background: rgba(46,204,113,0.15); color: var(--success); }
+.badge-planned { background: rgba(108,92,231,0.15); color: var(--accent); }
+
+.upload-status { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+.upload-status.ok { color: var(--success); }
+.upload-status.err { color: var(--danger); }
