@@ -92,9 +92,19 @@
 
       <!-- Volume -->
       <section class="card">
-        <h2 data-i18n="sectionVolume">Volume Master</h2>
+        <h2 data-i18n="sectionVolume">Volume uscita audio (jack)</h2>
         <input type="range" id="volume-slider" min="0" max="127" value="100">
         <span id="volume-value">100</span>
+      </section>
+
+      <!-- Audio output -->
+      <section class="card">
+        <h2 data-i18n="sectionAudioOutput">Uscita audio</h2>
+        <p class="audio-device-current"><span class="label" data-i18n="labelAudioDevice">Dispositivo</span> <span id="audio-device-current">—</span></p>
+        <button type="button" id="btn-audio-refresh" class="btn btn-secondary" data-i18n="refreshAudioDevices">Aggiorna elenco</button>
+        <select id="audio-device-select" class="audio-device-select" aria-label="Uscita audio"></select>
+        <button type="button" id="btn-audio-apply" class="btn btn-primary" data-i18n="applyAudioDevice">Applica uscita</button>
+        <p id="audio-device-msg" class="msg hidden"></p>
       </section>
 
       <!-- SoundFonts -->

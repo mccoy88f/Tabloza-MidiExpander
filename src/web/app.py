@@ -14,7 +14,13 @@ from flask import Flask, jsonify, request, send_from_directory, session
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
-from audio_utils import apply_output_volume, play_stereo_tone  # noqa: E402
+from audio_utils import (  # noqa: E402
+    apply_output_volume,
+    card_from_audio_device,
+    device_label,
+    list_playback_devices,
+    play_stereo_tone,
+)
 from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import (
     get_midi_status,
@@ -138,6 +144,10 @@ def api_status():
         },
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
+        "audio": {
+            "device": config.get("fluidsynth", {}).get("audio_device", "plughw:0,0"),
+            "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
+        },
     })
 
 
@@ -240,6 +250,58 @@ def api_volume():
         "volume": vol,
         "alsa": alsa_detail,
         "alsa_ok": ok_alsa,
+    })
+
+
+# --- Audio output ---
+
+@app.route("/api/audio/devices")
+@require_auth
+def api_audio_devices():
+    config = load_config()
+    current = config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")
+    devices = list_playback_devices()
+    current_label = device_label(current, devices)
+    if current and current not in {d["id"] for d in devices}:
+        current_label = f"{current} (non rilevato)"
+    return jsonify({
+        "devices": devices,
+        "current": current,
+        "current_label": current_label,
+    })
+
+
+@app.route("/api/audio/select", methods=["POST"])
+@require_auth
+def api_audio_select():
+    from audio_utils import AUDIO_DEVICE_ID_RE
+
+    data = request.get_json(silent=True) or {}
+    device = data.get("device", "").strip()
+    if not AUDIO_DEVICE_ID_RE.match(device):
+        return jsonify({"error": "Dispositivo non valido"}), 400
+
+    devices = list_playback_devices()
+    if devices and device not in {d["id"] for d in devices}:
+        return jsonify({"error": "Dispositivo non trovato"}), 404
+
+    config = load_config()
+    card = card_from_audio_device(device)
+    config.setdefault("fluidsynth", {})["audio_device"] = device
+    config["fluidsynth"]["alsa_card"] = card
+    save_config(config)
+
+    _restart_orchestrator()
+    time.sleep(4)
+    _reload_orchestrator()
+    apply_output_volume(config.get("volume", 100), config)
+    trigger_orchestrator_apply_volume()
+
+    return jsonify({
+        "ok": True,
+        "device": device,
+        "label": device_label(device, devices),
+        "alsa_card": card,
     })
 
 
@@ -389,6 +451,13 @@ def api_midi_reset():
 
 
 # --- Helpers ---
+
+def _restart_orchestrator():
+    subprocess.run(
+        ["systemctl", "restart", "tabloza-orchestrator"],
+        capture_output=True, timeout=20, check=False,
+    )
+
 
 def _reload_orchestrator():
     try:

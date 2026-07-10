@@ -9,6 +9,48 @@ import subprocess
 log = logging.getLogger("tabloza.audio")
 
 PREFERRED_MIXER_CONTROLS = ("PCM", "Headphone", "HP", "Master", "Digital", "Playback")
+PLAYBACK_DEVICE_RE = re.compile(
+    r"^card (\d+): .+ \[([^\]]+)\], device (\d+):",
+)
+AUDIO_DEVICE_ID_RE = re.compile(r"^(?:plug)?hw:(\d+),(\d+)$")
+
+
+def card_from_audio_device(device: str) -> int:
+    match = AUDIO_DEVICE_ID_RE.match(device.strip())
+    return int(match.group(1)) if match else 0
+
+
+def list_playback_devices() -> list[dict]:
+    """List ALSA playback devices via `aplay -l`."""
+    try:
+        result = subprocess.run(
+            ["aplay", "-l"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return []
+
+    devices = []
+    for line in result.stdout.splitlines():
+        match = PLAYBACK_DEVICE_RE.match(line.strip())
+        if not match:
+            continue
+        card, name, dev = match.groups()
+        devices.append({
+            "card": int(card),
+            "device": int(dev),
+            "id": f"plughw:{card},{dev}",
+            "name": name.strip(),
+            "label": f"{name.strip()} (card {card})",
+        })
+    return devices
+
+
+def device_label(device_id: str, devices: list[dict] | None = None) -> str:
+    for dev in devices or list_playback_devices():
+        if dev["id"] == device_id:
+            return dev["label"]
+    return device_id
 
 
 def play_stereo_tone(

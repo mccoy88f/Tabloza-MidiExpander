@@ -184,6 +184,20 @@ input[type="text"] {
 #volume-slider { width: calc(100% - 3rem); vertical-align: middle; accent-color: var(--accent); }
 #volume-value { display: inline-block; width: 2.5rem; text-align: right; font-variant-numeric: tabular-nums; }
 
+.audio-device-current { margin: 0 0 0.75rem; color: var(--text); }
+.audio-device-select {
+  width: 100%;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #2a2d3a;
+  background: #1a1d27;
+  color: var(--text);
+  font: inherit;
+}
+.audio-device-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#btn-audio-apply { margin-top: 0.25rem; }
+
 .sf2-item, .wifi-item {
   display: flex;
   justify-content: space-between;

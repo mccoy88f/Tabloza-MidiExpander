@@ -469,8 +469,10 @@ def main():
     signal.signal(signal.SIGINT, handle_sigterm)
 
     config = load_config()
-    start_fluidsynth(config)
+    started = start_fluidsynth(config)
     start_midi_monitor()
+    if started and config.get("active_soundfont"):
+        threading.Thread(target=_load_soundfont_async, daemon=True).start()
 
     while not shutdown:
         if fluidsynth_proc is None or fluidsynth_proc.poll() is not None:

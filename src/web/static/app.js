@@ -401,6 +401,76 @@ volumeSlider.addEventListener("input", (e) => {
   }, 200);
 });
 
+// --- Audio output ---
+let currentAudioDevice = "";
+
+async function refreshAudioDevices() {
+  const select = document.getElementById("audio-device-select");
+  const currentEl = document.getElementById("audio-device-current");
+  if (!select || !currentEl) return;
+  try {
+    const data = await api("/api/audio/devices");
+    currentAudioDevice = data.current || "";
+    currentEl.textContent = data.current_label || data.current || "—";
+    select.innerHTML = "";
+    if (!data.devices || !data.devices.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = t("audioDeviceEmpty");
+      select.appendChild(opt);
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    data.devices.forEach((dev) => {
+      const opt = document.createElement("option");
+      opt.value = dev.id;
+      opt.textContent = dev.label;
+      if (dev.id === data.current) opt.selected = true;
+      select.appendChild(opt);
+    });
+  } catch {
+    currentEl.textContent = "—";
+  }
+}
+
+document.getElementById("btn-audio-refresh").addEventListener("click", refreshAudioDevices);
+
+document.getElementById("btn-audio-apply").addEventListener("click", async () => {
+  const select = document.getElementById("audio-device-select");
+  const msg = document.getElementById("audio-device-msg");
+  const device = select.value;
+  if (!device || device === currentAudioDevice) {
+    msg.textContent = t("audioDeviceNoChange");
+    msg.className = "msg err";
+    msg.classList.remove("hidden");
+    return;
+  }
+  if (!confirm(t("audioDeviceConfirm"))) return;
+  const btn = document.getElementById("btn-audio-apply");
+  btn.disabled = true;
+  msg.textContent = t("audioDeviceApplying");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const res = await api("/api/audio/select", {
+      method: "POST",
+      body: JSON.stringify({ device }),
+    });
+    currentAudioDevice = res.device;
+    document.getElementById("audio-device-current").textContent = res.label || res.device;
+    msg.textContent = t("audioDeviceApplied", { name: res.label || res.device });
+    msg.className = "msg ok";
+    refreshStatus();
+    refreshSoundfonts();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // --- WiFi ---
 document.getElementById("btn-wifi-scan").addEventListener("click", async () => {
   const msg = document.getElementById("wifi-msg");
@@ -483,6 +553,7 @@ function refreshAll() {
   if (onDashboard) {
     refreshStatus();
     refreshSoundfonts();
+    refreshAudioDevices();
   }
 }
 
