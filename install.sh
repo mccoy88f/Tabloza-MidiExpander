@@ -74,7 +74,7 @@ apt-get install -y -qq \
     fluidsynth fluid-soundfont-gm \
     avahi-daemon avahi-utils \
     network-manager \
-    python3 python3-flask python3-bcrypt python3-venv \
+    python3 python3-flask python3-bcrypt python3-venv python3-pyalsaaudio \
     alsa-utils \
     libasound2-dev
 

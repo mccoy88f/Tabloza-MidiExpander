@@ -84,6 +84,9 @@ def load_config() -> dict:
         defaults.update(stored)
         if "fluidsynth" in stored:
             defaults["fluidsynth"].update(stored["fluidsynth"])
+        if "volume" in defaults:
+            from audio_utils import normalize_volume
+            defaults["volume"] = normalize_volume(defaults["volume"])
     return defaults
 
 
@@ -91,7 +94,9 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
     """FluidSynth senza SF2 — caricamento dinamico via server TCP."""
     fs_cfg = config.get("fluidsynth", {})
     max_gain = fs_cfg.get("gain", 2.0)
-    initial_gain = max_gain if config.get("volume", 100) > 0 else 0.0
+    from audio_utils import normalize_volume, volume_to_gain
+    vol = normalize_volume(config.get("volume", 100))
+    initial_gain = volume_to_gain(vol, max_gain)
     return [
         FLUIDSYNTH_BIN,
         "-a", fs_cfg.get("audio_driver", "alsa"),

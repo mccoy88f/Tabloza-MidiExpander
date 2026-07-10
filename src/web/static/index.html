@@ -92,9 +92,11 @@
 
       <!-- Volume -->
       <section class="card">
-        <h2 data-i18n="sectionVolume">Volume uscita audio (jack)</h2>
-        <input type="range" id="volume-slider" min="0" max="127" value="100">
-        <span id="volume-value">100</span>
+        <h2 data-i18n="sectionVolume">Volume uscita audio</h2>
+        <div class="volume-row">
+          <input type="range" id="volume-slider" min="0" max="100" value="100" aria-valuemin="0" aria-valuemax="100">
+          <span id="volume-value">100</span><span class="volume-unit">%</span>
+        </div>
       </section>
 
       <!-- Audio output -->
@@ -143,14 +145,16 @@
       </section>
 
       <!-- Security -->
-      <section class="card">
-        <h2 data-i18n="sectionSecurity">Sicurezza</h2>
-        <form id="change-password-form">
-          <input type="password" id="current-password" data-i18n-placeholder="currentPassword" placeholder="Password attuale" required>
-          <input type="password" id="new-password" data-i18n-placeholder="newPassword" placeholder="Nuova password" required>
-          <button type="submit" class="btn btn-secondary" data-i18n="changePassword">Cambia password</button>
-        </form>
-        <p id="password-msg" class="msg hidden"></p>
+      <section class="card console-card">
+        <details id="security-section">
+          <summary data-i18n="sectionSecurity">Sicurezza</summary>
+          <form id="change-password-form">
+            <input type="password" id="current-password" data-i18n-placeholder="currentPassword" placeholder="Password attuale" required>
+            <input type="password" id="new-password" data-i18n-placeholder="newPassword" placeholder="Nuova password" required>
+            <button type="submit" class="btn btn-secondary" data-i18n="changePassword">Cambia password</button>
+          </form>
+          <p id="password-msg" class="msg hidden"></p>
+        </details>
       </section>
     </div>
   </div>

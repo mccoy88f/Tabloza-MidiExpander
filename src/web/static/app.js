@@ -179,8 +179,9 @@ async function refreshStatus() {
     || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
   document.getElementById("status-sf2").textContent = sf2Label;
   if (!volumeAdjusting) {
-    document.getElementById("volume-slider").value = s.volume;
-    document.getElementById("volume-value").textContent = s.volume;
+    const pct = Math.min(100, Math.max(0, Number(s.volume) || 0));
+    document.getElementById("volume-slider").value = pct;
+    document.getElementById("volume-value").textContent = pct;
   }
   renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
@@ -220,8 +221,8 @@ document.getElementById("btn-jack-test").addEventListener("click", async () => {
   msg.className = "msg";
   msg.classList.remove("hidden");
   try {
-    await api("/api/audio/test-hardware", { method: "POST" });
-    msg.textContent = t("jackTestDone");
+    const res = await api("/api/audio/test-hardware", { method: "POST" });
+    msg.textContent = res.message || t("jackTestDone");
     msg.className = "msg ok";
   } catch (err) {
     msg.textContent = err.message;

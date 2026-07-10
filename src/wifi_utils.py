@@ -1,5 +1,6 @@
 """WiFi scan/connect helpers via NetworkManager."""
 
+import re
 import subprocess
 import time
 
@@ -115,3 +116,48 @@ def scan_wifi_networks() -> tuple[list[dict], str | None]:
     networks.sort(key=lambda n: n["signal"], reverse=True)
     log_event("wifi", f"Trovate {len(networks)} reti")
     return networks, None
+
+
+def _safe_conn_name(ssid: str) -> str:
+    safe = re.sub(r"[^\w\-]+", "_", ssid.strip())[:20] or "wifi"
+    return f"tabloza-wifi-{safe}"
+
+
+def connect_wifi_network(ssid: str, password: str = "") -> tuple[bool, str | None]:
+    """Connect wlan0 to an infrastructure WiFi network (stores credentials in NM)."""
+    ssid = ssid.strip()
+    if not ssid:
+        return False, "SSID richiesto"
+
+    ok, detail = prepare_wifi_scan()
+    if not ok:
+        return False, detail
+
+    log_event("wifi", f"Connessione a «{ssid}»…")
+    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=15)
+
+    conn_name = _safe_conn_name(ssid)
+    _run(["nmcli", "connection", "delete", conn_name], timeout=10)
+
+    cmd = [
+        "nmcli", "--wait", "45", "device", "wifi", "connect", ssid,
+        "ifname", WLAN_IFACE,
+        "name", conn_name,
+    ]
+    if password:
+        cmd += ["password", password]
+
+    result = _run(cmd, timeout=60)
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout or "connessione fallita").strip()
+        log_event("wifi", f"Connessione fallita: {err}", "error")
+        return False, err
+
+    _run([
+        "nmcli", "connection", "modify", conn_name,
+        "connection.autoconnect", "yes",
+        "connection.autoconnect-priority", "100",
+    ], timeout=10)
+    _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=10)
+    log_event("wifi", f"Connesso a «{ssid}»")
+    return True, None

@@ -199,8 +199,9 @@ def route_rtpmidi_to_fluidsynth() -> int:
 
 
 def volume_to_gain(volume: int, max_gain: float = 2.0) -> float:
-    vol = max(0, min(127, int(volume)))
-    return round((vol / 127.0) * max_gain, 3)
+    from audio_utils import normalize_volume
+    vol = normalize_volume(volume)
+    return round((vol / 100.0) * max_gain, 3) if vol > 0 else 0.0
 
 
 def set_fluidsynth_output_level(
@@ -212,7 +213,10 @@ def set_fluidsynth_output_level(
     """Keep FluidSynth at full internal level; ALSA mixer handles loudness."""
     from fluidsynth_client import send_command, shell_bound
 
-    gain = max_gain if max(0, min(127, int(volume))) > 0 else 0.0
+    from audio_utils import normalize_volume
+    gain = volume_to_gain(volume, max_gain)
+    if normalize_volume(volume) == 0:
+        gain = 0.0
     for attempt in range(retries):
         if shell_bound() and find_fluidsynth_input():
             ok_gain, _ = send_command(f"gain {gain}")

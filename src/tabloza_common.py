@@ -35,8 +35,13 @@ def startup_soundfont_name(config: dict, soundfonts_dir: Path | None = None) -> 
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
-            return json.load(f)
-    return {"active_soundfont": "", "default_soundfont": "", "volume": 100}
+            config = json.load(f)
+    else:
+        config = {"active_soundfont": "", "default_soundfont": "", "volume": 100}
+    from audio_utils import normalize_volume
+    if "volume" in config:
+        config["volume"] = normalize_volume(config["volume"])
+    return config
 
 
 def save_config(config: dict):

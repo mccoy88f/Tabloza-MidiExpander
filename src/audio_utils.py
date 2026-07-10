@@ -1,17 +1,15 @@
-"""Tabloza — utilità audio ALSA."""
+"""Tabloza — utilità audio ALSA (pyalsaaudio)."""
 
 import logging
 import math
 import re
 import struct
-import subprocess
+
+import alsaaudio
 
 log = logging.getLogger("tabloza.audio")
 
 PREFERRED_MIXER_CONTROLS = ("PCM", "Headphone", "HP", "Master", "Digital", "Playback")
-PLAYBACK_DEVICE_RE = re.compile(
-    r"^card (\d+): .+ \[([^\]]+)\], device (\d+):",
-)
 AUDIO_DEVICE_ID_RE = re.compile(r"^(?:plug)?hw:(\d+),(\d+)$")
 
 
@@ -32,30 +30,36 @@ def sample_rate_for_device(device: str, default: int = 44100) -> int:
     return 48000 if card > 0 else default
 
 
+def normalize_volume(volume: int) -> int:
+    """0–100 percent; migrate legacy 0–127 MIDI-style values."""
+    vol = int(volume)
+    if vol > 100:
+        vol = round(vol / 127 * 100)
+    return max(0, min(100, vol))
+
+
+def volume_to_alsa_percent(volume: int) -> int:
+    return normalize_volume(volume)
+
+
 def list_playback_devices() -> list[dict]:
-    """List ALSA playback devices via `aplay -l`."""
+    """List ALSA playback devices via pyalsaaudio."""
     try:
-        result = subprocess.run(
-            ["aplay", "-l"],
-            capture_output=True, text=True, timeout=5, check=True,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        cards = alsaaudio.cards()
+    except alsaaudio.ALSAAudioError:
         return []
 
     devices = []
-    for line in result.stdout.splitlines():
-        match = PLAYBACK_DEVICE_RE.match(line.strip())
-        if not match:
-            continue
-        card_i, name, dev = match.groups()
-        card_i, dev_i = int(card_i), int(dev)
+    for card_i, name in enumerate(cards):
+        dev_i = 0
+        device_id = alsa_device_for_card(card_i, dev_i)
         devices.append({
             "card": card_i,
             "device": dev_i,
-            "id": alsa_device_for_card(card_i, dev_i),
+            "id": device_id,
             "name": name.strip(),
             "label": f"{name.strip()} (card {card_i})",
-            "sample_rate": sample_rate_for_device(alsa_device_for_card(card_i, dev_i)),
+            "sample_rate": sample_rate_for_device(device_id),
         })
     return devices
 
@@ -78,6 +82,29 @@ def audio_device_available(device: str) -> bool:
     return False
 
 
+def _open_playback_pcm(device: str, sample_rate: int, channels: int = 2) -> alsaaudio.PCM:
+    """Open PCM, retrying plughw when hw fails (some cards)."""
+    candidates = [device]
+    if device.startswith("hw:") and not device.startswith("plughw:"):
+        candidates.append("plug" + device)
+    last_err: Exception | None = None
+    for dev in candidates:
+        try:
+            pcm = alsaaudio.PCM(
+                alsaaudio.PCM_PLAYBACK,
+                alsaaudio.PCM_NORMAL,
+                device=dev,
+            )
+            pcm.setchannels(channels)
+            pcm.setrate(sample_rate)
+            pcm.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+            pcm.setperiodsize(1024)
+            return pcm
+        except alsaaudio.ALSAAudioError as exc:
+            last_err = exc
+    raise last_err or alsaaudio.ALSAAudioError(f"Impossibile aprire {device}")
+
+
 def play_stereo_tone(
     device: str,
     frequency: float = 440.0,
@@ -85,29 +112,32 @@ def play_stereo_tone(
     sample_rate: int = 44100,
     volume: float = 0.4,
 ) -> None:
-    """Play the same sine tone on left and right (stereo jack test)."""
-    n_samples = int(sample_rate * duration_sec)
+    """Play the same sine tone on left and right on the given ALSA device."""
+    pcm = _open_playback_pcm(device, sample_rate)
+    period = pcm.getperiodsize()
+    if isinstance(period, tuple):
+        period = period[0]
     amp = int(32767 * volume)
-    buf = bytearray()
-    for i in range(n_samples):
-        sample = int(amp * math.sin(2 * math.pi * frequency * i / sample_rate))
-        buf += struct.pack("<hh", sample, sample)
-    subprocess.run(
-        ["aplay", "-D", device, "-f", "S16_LE", "-r", str(sample_rate), "-c", "2", "-q"],
-        input=bytes(buf),
-        timeout=duration_sec + 5,
-        check=True,
-    )
+    total_samples = int(sample_rate * duration_sec)
+    written = 0
+    phase = 0.0
+    phase_inc = 2 * math.pi * frequency / sample_rate
+
+    while written < total_samples:
+        chunk = min(period, total_samples - written)
+        buf = bytearray()
+        for _ in range(chunk):
+            sample = int(amp * math.sin(phase))
+            phase += phase_inc
+            buf += struct.pack("<hh", sample, sample)
+        pcm.write(bytes(buf))
+        written += chunk
 
 
 def _mixer_controls(card: int) -> list[str]:
     try:
-        result = subprocess.run(
-            ["amixer", "-c", str(card), "scontrols"],
-            capture_output=True, text=True, timeout=5, check=True,
-        )
-        return re.findall(r"Simple mixer control '([^']+)'", result.stdout)
-    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return alsaaudio.mixers(cardindex=card)
+    except alsaaudio.ALSAAudioError:
         return []
 
 
@@ -121,9 +151,20 @@ def resolve_mixer_control(card: int = 0, control: str | None = None) -> str | No
     return available[0] if available else None
 
 
-def volume_to_alsa_percent(volume: int) -> int:
-    vol = max(0, min(127, int(volume)))
-    return int(round(vol / 127.0 * 100))
+def _mixer_has_volume(mix: alsaaudio.Mixer) -> bool:
+    try:
+        levels = mix.getvolume()
+        return bool(levels)
+    except alsaaudio.ALSAAudioError:
+        return False
+
+
+def _mixer_has_switch(mix: alsaaudio.Mixer) -> bool:
+    try:
+        mix.getswitch()
+        return True
+    except alsaaudio.ALSAAudioError:
+        return False
 
 
 def set_alsa_output_volume(
@@ -131,37 +172,37 @@ def set_alsa_output_volume(
     card: int = 0,
     control: str | None = None,
 ) -> tuple[bool, str]:
-    """Set ALSA mixer level for the analog output (headphone jack / USB DAC)."""
+    """Set ALSA mixer level for the active output (jack / USB DAC)."""
     percent = volume_to_alsa_percent(volume)
     target = resolve_mixer_control(card, control)
     if not target:
         return False, f"Nessun controllo mixer ALSA sulla card {card}"
 
-    def _run_amixer(args: list[str]) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["amixer", "-c", str(card), *args],
-            capture_output=True, text=True, timeout=5, check=False,
-        )
+    try:
+        mix = alsaaudio.Mixer(target, cardindex=card)
+    except alsaaudio.ALSAAudioError as exc:
+        return False, str(exc)
 
     try:
-        if percent == 0:
-            result = _run_amixer(["sset", target, "off"])
-        else:
-            result = _run_amixer(["sset", target, f"{percent}%"])
-            if result.returncode != 0:
-                result = _run_amixer(["sset", target, "on"])
-        if result.returncode != 0:
-            err = (result.stderr or result.stdout or "amixer fallito").strip()
-            return False, err
-        if percent == 0:
-            detail = f"{target}=off (card {card})"
-        elif "pvolume" not in (result.stdout or "").lower() and "Playback [on]" in (result.stdout or ""):
-            detail = f"{target}=on (card {card}, switch)"
-        else:
+        if _mixer_has_volume(mix):
+            channels = mix.getvolume()
+            if percent == 0:
+                mix.setvolume(0)
+            else:
+                mix.setvolume([percent] * len(channels))
             detail = f"{target}={percent}% (card {card})"
-        log.info("Volume ALSA: %s", detail)
-        return True, detail
-    except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
+            log.info("Volume ALSA: %s", detail)
+            return True, detail
+
+        if _mixer_has_switch(mix):
+            mix.setswitch(1 if percent > 0 else 0)
+            state = "on" if percent > 0 else "off"
+            detail = f"{target}={state} (card {card}, switch)"
+            log.info("Volume ALSA: %s", detail)
+            return True, detail
+
+        return False, f"Controllo {target} non gestibile sulla card {card}"
+    except alsaaudio.ALSAAudioError as exc:
         return False, str(exc)
 
 

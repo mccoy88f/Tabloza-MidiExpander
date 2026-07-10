@@ -15,6 +15,7 @@ from flask import Flask, jsonify, request, send_from_directory, session
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
 from event_log import clear_events, log_event, read_events  # noqa: E402
+import alsaaudio
 from audio_utils import (  # noqa: E402
     apply_output_volume,
     audio_device_available,
@@ -45,7 +46,7 @@ from tabloza_common import (  # noqa: E402
     verify_password,
 )
 from soundfont_config import startup_soundfont_name  # noqa: E402
-from wifi_utils import scan_wifi_networks  # noqa: E402
+from wifi_utils import connect_wifi_network, scan_wifi_networks  # noqa: E402
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = load_secret_key()
@@ -264,8 +265,8 @@ def api_delete_soundfont(name):
 def api_volume():
     data = request.get_json(silent=True) or {}
     vol = data.get("volume")
-    if vol is None or not (0 <= int(vol) <= 127):
-        return jsonify({"error": "Volume deve essere 0-127"}), 400
+    if vol is None or not (0 <= int(vol) <= 100):
+        return jsonify({"error": "Volume deve essere 0-100%"}), 400
     vol = int(vol)
     config = load_config()
     config["volume"] = vol
@@ -367,36 +368,8 @@ def api_wifi_connect():
     if not ssid:
         return jsonify({"error": "SSID richiesto"}), 400
 
-    log_event("wifi", f"Connessione a «{ssid}»…")
-    conn_name = f"tabloza-wifi-{ssid[:20]}"
-    try:
-        subprocess.run(
-            ["nmcli", "connection", "delete", conn_name],
-            capture_output=True, timeout=5, check=False,
-        )
-        cmd = [
-            "nmcli", "connection", "add",
-            "type", "wifi",
-            "con-name", conn_name,
-            "ifname", "wlan0",
-            "ssid", ssid,
-            "wifi-sec.key-mgmt", "wpa-psk" if password else "none",
-        ]
-        if password:
-            cmd += ["wifi-sec.psk", password]
-        subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=True)
-        subprocess.run(
-            ["nmcli", "connection", "up", conn_name],
-            capture_output=True, text=True, timeout=45, check=True,
-        )
-        subprocess.run(
-            ["nmcli", "connection", "down", "tabloza-hotspot"],
-            capture_output=True, timeout=10, check=False,
-        )
-        log_event("wifi", f"Connesso a «{ssid}»")
-    except subprocess.CalledProcessError as e:
-        err = (e.stderr or e.stdout or str(e)).strip()
-        log_event("wifi", f"Connessione fallita: {err}", "error")
+    ok, err = connect_wifi_network(ssid, password)
+    if not ok:
         return jsonify({"error": f"Connessione fallita: {err}"}), 500
 
     return jsonify({"ok": True, "ssid": ssid})
@@ -453,19 +426,23 @@ def api_audio_test():
 @app.route("/api/audio/test-hardware", methods=["POST"])
 @require_auth
 def api_audio_test_hardware():
-    """Play a sine tone directly on the analog headphone jack (bypasses FluidSynth/MIDI)."""
+    """Play a sine tone directly on the configured ALSA output (bypasses FluidSynth/MIDI)."""
     cfg = load_config().get("fluidsynth", {})
     device = cfg.get("audio_device", "plughw:0,0")
     rate = int(cfg.get("sample_rate", sample_rate_for_device(device)))
+    label = device_label(device)
     try:
         play_stereo_tone(device, sample_rate=rate)
         return jsonify({
             "ok": True,
-            "message": "Segnale stereo 440 Hz inviato al jack cuffie",
+            "message": f"Segnale stereo 440 Hz inviato a {label}",
             "device": device,
+            "label": label,
         })
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        return jsonify({"error": f"Test jack fallito: {exc}"}), 500
+    except alsaaudio.ALSAAudioError as exc:
+        return jsonify({"error": f"Test audio fallito su {label}: {exc}"}), 500
+    except OSError as exc:
+        return jsonify({"error": f"Test audio fallito: {exc}"}), 500
 
 
 @app.route("/api/midi/reset", methods=["POST"])

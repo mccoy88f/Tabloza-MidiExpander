@@ -181,8 +181,11 @@ input[type="text"] {
   50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
 }
 
-#volume-slider { width: calc(100% - 3rem); vertical-align: middle; accent-color: var(--accent); }
-#volume-value { display: inline-block; width: 2.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+#volume-slider { width: 100%; vertical-align: middle; accent-color: var(--accent); }
+.volume-row { display: flex; align-items: center; gap: 0.75rem; }
+.volume-row #volume-slider { flex: 1; min-width: 0; }
+#volume-value { display: inline-block; min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
+.volume-unit { font-variant-numeric: tabular-nums; color: var(--muted, #888); }
 
 .audio-device-current { margin: 0 0 0.75rem; color: var(--text); }
 .audio-device-select {

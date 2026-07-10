@@ -6,28 +6,27 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
+# pyalsaaudio is Linux-only; stub for local dev/test on macOS.
+if "alsaaudio" not in sys.modules:
+    try:
+        import alsaaudio  # noqa: F401
+    except ImportError:
+        sys.modules["alsaaudio"] = MagicMock()
+
 from audio_utils import (  # noqa: E402
     card_from_audio_device,
     list_playback_devices,
+    normalize_volume,
     volume_to_alsa_percent,
 )
 from event_log import clear_events, log_event, read_events  # noqa: E402
 from soundfont_config import startup_soundfont_name  # noqa: E402
-from wifi_utils import parse_nmcli_terse_fields  # noqa: E402
-
-
-APLAY_SAMPLE = """\
-**** List of PLAYBACK Hardware Devices ****
-card 0: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]
-  Subdevices: 4/4
-card 1: Device [USB Audio Device], device 0: USB Audio [USB Audio Device]
-  Subdevices: 1/1
-"""
+from wifi_utils import connect_wifi_network, parse_nmcli_terse_fields  # noqa: E402
 
 
 class TestAudioUtils(unittest.TestCase):
@@ -36,15 +35,20 @@ class TestAudioUtils(unittest.TestCase):
         self.assertEqual(card_from_audio_device("hw:0,0"), 0)
         self.assertEqual(card_from_audio_device("invalid"), 0)
 
+    def test_normalize_volume(self):
+        self.assertEqual(normalize_volume(0), 0)
+        self.assertEqual(normalize_volume(100), 100)
+        self.assertEqual(normalize_volume(127), 100)
+        self.assertEqual(normalize_volume(64), 64)
+
     def test_volume_to_alsa_percent(self):
         self.assertEqual(volume_to_alsa_percent(0), 0)
-        self.assertEqual(volume_to_alsa_percent(127), 100)
-        self.assertEqual(volume_to_alsa_percent(64), 50)
+        self.assertEqual(volume_to_alsa_percent(100), 100)
+        self.assertEqual(volume_to_alsa_percent(64), 64)
 
-    @patch("audio_utils.subprocess.run")
-    def test_list_playback_devices(self, mock_run):
-        mock_run.return_value.stdout = APLAY_SAMPLE
-        mock_run.return_value.returncode = 0
+    @patch("audio_utils.alsaaudio.cards")
+    def test_list_playback_devices(self, mock_cards):
+        mock_cards.return_value = ["Headphones", "USB Audio Device"]
         devices = list_playback_devices()
         self.assertEqual(len(devices), 2)
         self.assertEqual(devices[0]["id"], "plughw:0,0")
@@ -87,6 +91,24 @@ class TestNmcliParse(unittest.TestCase):
             parse_nmcli_terse_fields(r"Foo\:Bar:55:WPA2"),
             ["Foo:Bar", "55", "WPA2"],
         )
+
+
+class TestWifiConnect(unittest.TestCase):
+    @patch("wifi_utils._run")
+    @patch("wifi_utils.prepare_wifi_scan")
+    def test_connect_with_password(self, mock_prepare, mock_run):
+        mock_prepare.return_value = (True, "ok")
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = connect_wifi_network("MyNet", "secret123")
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        connect_cmd = mock_run.call_args_list[-3][0][0]
+        self.assertIn("device", connect_cmd)
+        self.assertIn("wifi", connect_cmd)
+        self.assertIn("connect", connect_cmd)
+        self.assertIn("MyNet", connect_cmd)
+        self.assertIn("password", connect_cmd)
+        self.assertIn("secret123", connect_cmd)
 
 
 class TestEventLog(unittest.TestCase):
