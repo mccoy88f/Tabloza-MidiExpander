@@ -59,6 +59,7 @@ def find_fluidsynth_input() -> dict | None:
 
 
 def find_rtpmidid_outputs() -> list[dict]:
+    """All ALSA output ports from rtpmidid (incl. per-connection ports from Mac)."""
     sources = []
     for port in get_output_ports():
         label = f"{port['client']} {port['name']}".lower()

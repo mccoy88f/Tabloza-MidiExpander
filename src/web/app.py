@@ -15,9 +15,12 @@ from flask import Flask, jsonify, request, send_from_directory, session
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from midi_utils import get_midi_status, send_cc7  # noqa: E402
 from tabloza_common import (  # noqa: E402
+    AUTHOR,
+    GITHUB_URL,
     MDNS_NAME,
     SOUNDFONTS_DIR,
     change_password,
+    get_version,
     load_config,
     load_secret_key,
     save_config,
@@ -53,6 +56,15 @@ def static_files(filename):
 
 
 # --- Auth ---
+
+@app.route("/api/version")
+def api_version():
+    return jsonify({
+        "version": get_version(),
+        "github": GITHUB_URL,
+        "author": AUTHOR,
+    })
+
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():

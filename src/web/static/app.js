@@ -361,9 +361,21 @@ function refreshAll() {
 document.addEventListener("tabloza:lang", () => refreshAll());
 
 // --- Init ---
+async function loadFooter() {
+  try {
+    const v = await fetch("/api/version").then((r) => r.json());
+    document.getElementById("footer-version").textContent = `v${v.version || "?"}`;
+    const gh = document.getElementById("footer-github");
+    if (gh && v.github) gh.href = v.github;
+  } catch {
+    document.getElementById("footer-version").textContent = "v?";
+  }
+}
+
 setupLangSwitcher();
 document.documentElement.lang = getLang();
 applyI18n();
+loadFooter();
 
 (async () => {
   try {

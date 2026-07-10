@@ -9,6 +9,15 @@ import bcrypt
 
 HOSTNAME = "tabloza-me"
 MDNS_NAME = f"{HOSTNAME}.local"
+GITHUB_URL = "https://github.com/mccoy88f/Tabloza-MidiExpander"
+AUTHOR = "mccoy88f"
+VERSION_FILE = Path("/opt/tabloza/VERSION")
+
+
+def get_version() -> str:
+    if VERSION_FILE.is_file():
+        return VERSION_FILE.read_text().strip()
+    return "dev"
 
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"

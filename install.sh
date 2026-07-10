@@ -71,6 +71,7 @@ fi
 # --- rtpmidid (da GitHub, non nei repo Pi OS) ---
 log "Installazione rtpmidid..."
 bash "${INSTALL_DIR}/scripts/install-rtpmidid.sh"
+bash "${INSTALL_DIR}/scripts/configure-rtpmidid.sh" "${INSTALL_DIR}/config/rtpmidid/default.ini"
 
 # --- Config persistente ---
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -125,6 +126,11 @@ bash "${INSTALL_DIR}/scripts/configure-network.sh" "${HOTSPOT_SSID}" "${HOTSPOT_
 log "Configurazione priorità audio real-time..."
 bash "${INSTALL_DIR}/scripts/configure-audio-rt.sh"
 
+# --- Comandi di sistema ---
+log "Installazione comandi tabloza-test e tabloza-uninstall..."
+install -m 755 "${INSTALL_DIR}/scripts/tabloza-test.sh"      /usr/local/bin/tabloza-test
+install -m 755 "${INSTALL_DIR}/scripts/tabloza-uninstall.sh"  /usr/local/bin/tabloza-uninstall
+
 # --- Servizi systemd ---
 log "Installazione servizi systemd..."
 install -m 644 "${INSTALL_DIR}/systemd/rtpmidid.service"        /etc/systemd/system/rtpmidid.service
@@ -154,4 +160,5 @@ log "  Hotspot:   ${HOTSPOT_SSID} → http://${HOTSPOT_IP}"
 log "  Password:  ${DEFAULT_PASSWORD}"
 log ""
 log "  Riavvia con: sudo reboot"
+log "  Test:       sudo tabloza-test"
 log "============================================"

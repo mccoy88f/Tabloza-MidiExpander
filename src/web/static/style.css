@@ -187,3 +187,19 @@ input[type="text"] {
 .upload-status { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
 .upload-status.ok { color: var(--success); }
 .upload-status.err { color: var(--danger); }
+
+.app-footer {
+  text-align: center;
+  padding: 1.25rem 1rem 2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.app-footer a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.app-footer a:hover { text-decoration: underline; }
+
+.footer-sep { margin: 0 0.4rem; opacity: 0.5; }

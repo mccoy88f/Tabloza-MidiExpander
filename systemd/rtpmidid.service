@@ -5,9 +5,10 @@ Wants=avahi-daemon.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/rtpmidid
+ExecStart=/usr/bin/rtpmidid --ini /etc/rtpmidid/default.ini
 Restart=always
 RestartSec=3
+RuntimeDirectory=rtpmidid
 
 [Install]
 WantedBy=multi-user.target

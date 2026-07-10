@@ -58,6 +58,7 @@ const I18N = {
     errorGeneric: "Errore {code}",
     langIt: "IT",
     langEn: "EN",
+    footerCredits: "mccoy88f su GitHub",
   },
   en: {
     appTitle: "Tabloza MidiExpander",
@@ -118,6 +119,7 @@ const I18N = {
     errorGeneric: "Error {code}",
     langIt: "IT",
     langEn: "EN",
+    footerCredits: "mccoy88f on GitHub",
   },
 };
 
