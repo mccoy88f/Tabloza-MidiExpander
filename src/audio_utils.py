@@ -20,6 +20,18 @@ def card_from_audio_device(device: str) -> int:
     return int(match.group(1)) if match else 0
 
 
+def alsa_device_for_card(card: int, device: int = 0) -> str:
+    """USB cards often need hw: at 48 kHz; built-in jack tolerates plughw:."""
+    if card == 0:
+        return f"plughw:{card},{device}"
+    return f"hw:{card},{device}"
+
+
+def sample_rate_for_device(device: str, default: int = 44100) -> int:
+    card = card_from_audio_device(device)
+    return 48000 if card > 0 else default
+
+
 def list_playback_devices() -> list[dict]:
     """List ALSA playback devices via `aplay -l`."""
     try:
@@ -35,13 +47,15 @@ def list_playback_devices() -> list[dict]:
         match = PLAYBACK_DEVICE_RE.match(line.strip())
         if not match:
             continue
-        card, name, dev = match.groups()
+        card_i, name, dev = match.groups()
+        card_i, dev_i = int(card_i), int(dev)
         devices.append({
-            "card": int(card),
-            "device": int(dev),
-            "id": f"plughw:{card},{dev}",
+            "card": card_i,
+            "device": dev_i,
+            "id": alsa_device_for_card(card_i, dev_i),
             "name": name.strip(),
-            "label": f"{name.strip()} (card {card})",
+            "label": f"{name.strip()} (card {card_i})",
+            "sample_rate": sample_rate_for_device(alsa_device_for_card(card_i, dev_i)),
         })
     return devices
 
@@ -54,7 +68,14 @@ def device_label(device_id: str, devices: list[dict] | None = None) -> str:
 
 
 def audio_device_available(device: str) -> bool:
-    return device in {d["id"] for d in list_playback_devices()}
+    match = AUDIO_DEVICE_ID_RE.match(device.strip())
+    if not match:
+        return False
+    card, dev = match.groups()
+    for d in list_playback_devices():
+        if d["card"] == int(card) and d["device"] == int(dev):
+            return True
+    return False
 
 
 def play_stereo_tone(
@@ -110,22 +131,36 @@ def set_alsa_output_volume(
     card: int = 0,
     control: str | None = None,
 ) -> tuple[bool, str]:
-    """Set ALSA mixer level for the analog output (headphone jack on Pi)."""
+    """Set ALSA mixer level for the analog output (headphone jack / USB DAC)."""
     percent = volume_to_alsa_percent(volume)
     target = resolve_mixer_control(card, control)
     if not target:
         return False, f"Nessun controllo mixer ALSA sulla card {card}"
-    try:
-        subprocess.run(
-            ["amixer", "-c", str(card), "set", target, f"{percent}%"],
-            capture_output=True, text=True, timeout=5, check=True,
+
+    def _run_amixer(args: list[str]) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["amixer", "-c", str(card), *args],
+            capture_output=True, text=True, timeout=5, check=False,
         )
-        detail = f"{target}={percent}% (card {card})"
+
+    try:
+        if percent == 0:
+            result = _run_amixer(["sset", target, "off"])
+        else:
+            result = _run_amixer(["sset", target, f"{percent}%"])
+            if result.returncode != 0:
+                result = _run_amixer(["sset", target, "on"])
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "amixer fallito").strip()
+            return False, err
+        if percent == 0:
+            detail = f"{target}=off (card {card})"
+        elif "pvolume" not in (result.stdout or "").lower() and "Playback [on]" in (result.stdout or ""):
+            detail = f"{target}=on (card {card}, switch)"
+        else:
+            detail = f"{target}={percent}% (card {card})"
         log.info("Volume ALSA: %s", detail)
         return True, detail
-    except subprocess.CalledProcessError as exc:
-        err = (exc.stderr or b"").decode(errors="replace").strip()
-        return False, err or f"amixer fallito su {target}"
     except (subprocess.TimeoutExpired, FileNotFoundError) as exc:
         return False, str(exc)
 

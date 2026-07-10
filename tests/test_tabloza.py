@@ -48,7 +48,8 @@ class TestAudioUtils(unittest.TestCase):
         devices = list_playback_devices()
         self.assertEqual(len(devices), 2)
         self.assertEqual(devices[0]["id"], "plughw:0,0")
-        self.assertEqual(devices[1]["id"], "plughw:1,0")
+        self.assertEqual(devices[1]["id"], "hw:1,0")
+        self.assertEqual(devices[1]["sample_rate"], 48000)
         self.assertIn("USB Audio Device", devices[1]["name"])
 
 

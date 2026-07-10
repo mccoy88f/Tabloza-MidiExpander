@@ -25,8 +25,7 @@ fi
 ASOUNDRC="/etc/asound.conf"
 if [[ ! -f "$ASOUNDRC" ]] || ! grep -q "tabloza" "$ASOUNDRC" 2>/dev/null; then
     cat > "$ASOUNDRC" <<'EOF'
-# Tabloza MidiExpander — ALSA defaults
-defaults.pcm.rate_converter "samplerate_best"
+# Tabloza MidiExpander — ALSA defaults (tabloza)
 EOF
 fi
 

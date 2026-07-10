@@ -22,6 +22,7 @@ from audio_utils import (  # noqa: E402
     device_label,
     list_playback_devices,
     play_stereo_tone,
+    sample_rate_for_device,
 )
 from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import (
@@ -318,6 +319,7 @@ def api_audio_select():
     card = card_from_audio_device(device)
     config.setdefault("fluidsynth", {})["audio_device"] = device
     config["fluidsynth"]["alsa_card"] = card
+    config["fluidsynth"]["sample_rate"] = sample_rate_for_device(device)
     save_config(config)
     log_event("web", f"Uscita audio → {device}")
     if not trigger_orchestrator_reload_fluidsynth():
@@ -452,9 +454,11 @@ def api_audio_test():
 @require_auth
 def api_audio_test_hardware():
     """Play a sine tone directly on the analog headphone jack (bypasses FluidSynth/MIDI)."""
-    device = load_config().get("fluidsynth", {}).get("audio_device", "plughw:0,0")
+    cfg = load_config().get("fluidsynth", {})
+    device = cfg.get("audio_device", "plughw:0,0")
+    rate = int(cfg.get("sample_rate", sample_rate_for_device(device)))
     try:
-        play_stereo_tone(device)
+        play_stereo_tone(device, sample_rate=rate)
         return jsonify({
             "ok": True,
             "message": "Segnale stereo 440 Hz inviato al jack cuffie",
