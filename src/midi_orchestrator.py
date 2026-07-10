@@ -34,13 +34,16 @@ from midi_utils import (
     set_fluidsynth_output_level,
 )
 
+from soundfont_config import startup_soundfont_name
+
 DATA_DIR = Path(os.environ.get("TABLOZA_DATA_DIR", "/var/lib/tabloza"))
 CONFIG_FILE = DATA_DIR / "config.json"
 SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 FLUIDSYNTH_BIN = "/usr/bin/fluidsynth"
 FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
-FLUID_STARTUP_TIMEOUT = 25.0
+RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
+FLUID_STARTUP_TIMEOUT = 35.0
 ROUTING_INTERVAL = 5
 
 logging.basicConfig(
@@ -52,6 +55,7 @@ log = logging.getLogger("tabloza.orchestrator")
 fluidsynth_proc: subprocess.Popen | None = None
 fluidsynth_log_fd = None
 shutdown = False
+reload_fluidsynth_pending = False
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
 soundfont_load_lock = threading.Lock()
@@ -60,6 +64,7 @@ soundfont_load_lock = threading.Lock()
 def load_config() -> dict:
     defaults = {
         "active_soundfont": "",
+        "default_soundfont": "",
         "volume": 100,
         "fluidsynth": {
             "audio_driver": "alsa",
@@ -367,6 +372,24 @@ def _load_soundfont_async():
     apply_soundfont_from_config()
 
 
+def schedule_startup_soundfont():
+    """Load default (or last active) SoundFont after FluidSynth is up."""
+    config = load_config()
+    name = startup_soundfont_name(config, SOUNDFONTS_DIR)
+    if not name:
+        return
+    if config.get("active_soundfont") != name:
+        config["active_soundfont"] = name
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=2)
+    write_soundfont_state(
+        selected=name, loaded="", loading=False, error=None, load_started_at=None,
+    )
+    log.info("Caricamento SF2 all'avvio: %s", name)
+    threading.Thread(target=_load_soundfont_async, daemon=True).start()
+
+
 def start_fluidsynth(config: dict) -> bool:
     global fluidsynth_proc
     _ensure_alsa_seq()
@@ -428,8 +451,26 @@ def handle_sigusr1(signum, frame):
 
 
 def handle_sigusr2(signum, frame):
+    global reload_fluidsynth_pending
+    if RELOAD_FLUIDSYNTH_FLAG.is_file():
+        RELOAD_FLUIDSYNTH_FLAG.unlink(missing_ok=True)
+        reload_fluidsynth_pending = True
+        log.info("SIGUSR2 — richiesto riavvio FluidSynth (nuova uscita audio)")
+        return
     log.info("SIGUSR2 ricevuto — applica volume")
     apply_volume(load_config())
+
+
+def _process_pending_fluidsynth_reload():
+    global reload_fluidsynth_pending
+    if not reload_fluidsynth_pending:
+        return
+    reload_fluidsynth_pending = False
+    config = load_config()
+    if start_fluidsynth(config):
+        schedule_startup_soundfont()
+    else:
+        log.error("Riavvio FluidSynth fallito — controlla %s", FLUIDSYNTH_LOG)
 
 
 def handle_sigterm(signum, frame):
@@ -471,10 +512,11 @@ def main():
     config = load_config()
     started = start_fluidsynth(config)
     start_midi_monitor()
-    if started and config.get("active_soundfont"):
-        threading.Thread(target=_load_soundfont_async, daemon=True).start()
+    if started:
+        schedule_startup_soundfont()
 
     while not shutdown:
+        _process_pending_fluidsynth_reload()
         if fluidsynth_proc is None or fluidsynth_proc.poll() is not None:
             if fluidsynth_proc and fluidsynth_proc.poll() is not None:
                 code = fluidsynth_proc.returncode
@@ -484,7 +526,8 @@ def main():
                 _reap_fluidsynth()
             else:
                 log.warning("FluidSynth non attivo — tentativo avvio...")
-            start_fluidsynth(load_config())
+            if start_fluidsynth(load_config()):
+                schedule_startup_soundfont()
         else:
             route_rtpmidi_to_fluidsynth()
             _check_soundfont_load_watchdog()

@@ -26,11 +26,17 @@ SECRET_FILE = DATA_DIR / "secret.key"
 SOUNDFONTS_DIR = DATA_DIR / "soundfonts"
 
 
+def startup_soundfont_name(config: dict, soundfonts_dir: Path | None = None) -> str:
+    from soundfont_config import startup_soundfont_name as _name
+
+    return _name(config, soundfonts_dir or SOUNDFONTS_DIR)
+
+
 def load_config() -> dict:
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE) as f:
             return json.load(f)
-    return {"active_soundfont": "", "volume": 100}
+    return {"active_soundfont": "", "default_soundfont": "", "volume": 100}
 
 
 def save_config(config: dict):

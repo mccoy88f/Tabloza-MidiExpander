@@ -108,6 +108,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     cat > "${CONFIG_FILE}" <<'EOF'
 {
   "active_soundfont": "",
+  "default_soundfont": "",
   "volume": 100,
   "fluidsynth": {
     "audio_driver": "alsa",

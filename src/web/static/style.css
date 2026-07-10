@@ -211,6 +211,7 @@ input[type="text"] {
 .sf2-active { color: var(--success); font-size: 0.8rem; }
 .sf2-selected { color: var(--accent); font-size: 0.8rem; }
 .sf2-loading { color: #f39c12; font-size: 0.8rem; }
+.sf2-default { color: #f1c40f; font-size: 0.8rem; }
 .sf2-actions { display: flex; gap: 0.5rem; }
 
 .upload-zone {

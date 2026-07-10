@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from activity_status import get_audio_activity, get_midi_activity  # noqa: E402
 from audio_utils import (  # noqa: E402
     apply_output_volume,
+    audio_device_available,
     card_from_audio_device,
     device_label,
     list_playback_devices,
@@ -25,7 +26,9 @@ from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import (
     get_midi_status,
     trigger_orchestrator_apply_volume,
+    trigger_orchestrator_reload_fluidsynth,
     trigger_orchestrator_test_note,
+    wait_fluidsynth_midi_ready,
 )  # noqa: E402
 from tabloza_common import (  # noqa: E402
     AUTHOR,
@@ -39,6 +42,7 @@ from tabloza_common import (  # noqa: E402
     save_config,
     verify_password,
 )
+from soundfont_config import startup_soundfont_name  # noqa: E402
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = load_secret_key()
@@ -158,6 +162,7 @@ def api_status():
 def api_soundfonts():
     config = load_config()
     active = config.get("active_soundfont", "")
+    default = config.get("default_soundfont", "")
     sf_state = read_soundfont_state()
     loaded = sf_state.get("loaded", "")
     loading = sf_state.get("loading", False)
@@ -171,10 +176,12 @@ def api_soundfonts():
             "loaded": sf.name == loaded,
             "loading": loading and sf.name == active,
             "active": sf.name == active,
+            "default": sf.name == default,
         })
     return jsonify({
         "soundfonts": fonts,
         "active": active,
+        "default": default,
         "loaded": loaded,
         "loading": loading,
     })
@@ -193,6 +200,20 @@ def api_select_soundfont():
     save_config(config)
     _reload_orchestrator()
     return jsonify({"ok": True, "active": name})
+
+
+@app.route("/api/soundfonts/default", methods=["POST"])
+@require_auth
+def api_default_soundfont():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "")
+    path = SOUNDFONTS_DIR / name
+    if not path.is_file():
+        return jsonify({"error": "SoundFont non trovato"}), 404
+    config = load_config()
+    config["default_soundfont"] = name
+    save_config(config)
+    return jsonify({"ok": True, "default": name})
 
 
 @app.route("/api/soundfonts/upload", methods=["POST"])
@@ -225,6 +246,9 @@ def api_delete_soundfont(name):
         config["active_soundfont"] = ""
         save_config(config)
         _reload_orchestrator()
+    config = load_config()
+    if config.get("default_soundfont") == name:
+        save_config({"default_soundfont": ""})
     path.unlink()
     return jsonify({"ok": True})
 
@@ -284,6 +308,8 @@ def api_audio_select():
     devices = list_playback_devices()
     if devices and device not in {d["id"] for d in devices}:
         return jsonify({"error": "Dispositivo non trovato"}), 404
+    if not audio_device_available(device):
+        return jsonify({"error": "Uscita audio non disponibile"}), 400
 
     config = load_config()
     card = card_from_audio_device(device)
@@ -291,17 +317,23 @@ def api_audio_select():
     config["fluidsynth"]["alsa_card"] = card
     save_config(config)
 
-    _restart_orchestrator()
-    time.sleep(4)
-    _reload_orchestrator()
-    apply_output_volume(config.get("volume", 100), config)
-    trigger_orchestrator_apply_volume()
+    if not trigger_orchestrator_reload_fluidsynth():
+        return jsonify({"error": "Orchestrator non attivo"}), 503
+    if not wait_fluidsynth_midi_ready(50.0):
+        return jsonify({
+            "error": "FluidSynth non ripartito con la nuova uscita — verifica il dispositivo USB e i log",
+        }), 503
+
+    ok_alsa, alsa_detail = apply_output_volume(config.get("volume", 100), config)
 
     return jsonify({
         "ok": True,
         "device": device,
         "label": device_label(device, devices),
         "alsa_card": card,
+        "alsa": alsa_detail,
+        "alsa_ok": ok_alsa,
+        "startup_soundfont": startup_soundfont_name(config),
     })
 
 
@@ -451,13 +483,6 @@ def api_midi_reset():
 
 
 # --- Helpers ---
-
-def _restart_orchestrator():
-    subprocess.run(
-        ["systemctl", "restart", "tabloza-orchestrator"],
-        capture_output=True, timeout=20, check=False,
-    )
-
 
 def _reload_orchestrator():
     try:

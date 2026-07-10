@@ -53,6 +53,10 @@ def device_label(device_id: str, devices: list[dict] | None = None) -> str:
     return device_id
 
 
+def audio_device_available(device: str) -> bool:
+    return device in {d["id"] for d in list_playback_devices()}
+
+
 def play_stereo_tone(
     device: str,
     frequency: float = 440.0,

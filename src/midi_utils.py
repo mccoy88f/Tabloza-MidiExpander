@@ -12,6 +12,8 @@ from activity_status import touch_midi_activity
 
 log = logging.getLogger("tabloza.midi")
 
+RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
+
 PORT_RE = re.compile(r"(\d+:\d+)")
 CLIENT_RE = re.compile(r"^client (\d+):\s*'([^']*)'")
 CLIENT_NUM_RE = re.compile(r"^client (\d+):")
@@ -248,10 +250,39 @@ def trigger_orchestrator_apply_volume() -> bool:
         pid = int(result.stdout.strip())
         if pid <= 0:
             return False
+        RELOAD_FLUIDSYNTH_FLAG.unlink(missing_ok=True)
         os.kill(pid, signal.SIGUSR2)
         return True
     except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def trigger_orchestrator_reload_fluidsynth() -> bool:
+    """Restart FluidSynth in orchestrator (SIGUSR2 + flag) — e.g. after audio output change."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        RELOAD_FLUIDSYNTH_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        RELOAD_FLUIDSYNTH_FLAG.write_text("1")
+        os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def wait_fluidsynth_midi_ready(timeout: float = 45.0) -> bool:
+    """Poll until FluidSynth ALSA MIDI port is visible."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if find_fluidsynth_input():
+            return True
+        time.sleep(0.5)
+    return False
 
 
 def send_test_note(retries: int = 5, delay: float = 0.6) -> tuple[bool, str]:

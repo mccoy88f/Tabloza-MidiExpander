@@ -274,14 +274,18 @@ async function refreshSoundfonts() {
         : sf.selected
           ? `<span class="sf2-selected"> ${t("sf2SelectedBadge")}</span>`
           : "";
+    const defaultBadge = sf.default
+      ? `<span class="sf2-default"> ${t("sf2DefaultBadge")}</span>`
+      : "";
     div.innerHTML = `
       <div>
         <span class="sf2-name">${escapeHtml(sf.name)}</span>
         <span class="muted" style="font-size:0.8rem;margin-left:0.5rem">${sizeMB} MB</span>
-        ${statusBadge}
+        ${statusBadge}${defaultBadge}
       </div>
       <div class="sf2-actions">
         ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? t("loading") : t("load")}</button>` : ""}
+        ${!sf.default ? `<button class="btn btn-secondary" data-default="${escapeHtml(sf.name)}" title="${t("setDefaultSf2")}">★</button>` : ""}
         <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;
     list.appendChild(div);
@@ -292,6 +296,16 @@ async function refreshSoundfonts() {
       await api("/api/soundfonts/select", {
         method: "POST",
         body: JSON.stringify({ name: btn.dataset.load }),
+      });
+      refreshAll();
+    });
+  });
+
+  list.querySelectorAll("[data-default]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await api("/api/soundfonts/default", {
+        method: "POST",
+        body: JSON.stringify({ name: btn.dataset.default }),
       });
       refreshAll();
     });
