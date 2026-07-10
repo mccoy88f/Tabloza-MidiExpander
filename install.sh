@@ -74,9 +74,12 @@ apt-get install -y -qq \
     fluidsynth fluid-soundfont-gm \
     avahi-daemon avahi-utils \
     network-manager \
-    python3 python3-flask python3-bcrypt python3-venv python3-pyalsaaudio \
+    python3 python3-flask python3-bcrypt python3-venv python3-pip \
     alsa-utils \
     libasound2-dev
+
+python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
+    || python3 -m pip install pyalsaaudio
 
 # FluidSynth di sistema (pacchetto fluid-soundfont-gm) confligge con Tabloza.
 log "Disabilito FluidSynth di sistema..."
