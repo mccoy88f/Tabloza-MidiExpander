@@ -296,9 +296,9 @@ function renderNetworkSection(s) {
     }
   }
 
-  // WiFi client: nascosto se hotspot, link LAN attivi o radio WiFi spenta
+  // WiFi client: nascosto se hotspot (AP occupa wlan) o radio WiFi spenta
   if (blockWifi) {
-    const showWifi = wifiEnabled && !hotspot && !lanDirect;
+    const showWifi = wifiEnabled && !hotspot;
     blockWifi.classList.toggle("hidden", !showWifi);
     if (hintWifi) {
       if (ethRouter) {

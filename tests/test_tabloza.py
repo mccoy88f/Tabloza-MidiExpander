@@ -284,7 +284,9 @@ class TestWifiPower(unittest.TestCase):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         ok, err = enable_wifi()
         self.assertTrue(ok)
-        mock_run.assert_called_with(["nmcli", "radio", "wifi", "on"], timeout=10)
+        cmds = [c.args[0] for c in mock_run.call_args_list]
+        self.assertIn(["nmcli", "radio", "wifi", "on"], cmds)
+        self.assertIn(["nmcli", "device", "wifi", "rescan"], cmds)
 
 
 class TestUpdateUtils(unittest.TestCase):

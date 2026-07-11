@@ -473,6 +473,8 @@ def enable_wifi() -> tuple[bool, str | None]:
             err = (result.stderr or result.stdout or "attivazione WiFi fallita").strip()
             log_event("wifi", f"Attivazione WiFi fallita: {err}", "error")
             return False, err
+        _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
+        _run(["nmcli", "device", "wifi", "rescan"], timeout=15)
         log_event("wifi", "Radio WiFi attiva")
         return True, None
 
