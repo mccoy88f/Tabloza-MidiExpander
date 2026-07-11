@@ -1,6 +1,7 @@
 """Tabloza — monitor attività MIDI in ingresso e audio in uscita."""
 
 import logging
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -8,7 +9,25 @@ from pathlib import Path
 log = logging.getLogger("tabloza.activity")
 
 MIDI_ACTIVITY_FILE = Path("/run/tabloza/last_midi_event")
-MIDI_ACTIVE_WINDOW_SEC = 2.0
+MIDI_ACTIVE_WINDOW_SEC = 5.0
+
+_ASEQ_HEADER_PREFIXES = ("Waiting", "Source ", "Destination ", "Subscriber", "Queue ")
+_ASEQ_EVENT_RE = re.compile(
+    r"(?:Note|Control|Pgm|Pitch|Sustain|Clock|Sys(?:tem)?|Active sensing|Song )",
+    re.IGNORECASE,
+)
+
+
+def is_aseqdump_midi_event(line: str) -> bool:
+    """True se la riga di aseqdump rappresenta un evento MIDI (non intestazione)."""
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if any(stripped.startswith(prefix) for prefix in _ASEQ_HEADER_PREFIXES):
+        return False
+    if _ASEQ_EVENT_RE.search(stripped):
+        return True
+    return bool(re.search(r"\d+:\d+\.\d+\s+\d+:\d+\s+", stripped))
 
 
 def touch_midi_activity():

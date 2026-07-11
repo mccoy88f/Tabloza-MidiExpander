@@ -47,8 +47,12 @@ def load_config() -> dict:
 def save_config(config: dict):
     existing = load_config() if CONFIG_FILE.exists() else {}
     merged = {**existing, **config}
-    if "fluidsynth" in existing and "fluidsynth" not in config:
-        merged["fluidsynth"] = existing["fluidsynth"]
+    existing_fs = existing.get("fluidsynth") if isinstance(existing.get("fluidsynth"), dict) else {}
+    incoming_fs = config.get("fluidsynth") if isinstance(config.get("fluidsynth"), dict) else None
+    if incoming_fs is not None:
+        merged["fluidsynth"] = {**existing_fs, **incoming_fs}
+    elif existing_fs:
+        merged["fluidsynth"] = existing_fs
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(merged, f, indent=2)

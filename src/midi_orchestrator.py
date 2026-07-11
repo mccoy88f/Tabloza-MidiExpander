@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from activity_status import touch_midi_activity
+from activity_status import touch_midi_activity, is_aseqdump_midi_event
 from fluidsynth_client import (
     apply_runtime_synth_settings,
     bind_shell,
@@ -29,10 +29,13 @@ from fluidsynth_client import (
     read_soundfont_state,
     reset_synth,
     shell_bound,
+    unload_all_soundfonts,
     write_soundfont_state,
 )
 from midi_utils import (
     find_fluidsynth_input,
+    get_active_routes,
+    midi_monitor_port,
     route_rtpmidi_to_fluidsynth,
     send_test_note,
     set_fluidsynth_output_level,
@@ -230,38 +233,40 @@ def stop_midi_monitor():
 
 def _midi_monitor_loop():
     global midi_monitor_proc, shutdown
-    monitored_port = None
+    monitored_key = None
     while not shutdown:
-        fs = find_fluidsynth_input()
-        if not fs:
+        port, monitor_key = midi_monitor_port()
+        if not port:
             _stop_monitor_proc()
-            monitored_port = None
+            monitored_key = None
             time.sleep(2)
             continue
-        if monitored_port != fs["address"]:
+        if monitor_key != monitored_key:
             _stop_monitor_proc()
-            monitored_port = fs["address"]
+            monitored_key = monitor_key
             try:
+                cmd = ["aseqdump", "-p", port] if port != "*" else ["aseqdump"]
                 midi_monitor_proc = subprocess.Popen(
-                    ["aseqdump", "-p", fs["address"]],
+                    cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     text=True,
+                    bufsize=1,
                 )
-                log.info("Monitor MIDI su porta %s", fs["address"])
+                log.info("Monitor MIDI (%s)", monitor_key)
             except (OSError, FileNotFoundError):
-                time.sleep(2)
+                log.warning("aseqdump non disponibile — attività MIDI non monitorata")
+                monitored_key = None
+                time.sleep(5)
                 continue
         if not midi_monitor_proc or midi_monitor_proc.poll() is not None:
-            monitored_port = None
+            monitored_key = None
             time.sleep(1)
             continue
         line = midi_monitor_proc.stdout.readline()
         if not line:
             continue
-        if line.startswith("Waiting") or line.startswith("Source"):
-            continue
-        if line.strip():
+        if is_aseqdump_midi_event(line):
             touch_midi_activity()
 
 
@@ -340,8 +345,8 @@ def _process_alive() -> bool:
 
 
 def _eject_soundfont_state() -> bool:
-    """Unload SF2 and clear loading state (also used after cancel)."""
-    ok, detail = reset_synth(_process_alive)
+    """Unload SF2 from FluidSynth RAM and clear loading state."""
+    ok, detail = unload_all_soundfonts(_process_alive)
     write_soundfont_state(
         selected="", loaded="", loading=False, error=None, load_started_at=None,
     )

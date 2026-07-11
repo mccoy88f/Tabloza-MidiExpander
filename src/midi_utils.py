@@ -182,6 +182,20 @@ def get_active_routes() -> list[dict]:
     return routes
 
 
+def midi_monitor_port() -> tuple[str | None, str | None]:
+    """Return (alsa_port, monitor_key) for aseqdump — prefer routed MIDI sources."""
+    routes = get_active_routes()
+    if routes:
+        sources = sorted({route["from"] for route in routes})
+        if len(sources) == 1:
+            return sources[0], f"src:{sources[0]}"
+        return "*", f"src:{'+'.join(sources)}"
+    fs = find_fluidsynth_input()
+    if fs:
+        return fs["address"], f"fs:{fs['address']}"
+    return None, None
+
+
 def get_midi_status() -> dict:
     """Return structured MIDI routing status for API/frontend."""
     fs = find_fluidsynth_input()

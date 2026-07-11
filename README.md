@@ -88,7 +88,7 @@ Sezione **Motore synth** (collassabile). Le impostazioni sono salvate in `config
 | Parametro | Descrizione | Riavvio synth |
 |-----------|-------------|---------------|
 | **Preset buffer audio** | `Standard` (512×6), `Bassa latenza` (256×4), `Stabile` (1024×8) | Sì |
-| **Polifonia** | 32–512 voci simultanee (default 256) | No |
+| **Polifonia** | 32–512 voci simultanee (default 256) | Sì (riavvio synth) |
 | **Riverbero** | Effetto reverb FluidSynth | No |
 | **Chorus** | Effetto chorus FluidSynth | No |
 | **Caricamento dinamico SF2** | Carica campioni SF2 on demand (meno RAM, più I/O) | Sì |

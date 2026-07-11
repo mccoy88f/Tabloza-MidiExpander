@@ -263,8 +263,8 @@ def api_synth_settings_post():
         return jsonify({"error": str(exc)}), 400
 
     config["fluidsynth"] = fs_cfg
-    save_config(config)
-    log_event("web", f"Motore synth → preset {fs_cfg.get('audio_preset', 'standard')}")
+    save_config({"fluidsynth": fs_cfg})
+    log_event("web", f"Motore synth → preset {fs_cfg.get('audio_preset', 'stable')}")
 
     if needs_restart:
         if not trigger_orchestrator_reload_fluidsynth():
@@ -495,10 +495,13 @@ def api_audio_select():
     config = load_config()
     card = card_from_audio_device(device)
     resolved = resolve_audio_device(device)
-    config.setdefault("fluidsynth", {})["audio_device"] = resolved
+    config.setdefault("fluidsynth", {})
+    config["fluidsynth"]["audio_device"] = resolved
     config["fluidsynth"]["alsa_card"] = card
     config["fluidsynth"]["sample_rate"] = sample_rate_for_device(resolved)
-    save_config(config)
+    from synth_config import merge_fluidsynth_config
+    save_config({"fluidsynth": merge_fluidsynth_config(config.get("fluidsynth"))})
+    config = load_config()
     log_event("web", f"Uscita audio → {resolved}")
     if not trigger_orchestrator_reload_fluidsynth():
         return jsonify({"error": "Orchestrator non attivo"}), 503

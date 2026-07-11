@@ -100,13 +100,13 @@ class TestSystemStats(unittest.TestCase):
 
 
 class TestSynthConfig(unittest.TestCase):
-    def test_merge_defaults_standard_preset(self):
-        from synth_config import merge_fluidsynth_config
+    def test_merge_defaults_stable_preset(self):
+        from synth_config import DEFAULT_AUDIO_PRESET, merge_fluidsynth_config
 
         fs = merge_fluidsynth_config({})
-        self.assertEqual(fs["audio_preset"], "standard")
-        self.assertEqual(fs["period_size"], 512)
-        self.assertEqual(fs["period_count"], 6)
+        self.assertEqual(fs["audio_preset"], DEFAULT_AUDIO_PRESET)
+        self.assertEqual(fs["period_size"], 1024)
+        self.assertEqual(fs["period_count"], 8)
         self.assertEqual(fs["polyphony"], 256)
         self.assertTrue(fs["reverb"])
         self.assertTrue(fs["chorus"])
@@ -114,7 +114,7 @@ class TestSynthConfig(unittest.TestCase):
     def test_parse_update_needs_restart_on_preset(self):
         from synth_config import merge_fluidsynth_config, parse_synth_settings_update
 
-        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        cfg = {"fluidsynth": merge_fluidsynth_config({"audio_preset": "standard"})}
         fs, restart = parse_synth_settings_update({"audio_preset": "stable"}, cfg)
         self.assertTrue(restart)
         self.assertEqual(fs["period_size"], 1024)
@@ -126,6 +126,100 @@ class TestSynthConfig(unittest.TestCase):
         fs, restart = parse_synth_settings_update({"reverb": False}, cfg)
         self.assertFalse(restart)
         self.assertFalse(fs["reverb"])
+
+    def test_parse_update_needs_restart_on_polyphony(self):
+        from synth_config import merge_fluidsynth_config, parse_synth_settings_update
+
+        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        fs, restart = parse_synth_settings_update({"polyphony": 512}, cfg)
+        self.assertTrue(restart)
+        self.assertEqual(fs["polyphony"], 512)
+
+
+class TestActivityStatus(unittest.TestCase):
+    def test_aseqdump_event_lines(self):
+        from activity_status import is_aseqdump_midi_event
+
+        self.assertTrue(is_aseqdump_midi_event(" 23:01:23.045  24:0   Note on               0, note 60, velocity 100"))
+        self.assertTrue(is_aseqdump_midi_event("128:0   Control change          0, controller 7, value 100"))
+        self.assertFalse(is_aseqdump_midi_event("Waiting for events at port 128:0"))
+        self.assertFalse(is_aseqdump_midi_event("Source  Event                   Ch Ch"))
+        self.assertFalse(is_aseqdump_midi_event(""))
+
+    def test_midi_active_window(self):
+        from activity_status import MIDI_ACTIVE_WINDOW_SEC
+
+        self.assertGreaterEqual(MIDI_ACTIVE_WINDOW_SEC, 5.0)
+
+
+class TestMidiMonitorPort(unittest.TestCase):
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_prefers_routed_source(self, mock_fs, mock_routes):
+        from midi_utils import midi_monitor_port
+
+        mock_routes.return_value = [{"from": "14:0", "to": "128:0"}]
+        mock_fs.return_value = {"address": "128:0"}
+        port, key = midi_monitor_port()
+        self.assertEqual(port, "14:0")
+        self.assertEqual(key, "src:14:0")
+
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_multiple_sources_use_global_dump(self, mock_fs, mock_routes):
+        from midi_utils import midi_monitor_port
+
+        mock_routes.return_value = [
+            {"from": "14:0", "to": "128:0"},
+            {"from": "20:0", "to": "128:0"},
+        ]
+        port, key = midi_monitor_port()
+        self.assertEqual(port, "*")
+        self.assertIn("14:0", key)
+
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_fallback_to_fluidsynth(self, mock_fs, mock_routes):
+        from midi_utils import midi_monitor_port
+
+        mock_routes.return_value = []
+        mock_fs.return_value = {"address": "128:0"}
+        port, key = midi_monitor_port()
+        self.assertEqual(port, "128:0")
+        self.assertEqual(key, "fs:128:0")
+
+
+class TestTablozaCommon(unittest.TestCase):
+    def test_save_config_merges_fluidsynth_fields(self):
+        import json
+        import sys
+        from unittest.mock import MagicMock
+
+        sys.modules.setdefault("bcrypt", MagicMock())
+        import tabloza_common as tc
+
+        with tempfile.TemporaryDirectory() as td:
+            config_file = Path(td) / "config.json"
+            config_file.write_text(json.dumps({
+                "volume": 80,
+                "fluidsynth": {
+                    "polyphony": 512,
+                    "audio_preset": "standard",
+                    "audio_device": "plughw:0,0",
+                },
+            }))
+            with patch.object(tc, "CONFIG_FILE", config_file):
+                tc.save_config({
+                    "fluidsynth": {
+                        "audio_device": "plughw:1,0",
+                        "alsa_card": 1,
+                    },
+                })
+                saved = json.loads(config_file.read_text())
+                self.assertEqual(saved["volume"], 80)
+                self.assertEqual(saved["fluidsynth"]["polyphony"], 512)
+                self.assertEqual(saved["fluidsynth"]["audio_device"], "plughw:1,0")
+                self.assertEqual(saved["fluidsynth"]["alsa_card"], 1)
 
 
 class TestAudioUtils(unittest.TestCase):
@@ -208,9 +302,59 @@ card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
 
 
 class TestFluidSynthClient(unittest.TestCase):
+    def test_parse_font_ids_from_log(self):
+        from fluidsynth_client import parse_font_ids_from_log
+
+        text = "\n".join([
+            "ID Name",
+            "2 Uplift.sf2",
+            "1 /var/lib/tabloza/soundfonts/FluidR3_GM.sf2",
+        ])
+        self.assertEqual(parse_font_ids_from_log(text), [2, 1])
+
+    def test_parse_font_ids_empty(self):
+        from fluidsynth_client import parse_font_ids_from_log
+
+        self.assertEqual(parse_font_ids_from_log("No SoundFont loaded"), [])
+
+    @patch("fluidsynth_client._shell_stdin", object())
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.query_loaded_font_ids")
+    @patch("fluidsynth_client.time.sleep")
+    def test_unload_all_soundfonts(self, _sleep, mock_ids, mock_send):
+        from fluidsynth_client import unload_all_soundfonts
+
+        mock_ids.side_effect = [[2, 1], []]
+        ok, detail = unload_all_soundfonts(lambda: True)
+        self.assertTrue(ok)
+        self.assertEqual(detail, "unloaded")
+        sent = [call.args[0] for call in mock_send.call_args_list]
+        self.assertIn("unload 2", sent)
+        self.assertIn("unload 1", sent)
+        self.assertIn("reset", sent)
+
+    @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send):
+    def test_load_soundfont_unloads_before_load(self, _sleep, mock_send, _unload):
+        from fluidsynth_client import load_soundfont
+
+        sf = Path("/tmp/tabloza-test-load.sf2")
+        sf.write_bytes(b"x")
+        try:
+            ok, detail = load_soundfont(sf, lambda: True)
+            self.assertTrue(ok)
+            self.assertEqual(detail, "loaded")
+            self.assertTrue(any(
+                call.args[0].startswith("load ") for call in mock_send.call_args_list
+            ))
+        finally:
+            sf.unlink(missing_ok=True)
+
+    @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.time.sleep")
+    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send, _unload):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-cancel.sf2")

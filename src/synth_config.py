@@ -18,16 +18,18 @@ AUDIO_PRESETS: dict[str, dict] = {
     },
 }
 
+DEFAULT_AUDIO_PRESET = "stable"
+
 DEFAULT_FLUIDSYNTH_CONFIG: dict = {
     "audio_driver": "alsa",
     "audio_device": "plughw:0,0",
     "sample_rate": 44100,
-    "period_size": 512,
-    "period_count": 6,
+    "period_size": 1024,
+    "period_count": 8,
     "gain": 2.0,
     "alsa_card": 0,
     "alsa_mixer_control": "PCM",
-    "audio_preset": "standard",
+    "audio_preset": DEFAULT_AUDIO_PRESET,
     "polyphony": 256,
     "reverb": True,
     "chorus": True,
@@ -40,7 +42,7 @@ def merge_fluidsynth_config(stored: dict | None) -> dict:
     merged = dict(DEFAULT_FLUIDSYNTH_CONFIG)
     if stored:
         merged.update(stored)
-    preset = merged.get("audio_preset", "standard")
+    preset = merged.get("audio_preset", DEFAULT_AUDIO_PRESET)
     if preset in AUDIO_PRESETS:
         merged["period_size"] = AUDIO_PRESETS[preset]["period_size"]
         merged["period_count"] = AUDIO_PRESETS[preset]["period_count"]
@@ -49,7 +51,7 @@ def merge_fluidsynth_config(stored: dict | None) -> dict:
     merged["chorus"] = bool(merged.get("chorus", True))
     merged["dynamic_sample_loading"] = bool(merged.get("dynamic_sample_loading", False))
     if merged.get("audio_preset") not in AUDIO_PRESETS:
-        merged["audio_preset"] = "standard"
+        merged["audio_preset"] = DEFAULT_AUDIO_PRESET
     return merged
 
 
@@ -93,6 +95,7 @@ def parse_synth_settings_update(data: dict, current: dict) -> tuple[dict, bool]:
     old_restart_key = (
         fs["period_size"],
         fs["period_count"],
+        fs["polyphony"],
         fs["dynamic_sample_loading"],
     )
 
@@ -117,6 +120,7 @@ def parse_synth_settings_update(data: dict, current: dict) -> tuple[dict, bool]:
     new_restart_key = (
         fs["period_size"],
         fs["period_count"],
+        fs["polyphony"],
         fs["dynamic_sample_loading"],
     )
     needs_restart = new_restart_key != old_restart_key

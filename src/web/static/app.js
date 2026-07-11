@@ -1,6 +1,18 @@
 const API = "";
 const STATUS_REFRESH_MS = 2000;
 let lastSf2StateKey = "";
+let lastAppliedSynthSettingsKey = "";
+
+function synthSettingsKey(settings) {
+  if (!settings) return "";
+  return JSON.stringify({
+    audio_preset: settings.audio_preset,
+    polyphony: settings.polyphony,
+    reverb: settings.reverb,
+    chorus: settings.chorus,
+    dynamic_sample_loading: settings.dynamic_sample_loading,
+  });
+}
 let lastSf2Loading = false;
 
 async function api(path, opts = {}) {
@@ -358,7 +370,13 @@ async function refreshStatus() {
   }
   renderMidiInputs(s.midi, s.activity);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
-  if (s.synth_settings) renderSynthSettings(s.synth_settings);
+  if (s.synth_settings) {
+    const settingsKey = synthSettingsKey(s.synth_settings);
+    if (settingsKey !== lastAppliedSynthSettingsKey) {
+      renderSynthSettings(s.synth_settings);
+      lastAppliedSynthSettingsKey = settingsKey;
+    }
+  }
   if (s.version) document.getElementById("status-version").textContent = `v${s.version}`;
   const sf = s.soundfont || {};
   const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error].join("|");
@@ -1209,6 +1227,7 @@ document.getElementById("btn-synth-apply")?.addEventListener("click", async () =
       body: JSON.stringify(collectSynthSettingsPayload()),
     });
     renderSynthSettings(res.settings);
+    lastAppliedSynthSettingsKey = synthSettingsKey(res.settings);
     msg.textContent = res.restarted ? t("synthAppliedRestart") : t("synthApplied");
     msg.className = "msg ok";
     refreshStatus();
@@ -1222,13 +1241,13 @@ document.getElementById("btn-synth-apply")?.addEventListener("click", async () =
 });
 
 document.getElementById("btn-synth-standard")?.addEventListener("click", async () => {
-  document.getElementById("synth-preset").value = "standard";
+  document.getElementById("synth-preset").value = "stable";
   document.getElementById("synth-polyphony").value = 256;
   document.getElementById("synth-polyphony-value").textContent = "256";
   document.getElementById("synth-reverb").checked = true;
   document.getElementById("synth-chorus").checked = true;
   document.getElementById("synth-dynamic").checked = false;
-  updateSynthPresetHint("standard", { presets: [{ id: "standard", period_size: 512, period_count: 6 }] });
+  updateSynthPresetHint("stable", { presets: [{ id: "stable", period_size: 1024, period_count: 8 }] });
   document.getElementById("btn-synth-apply").click();
 });
 

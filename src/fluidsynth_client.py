@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 from pathlib import Path
 
@@ -9,7 +10,10 @@ log = logging.getLogger("tabloza.fluidsynth")
 
 STATE_FILE = Path("/run/tabloza/soundfont_state.json")
 CANCEL_LOAD_FLAG = Path("/run/tabloza/cancel_soundfont_load")
+FLUIDSYNTH_LOG = Path("/run/tabloza/fluidsynth.log")
 _shell_stdin = None
+
+_FONT_ENTRY_RE = re.compile(r"^\s*(\d+)\s+(\S.*)$")
 
 
 def _default_state() -> dict:
@@ -78,6 +82,95 @@ def send_command(command: str) -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _log_file_size() -> int:
+    try:
+        return FLUIDSYNTH_LOG.stat().st_size
+    except OSError:
+        return 0
+
+
+def _read_fluidsynth_log_since(offset: int) -> str:
+    if not FLUIDSYNTH_LOG.is_file():
+        return ""
+    try:
+        with open(FLUIDSYNTH_LOG, encoding="utf-8", errors="replace") as handle:
+            handle.seek(max(0, offset))
+            return handle.read()
+    except OSError:
+        return ""
+
+
+def parse_font_ids_from_log(text: str) -> list[int]:
+    """Parse `fonts` shell output (ID / Name rows) from FluidSynth log text."""
+    ids: list[int] = []
+    past_header = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(">"):
+            continue
+        if re.match(r"^ID\s+Name", stripped, re.IGNORECASE):
+            past_header = True
+            continue
+        if "no soundfont" in stripped.lower():
+            continue
+        match = _FONT_ENTRY_RE.match(stripped)
+        if match and (past_header or "/" in match.group(2) or match.group(2).endswith(".sf2")):
+            ids.append(int(match.group(1)))
+    return ids
+
+
+def query_loaded_font_ids() -> list[int]:
+    """Return SoundFont IDs currently loaded in FluidSynth."""
+    if _shell_stdin is None:
+        return []
+    offset = _log_file_size()
+    ok, _ = send_command("fonts")
+    if not ok:
+        return []
+    time.sleep(0.25)
+    return parse_font_ids_from_log(_read_fluidsynth_log_since(offset))
+
+
+def unload_all_soundfonts(
+    process_alive,
+    should_cancel=None,
+    max_rounds: int = 8,
+) -> tuple[bool, str]:
+    """Unload every SoundFont from FluidSynth and reset MIDI state."""
+    if _shell_stdin is None:
+        return False, "Shell FluidSynth non disponibile"
+
+    total = 0
+    for _round in range(max_rounds):
+        if should_cancel and should_cancel():
+            return False, "cancelled"
+        if not process_alive():
+            return False, "FluidSynth terminato durante unload"
+
+        font_ids = query_loaded_font_ids()
+        if not font_ids:
+            break
+
+        for font_id in sorted(font_ids, reverse=True):
+            if should_cancel and should_cancel():
+                return False, "cancelled"
+            if not process_alive():
+                return False, "FluidSynth terminato durante unload"
+            ok, detail = send_command(f"unload {font_id}")
+            if not ok:
+                return ok, detail
+            time.sleep(0.15)
+            total += 1
+
+    send_command("reset")
+    time.sleep(0.15)
+    if not process_alive():
+        return False, "FluidSynth terminato dopo unload"
+    if total:
+        log.info("Scaricati %d SoundFont da FluidSynth", total)
+    return True, "unloaded"
+
+
 def load_timeout_for(path: Path) -> float:
     try:
         size_mb = path.stat().st_size / (1024 * 1024)
@@ -95,6 +188,11 @@ def load_soundfont(
         return False, f"File non trovato: {path}"
     if should_cancel and should_cancel():
         return False, "cancelled"
+    ok, detail = unload_all_soundfonts(process_alive, should_cancel=should_cancel)
+    if not ok:
+        return ok, detail
+    if detail == "cancelled":
+        return False, "cancelled"
     try:
         size_mb = path.stat().st_size / (1024 * 1024)
     except OSError:
@@ -105,20 +203,20 @@ def load_soundfont(
     if not ok:
         return ok, detail
     if should_cancel and should_cancel():
-        send_command("reset")
+        unload_all_soundfonts(process_alive, should_cancel=should_cancel)
         return False, "cancelled"
     settle = min(wait_sec, max(8.0, size_mb * 0.15))
     log.info("Attesa stabilizzazione SF2 %.0fs", settle)
     deadline = time.time() + settle
     while time.time() < deadline:
         if should_cancel and should_cancel():
-            send_command("reset")
+            unload_all_soundfonts(process_alive, should_cancel=should_cancel)
             return False, "cancelled"
         if not process_alive():
             return False, "FluidSynth terminato durante il caricamento SF2"
         time.sleep(0.25)
     if should_cancel and should_cancel():
-        send_command("reset")
+        unload_all_soundfonts(process_alive, should_cancel=should_cancel)
         return False, "cancelled"
     if not process_alive():
         return False, "FluidSynth terminato dopo il caricamento SF2"
