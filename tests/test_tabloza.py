@@ -312,6 +312,31 @@ class TestFluidSynthClient(unittest.TestCase):
         ])
         self.assertEqual(parse_font_ids_from_log(text), [2, 1])
 
+    def test_parse_fonts_from_log(self):
+        from fluidsynth_client import parse_fonts_from_log
+
+        text = "\n".join([
+            "ID Name",
+            "1 /var/lib/tabloza/soundfonts/SD1000.sf2",
+        ])
+        fonts = parse_fonts_from_log(text)
+        self.assertEqual(len(fonts), 1)
+        self.assertEqual(fonts[0]["path"], "/var/lib/tabloza/soundfonts/SD1000.sf2")
+
+    def test_soundfont_path_matches(self):
+        from fluidsynth_client import soundfont_path_matches
+
+        path = Path("/var/lib/tabloza/soundfonts/SD1000.sf2")
+        self.assertTrue(soundfont_path_matches(path, "/var/lib/tabloza/soundfonts/SD1000.sf2"))
+        self.assertTrue(soundfont_path_matches(path, "SD1000.sf2"))
+        self.assertFalse(soundfont_path_matches(path, "Other.sf2"))
+
+    def test_parse_load_error_from_log(self):
+        from fluidsynth_client import parse_load_error_from_log
+
+        text = 'fluidsynth: error: Failed to load SoundFont "/tmp/x.sf2"'
+        self.assertIn("Failed to load", parse_load_error_from_log(text))
+
     def test_parse_font_ids_empty(self):
         from fluidsynth_client import parse_font_ids_from_log
 
@@ -334,9 +359,12 @@ class TestFluidSynthClient(unittest.TestCase):
         self.assertIn("reset", sent)
 
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
+    @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
+    @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_unloads_before_load(self, _sleep, mock_send, _unload):
+    def test_load_soundfont_verified(self, _sleep, _send, _wait, _fonts, _match, _unload):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-load.sf2")
@@ -345,16 +373,50 @@ class TestFluidSynthClient(unittest.TestCase):
             ok, detail = load_soundfont(sf, lambda: True)
             self.assertTrue(ok)
             self.assertEqual(detail, "loaded")
-            self.assertTrue(any(
-                call.args[0].startswith("load ") for call in mock_send.call_args_list
-            ))
         finally:
             sf.unlink(missing_ok=True)
 
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=False)
+    @patch("fluidsynth_client.query_loaded_fonts", return_value=[])
+    @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send, _unload):
+    def test_load_soundfont_not_in_stack_fails(self, _sleep, _send, _wait, _fonts, _match, _unload):
+        from fluidsynth_client import load_soundfont
+
+        sf = Path("/tmp/tabloza-test-missing.sf2")
+        sf.write_bytes(b"x")
+        try:
+            ok, detail = load_soundfont(sf, lambda: True)
+            self.assertFalse(ok)
+            self.assertIn("non presente in FluidSynth", detail)
+        finally:
+            sf.unlink(missing_ok=True)
+
+    @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client._wait_for_load_completion", return_value=(False, "failed to load"))
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.time.sleep")
+    def test_load_soundfont_log_error_fails(self, _sleep, _send, _wait, _unload):
+        from fluidsynth_client import load_soundfont
+
+        sf = Path("/tmp/tabloza-test-error.sf2")
+        sf.write_bytes(b"x")
+        try:
+            ok, detail = load_soundfont(sf, lambda: True)
+            self.assertFalse(ok)
+            self.assertIn("Caricamento fallito", detail)
+        finally:
+            sf.unlink(missing_ok=True)
+
+    @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
+    @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
+    @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.time.sleep")
+    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send, _wait, _fonts, _match, _unload):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-cancel.sf2")

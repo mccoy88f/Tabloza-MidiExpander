@@ -30,6 +30,7 @@ from fluidsynth_client import (
     reset_synth,
     shell_bound,
     unload_all_soundfonts,
+    verify_soundfont_loaded,
     write_soundfont_state,
 )
 from midi_utils import (
@@ -581,12 +582,39 @@ def _check_soundfont_load_watchdog():
         return
     if started and selected:
         path = SOUNDFONTS_DIR / selected
-        max_wait = load_timeout_for(path) + 30 if path.is_file() else 300
+        max_wait = load_timeout_for(path) + 45 if path.is_file() else 300
         if time.time() - float(started) > max_wait:
             write_soundfont_state(
                 loading=False, loaded="",
                 error=f"Timeout caricamento {selected} ({int(max_wait)}s)",
             )
+
+
+_last_sf2_reconcile = 0.0
+
+
+def _reconcile_loaded_soundfont():
+    """Allinea lo stato UI se FluidSynth non ha più lo SF2 atteso in memoria."""
+    global _last_sf2_reconcile
+    now = time.time()
+    if now - _last_sf2_reconcile < 12.0:
+        return
+    _last_sf2_reconcile = now
+
+    state = read_soundfont_state()
+    if state.get("loading") or not state.get("loaded"):
+        return
+    if not fluidsynth_engine_running() or not shell_bound():
+        return
+
+    path = SOUNDFONTS_DIR / state["loaded"]
+    ok, detail = verify_soundfont_loaded(path)
+    if ok:
+        return
+
+    write_soundfont_state(loaded="", error=f"SF2 non in memoria: {detail}")
+    log.warning("Reconcile SF2: %s", detail)
+    log_event("orchestrator", f"SF2 non in memoria: {detail}", "error")
 
 
 def main():
@@ -622,6 +650,7 @@ def main():
         else:
             route_rtpmidi_to_fluidsynth()
             _check_soundfont_load_watchdog()
+            _reconcile_loaded_soundfont()
         time.sleep(ROUTING_INTERVAL)
 
     log.info("Orchestratore arrestato.")
