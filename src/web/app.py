@@ -145,6 +145,17 @@ def api_change_password():
 
 # --- Status ---
 
+def _orchestrator_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "midi_orchestrator.py"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
 @app.route("/api/status")
 @require_auth
 def api_status():
@@ -153,6 +164,10 @@ def api_status():
     sf_state = read_soundfont_state()
     audio = get_audio_activity()
     network = get_network_status()
+    engine_running = bool(audio.get("fluidsynth_running"))
+    midi_ready = midi.get("fluidsynth") is not None
+    orchestrator_running = _orchestrator_running()
+    starting = orchestrator_running and (not engine_running or not midi_ready)
     return jsonify({
         "ip": _get_ip(),
         "hostname": MDNS_NAME,
@@ -164,8 +179,10 @@ def api_status():
             "audio": audio,
         },
         "synth": {
-            "engine_running": audio.get("fluidsynth_running", False),
-            "midi_ready": midi.get("fluidsynth") is not None,
+            "engine_running": engine_running,
+            "midi_ready": midi_ready,
+            "starting": starting,
+            "orchestrator_running": orchestrator_running,
         },
         "soundfont": {
             "selected": config.get("active_soundfont", ""),

@@ -111,11 +111,18 @@ function renderMidiInputs(midi) {
   }
 }
 
-function renderSoundfontUi(soundfont) {
+function renderSoundfontUi(soundfont, synth = null) {
   if (!soundfont) return;
   const sf2Loaded = soundfont.loaded || "";
   const sf2Loading = !!soundfont.loading;
   const sf2Error = soundfont.error;
+  const engineRunning = synth ? !!synth.engine_running : false;
+  const starting = synth ? !!synth.starting : false;
+  const sf2Pending = sf2Loading || (
+    !sf2Loaded && !sf2Error && (
+      soundfont.selected || (synth && (starting || engineRunning))
+    )
+  );
 
   const dotSf2 = document.getElementById("dot-sf2");
   const valSf2 = document.getElementById("value-sf2");
@@ -124,7 +131,8 @@ function renderSoundfontUi(soundfont) {
       sf2Error ? "off"
         : sf2Loading ? "active pulse"
           : sf2Loaded ? "idle"
-            : "off"
+            : sf2Pending ? "pending pulse"
+              : "pending"
     );
   }
   if (valSf2) {
@@ -134,6 +142,8 @@ function renderSoundfontUi(soundfont) {
       valSf2.textContent = t("sf2Loading", { name: soundfont.selected || "…" });
     } else if (sf2Loaded) {
       valSf2.textContent = sf2Loaded;
+    } else if (starting && soundfont.selected) {
+      valSf2.textContent = t("sf2Loading", { name: soundfont.selected });
     } else if (soundfont.selected) {
       valSf2.textContent = t("sf2SelectedNotLoaded", { name: soundfont.selected });
     } else {
@@ -161,31 +171,44 @@ function renderActivity(activity, midi, synth, soundfont) {
 
   const engineRunning = !!(synth?.engine_running);
   const midiReady = !!(synth?.midi_ready);
+  const starting = !!(synth?.starting);
   dotSynth.className = "activity-dot " + (
-    engineRunning ? (midiReady ? "idle" : "active pulse") : "off"
+    engineRunning
+      ? (midiReady ? "idle" : "active pulse")
+      : starting ? "pending pulse" : "off"
   );
   valSynth.textContent = engineRunning
     ? (midiReady ? t("synthReady") : t("synthMidiPending"))
-    : t("synthStopped");
+    : starting ? t("synthStarting") : t("synthStopped");
 
-  renderSoundfontUi(soundfont);
+  renderSoundfontUi(soundfont, synth);
 
   const midiReceiving = !!midiAct.receiving;
-  dotMidi.className = "activity-dot " + (midiReceiving ? "active pulse" : midi?.routing_ok ? "idle" : "off");
+  dotMidi.className = "activity-dot " + (
+    midiReceiving ? "active pulse"
+      : midiReady ? "idle"
+        : starting ? "pending pulse"
+          : "off"
+  );
   valMidi.textContent = midiReceiving
     ? t("midiReceiving")
-    : midi?.routing_ok
+    : midiReady
       ? t("midiIdle")
-      : t("midiNoRoute");
+      : starting ? t("midiStarting") : t("midiNoRoute");
 
   const audioPlaying = !!audioAct.output_active;
   const sf2Loaded = soundfont?.loaded || "";
-  dotAudio.className = "activity-dot " + (audioPlaying ? "active pulse" : engineRunning ? "idle" : "off");
+  dotAudio.className = "activity-dot " + (
+    audioPlaying ? "active pulse"
+      : engineRunning ? (sf2Loaded ? "idle" : "pending pulse")
+        : starting ? "pending pulse"
+          : "off"
+  );
   valAudio.textContent = audioPlaying
     ? t("audioPlaying")
     : engineRunning
       ? (sf2Loaded ? t("audioIdle") : t("audioNoSf2"))
-      : t("audioStopped");
+      : starting ? t("audioStarting") : t("audioStopped");
 }
 
 function formatStatusIp(net, fallback = "—") {
@@ -305,7 +328,7 @@ async function refreshStatus() {
   document.getElementById("status-ip").textContent = formatStatusIp(s.network, s.ip || "—");
   document.getElementById("status-network").textContent = networkModeLabel(s.network_mode, s.network || {});
   renderNetworkSection(s);
-  renderSoundfontUi(s.soundfont);
+  renderSoundfontUi(s.soundfont, s.synth);
   if (!volumeAdjusting) {
     const pct = Math.min(100, Math.max(0, Number(s.volume) || 0));
     document.getElementById("volume-slider").value = pct;

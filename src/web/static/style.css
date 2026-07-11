@@ -182,14 +182,20 @@ input[type="text"] {
 
 .activity-dot.idle { background: var(--success); opacity: 0.45; }
 .activity-dot.active { background: var(--success); }
+.activity-dot.pending { background: var(--muted, #888); opacity: 0.85; }
 .activity-dot.off { background: var(--danger); opacity: 0.7; }
 
-.activity-dot.pulse {
+.activity-dot.pulse,
+.activity-dot.pending.pulse {
   animation: activity-pulse 1s ease-in-out infinite;
 }
 
+.activity-dot.pending.pulse {
+  --activity-pulse-color: rgba(160, 160, 160, 0.45);
+}
+
 @keyframes activity-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.5); }
+  0%, 100% { box-shadow: 0 0 0 0 var(--activity-pulse-color, rgba(46, 204, 113, 0.5)); }
   50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
 }
 
