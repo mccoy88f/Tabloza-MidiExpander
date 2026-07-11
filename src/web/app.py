@@ -319,9 +319,14 @@ def api_select_soundfont():
     return jsonify({"ok": True, "active": name})
 
 
-@app.route("/api/soundfonts/default", methods=["POST"])
+@app.route("/api/soundfonts/default", methods=["POST", "DELETE"])
 @require_auth
 def api_default_soundfont():
+    if request.method == "DELETE":
+        save_config({"default_soundfont": ""})
+        log_event("web", "SF2 predefinito rimosso")
+        return jsonify({"ok": True, "default": ""})
+
     data = request.get_json(silent=True) or {}
     name = data.get("name", "")
     path = SOUNDFONTS_DIR / name

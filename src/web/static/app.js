@@ -528,7 +528,9 @@ async function refreshSoundfonts() {
       </div>
       <div class="sf2-actions">
         ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? t("loading") : t("load")}</button>` : ""}
-        ${!sf.default ? `<button class="btn btn-secondary" data-default="${escapeHtml(sf.name)}" title="${t("setDefaultSf2")}">★</button>` : ""}
+        ${sf.default
+          ? `<button class="btn btn-secondary" data-clear-default="${escapeHtml(sf.name)}" title="${t("clearDefaultSf2")}">☆</button>`
+          : `<button class="btn btn-secondary" data-default="${escapeHtml(sf.name)}" title="${t("setDefaultSf2")}">★</button>`}
         <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;
     list.appendChild(div);
@@ -550,6 +552,13 @@ async function refreshSoundfonts() {
         method: "POST",
         body: JSON.stringify({ name: btn.dataset.default }),
       });
+      refreshAll();
+    });
+  });
+
+  list.querySelectorAll("[data-clear-default]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await api("/api/soundfonts/default", { method: "DELETE" });
       refreshAll();
     });
   });
