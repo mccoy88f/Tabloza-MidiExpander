@@ -48,10 +48,6 @@
           <div><span class="label" data-i18n="labelActiveSf2">SF2 attivo</span><span id="status-sf2">—</span></div>
           <div><span class="label" data-i18n="labelVersion">Versione</span><span id="status-version">—</span></div>
         </div>
-        <div class="system-actions">
-          <button type="button" id="btn-check-update" class="btn btn-secondary" data-i18n="checkUpdates">Verifica aggiornamenti</button>
-          <p id="update-msg" class="msg hidden"></p>
-        </div>
         <div class="activity-meters">
           <div class="activity-meter" id="meter-synth">
             <span class="activity-dot" id="dot-synth"></span>
@@ -192,19 +188,52 @@
         </div>
       </section>
 
-      <!-- Console -->
+      <!-- Diagnostica -->
       <section class="card console-card">
-        <details id="console-section">
-          <summary data-i18n="sectionConsole">Console eventi</summary>
-          <div class="console-toolbar">
-            <button type="button" id="btn-console-clear" class="btn btn-small btn-secondary" data-i18n="consoleClear">Svuota</button>
-            <span class="console-hint muted" data-i18n="consoleHint">Aggiornamento automatico mentre aperta</span>
+        <details id="diagnostics-section">
+          <summary data-i18n="sectionDiagnostics">Diagnostica</summary>
+          <div class="device-stats" aria-live="polite">
+            <div class="device-metric">
+              <div class="device-metric-header">
+                <span class="label" data-i18n="deviceRam">RAM</span>
+                <span id="device-ram-value" class="device-metric-value">—</span>
+              </div>
+              <div class="metric-bar"><div id="device-ram-bar" class="metric-bar-fill"></div></div>
+              <p id="device-ram-detail" class="device-metric-detail muted">—</p>
+            </div>
+            <div class="device-metric">
+              <div class="device-metric-header">
+                <span class="label" data-i18n="deviceCpu">CPU</span>
+                <span id="device-cpu-value" class="device-metric-value">—</span>
+              </div>
+              <div class="metric-bar"><div id="device-cpu-bar" class="metric-bar-fill"></div></div>
+              <p id="device-cpu-detail" class="device-metric-detail muted">—</p>
+            </div>
+            <div class="device-metric">
+              <div class="device-metric-header">
+                <span class="label" data-i18n="deviceDisk">Disco</span>
+                <span id="device-disk-value" class="device-metric-value">—</span>
+              </div>
+              <div class="metric-bar"><div id="device-disk-bar" class="metric-bar-fill"></div></div>
+              <p id="device-disk-detail" class="device-metric-detail muted">—</p>
+            </div>
+            <div class="device-metric device-metric-inline">
+              <span class="label" data-i18n="deviceTemperature">Temperatura</span>
+              <span id="device-temp-value" class="device-metric-value">—</span>
+            </div>
           </div>
-          <div id="console-memory" class="console-memory" aria-live="polite">
-            <div class="memory-bar" title="RAM"><div id="memory-bar-fill" class="memory-bar-fill"></div></div>
-            <p id="memory-stats" class="memory-stats muted">—</p>
+          <div class="device-actions">
+            <button type="button" id="btn-check-update" class="btn btn-secondary" data-i18n="checkUpdates">Verifica aggiornamenti</button>
+            <p id="update-msg" class="msg hidden"></p>
           </div>
-          <pre id="console-output" class="console-output" aria-live="polite"></pre>
+          <div class="diagnostics-console">
+            <div class="console-toolbar">
+              <span class="label" data-i18n="sectionConsole">Console eventi</span>
+              <button type="button" id="btn-console-clear" class="btn btn-small btn-secondary" data-i18n="consoleClear">Svuota</button>
+              <span class="console-hint muted" data-i18n="consoleHint">Aggiornamento automatico mentre aperta</span>
+            </div>
+            <pre id="console-output" class="console-output" aria-live="polite"></pre>
+          </div>
         </details>
       </section>
 

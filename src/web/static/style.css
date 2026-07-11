@@ -121,6 +121,16 @@ input[type="text"] {
 .msg.ok { color: var(--success); }
 .msg.err { color: var(--danger); }
 
+.device-actions { margin-top: 0.85rem; }
+.device-actions .msg { margin-top: 0.5rem; }
+.diagnostics-console {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.diagnostics-console .console-toolbar {
+  margin: 0 0 0.5rem;
+}
 .system-actions { margin: 0.75rem 0 0.25rem; }
 
 .status-grid { display: grid; gap: 0.5rem; }
@@ -288,6 +298,52 @@ input[type="text"] {
   margin: 0.75rem 0 0.5rem;
 }
 .console-hint { font-size: 0.8rem; }
+.device-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+}
+.device-metric {
+  padding: 0.65rem 0.75rem;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.device-metric-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.device-metric-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+.device-metric-value { font-size: 0.9rem; font-weight: 600; }
+.device-metric-value.temp-warn { color: #f39c12; }
+.device-metric-value.temp-critical { color: var(--danger); }
+.device-metric-detail { font-size: 0.78rem; line-height: 1.4; margin: 0.35rem 0 0; }
+.metric-bar {
+  height: 6px;
+  background: #2a2d3a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.metric-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.metric-bar-fill.warn { background: #f39c12; }
+.metric-bar-fill.critical { background: var(--danger); }
+.metric-bar-fill.temp-warn { background: #f39c12; }
+.metric-bar-fill.temp-critical { background: var(--danger); }
 .console-memory {
   margin-bottom: 0.75rem;
   padding: 0.65rem 0.75rem;

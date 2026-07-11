@@ -46,6 +46,15 @@ def _eth_ipv4_addresses(device: str) -> list[str]:
     return addrs
 
 
+def get_usable_ipv4(device: str) -> str:
+    """First non link-local IPv4 on a NetworkManager device."""
+    for ip in _eth_ipv4_addresses(device):
+        if ip.startswith("169.254."):
+            continue
+        return ip
+    return ""
+
+
 def has_usable_eth_ip(device: str) -> bool:
     """True if eth has a non link-local IPv4 (router DHCP or lan-direct 192.168.5.1)."""
     for ip in _eth_ipv4_addresses(device):

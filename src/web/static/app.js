@@ -167,12 +167,26 @@ function renderActivity(activity, midi, synth, soundfont) {
       : t("audioStopped");
 }
 
-function networkModeLabel(mode) {
+function formatStatusIp(net, fallback = "—") {
+  if (!net) return fallback;
+  const eth = net.eth_ip || "";
+  const wifi = net.wifi_ip || "";
+  if (eth && wifi) {
+    return `${t("statusIpEth", { ip: eth })} · ${t("statusIpWifi", { ip: wifi })}`;
+  }
+  if (eth) return eth;
+  if (wifi) return wifi;
+  return fallback;
+}
+
+function networkModeLabel(mode, net = {}) {
+  const wifi = net.wifi_connection || "";
   switch (mode) {
     case "hotspot": return t("networkHotspot");
-    case "client": return t("networkWifi");
+    case "client": return wifi ? t("networkWifiNamed", { name: wifi }) : t("networkWifi");
     case "ethernet": return t("networkEthernet");
-    case "lan_wifi": return t("networkLanWifi");
+    case "lan_wifi":
+      return wifi ? t("networkLanWifiNamed", { name: wifi }) : t("networkLanWifi");
     case "lan_direct": return t("networkLanDirect");
     case "offline": return t("networkOffline");
     default: return t("networkUnknown");
@@ -196,7 +210,7 @@ function renderNetworkSection(s) {
 
   if (!badge) return;
 
-  badge.textContent = t("networkActiveMode", { mode: networkModeLabel(mode) });
+  badge.textContent = t("networkActiveMode", { mode: networkModeLabel(mode, net) });
   badge.dataset.mode = mode;
 
   const lanDirect = !!(net.lan_direct_active || mode === "lan_direct");
@@ -246,8 +260,8 @@ function renderNetworkSection(s) {
 async function refreshStatus() {
   const s = await api("/api/status");
   document.getElementById("status-hostname").textContent = s.hostname || "—";
-  document.getElementById("status-ip").textContent = s.ip;
-  document.getElementById("status-network").textContent = networkModeLabel(s.network_mode);
+  document.getElementById("status-ip").textContent = formatStatusIp(s.network, s.ip || "—");
+  document.getElementById("status-network").textContent = networkModeLabel(s.network_mode, s.network || {});
   renderNetworkSection(s);
   const sf2Label = s.soundfont?.loaded
     || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
@@ -648,63 +662,124 @@ document.getElementById("btn-audio-apply").addEventListener("click", async () =>
   }
 });
 
-// --- Console ---
-let consoleTimer = null;
+// --- Diagnostica ---
+let diagnosticsTimer = null;
+
+function setMetricBar(barEl, pct) {
+  if (!barEl) return;
+  const value = Math.min(100, Math.max(0, pct || 0));
+  barEl.style.width = `${value}%`;
+  barEl.className = "metric-bar-fill" + (
+    value >= 90 ? " critical" : value >= 75 ? " warn" : ""
+  );
+}
+
+function renderDeviceStats(stats) {
+  if (!stats) return;
+
+  const ramPct = stats.used_percent || 0;
+  const ramValue = document.getElementById("device-ram-value");
+  const ramDetail = document.getElementById("device-ram-detail");
+  if (ramValue) {
+    ramValue.textContent = t("memoryUsed", {
+      used: stats.used_mb,
+      total: stats.total_mb,
+      pct: ramPct,
+    });
+  }
+  setMetricBar(document.getElementById("device-ram-bar"), ramPct);
+  if (ramDetail) {
+    const parts = [t("memoryAvailable", { mb: stats.available_mb })];
+    if (stats.fluidsynth_mb != null) {
+      parts.push(t("memoryFluidSynth", { mb: stats.fluidsynth_mb }));
+    }
+    ramDetail.textContent = parts.join(" · ");
+  }
+
+  const cpuPct = stats.percent;
+  const cpuValue = document.getElementById("device-cpu-value");
+  const cpuDetail = document.getElementById("device-cpu-detail");
+  if (cpuValue) {
+    cpuValue.textContent = cpuPct != null ? `${cpuPct}%` : t("deviceUnavailable");
+  }
+  setMetricBar(document.getElementById("device-cpu-bar"), cpuPct ?? 0);
+  if (cpuDetail) {
+    cpuDetail.textContent = stats.load_1m != null
+      ? t("deviceCpuDetail", { load: stats.load_1m, cores: stats.cores || 1 })
+      : "";
+  }
+
+  const diskPct = stats.disk_used_percent ?? 0;
+  const diskValue = document.getElementById("device-disk-value");
+  const diskDetail = document.getElementById("device-disk-detail");
+  if (diskValue && stats.disk_total_mb != null) {
+    diskValue.textContent = t("memoryUsed", {
+      used: stats.disk_used_mb,
+      total: stats.disk_total_mb,
+      pct: diskPct,
+    });
+  }
+  setMetricBar(document.getElementById("device-disk-bar"), diskPct);
+  if (diskDetail && stats.disk_free_mb != null) {
+    diskDetail.textContent = t("deviceDiskDetail", {
+      free: stats.disk_free_mb,
+      max: stats.sf2_max_upload_mb,
+    });
+  }
+
+  const tempValue = document.getElementById("device-temp-value");
+  if (tempValue) {
+    tempValue.textContent = stats.temperature_c != null
+      ? `${stats.temperature_c} °C`
+      : t("deviceTempUnavailable");
+    tempValue.className = "device-metric-value" + (
+      stats.temperature_c >= 80 ? " temp-critical"
+        : stats.temperature_c >= 70 ? " temp-warn" : ""
+    );
+  }
+}
+
+async function refreshDeviceStats() {
+  try {
+    const stats = await api("/api/device/stats");
+    renderDeviceStats(stats);
+  } catch {
+    /* ignore */
+  }
+}
+
+async function refreshDiagnostics() {
+  await Promise.all([refreshDeviceStats(), refreshConsole()]);
+}
+
+function setDiagnosticsPolling(enabled) {
+  clearInterval(diagnosticsTimer);
+  if (enabled) {
+    refreshDiagnostics();
+    diagnosticsTimer = setInterval(refreshDiagnostics, 2000);
+  }
+}
+
+const diagnosticsSection = document.getElementById("diagnostics-section");
+if (diagnosticsSection) {
+  diagnosticsSection.addEventListener("toggle", () => {
+    setDiagnosticsPolling(diagnosticsSection.open);
+  });
+}
 
 async function refreshConsole() {
   const out = document.getElementById("console-output");
   if (!out) return;
   try {
-    const { lines, memory } = await api("/api/console");
+    const { lines } = await api("/api/console");
     out.textContent = lines?.length ? lines.join("\n") : t("consoleEmpty");
     out.scrollTop = out.scrollHeight;
-    renderMemoryStats(memory);
   } catch {
     out.textContent = t("consoleEmpty");
   }
 }
 
-function renderMemoryStats(memory) {
-  const statsEl = document.getElementById("memory-stats");
-  const barEl = document.getElementById("memory-bar-fill");
-  if (!statsEl || !barEl || !memory) return;
-  const pct = Math.min(100, Math.max(0, memory.used_percent || 0));
-  barEl.style.width = `${pct}%`;
-  barEl.className = "memory-bar-fill" + (pct >= 90 ? " critical" : pct >= 75 ? " warn" : "");
-  const parts = [
-    t("memoryUsed", {
-      used: memory.used_mb,
-      total: memory.total_mb,
-      pct,
-    }),
-    t("memoryAvailable", { mb: memory.available_mb }),
-  ];
-  if (memory.fluidsynth_mb != null) {
-    parts.push(t("memoryFluidSynth", { mb: memory.fluidsynth_mb }));
-  }
-  if (memory.disk_free_mb != null) {
-    parts.push(t("memoryDiskFree", { mb: memory.disk_free_mb }));
-  }
-  parts.push(t("memorySf2Max", { mb: memory.sf2_max_upload_mb }));
-  statsEl.textContent = parts.join(" · ");
-}
-
-function setConsolePolling(enabled) {
-  clearInterval(consoleTimer);
-  if (enabled) {
-    refreshConsole();
-    consoleTimer = setInterval(refreshConsole, 2000);
-  }
-}
-
-const consoleSection = document.getElementById("console-section");
-if (consoleSection) {
-  consoleSection.addEventListener("toggle", () => {
-    setConsolePolling(consoleSection.open);
-  });
-}
-
-document.getElementById("btn-console-clear").addEventListener("click", async () => {
+document.getElementById("btn-console-clear")?.addEventListener("click", async () => {
   await api("/api/console/clear", { method: "POST" });
   refreshConsole();
 });

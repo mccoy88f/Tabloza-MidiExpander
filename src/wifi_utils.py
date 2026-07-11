@@ -321,9 +321,15 @@ def _eth_connected() -> bool:
 
 def get_network_status() -> dict:
     """Report ethernet/WiFi state for dashboard."""
-    from network_utils import is_lan_direct_active, LAN_DIRECT_IP
+    from network_utils import (
+        get_primary_ethernet_device,
+        get_usable_ipv4,
+        is_lan_direct_active,
+        LAN_DIRECT_IP,
+    )
 
     eth = _eth_connected()
+    eth_device = get_primary_ethernet_device()
     lan_direct = is_lan_direct_active()
     wlan_mode = "disconnected"
     wifi_name = ""
@@ -349,6 +355,13 @@ def get_network_status() -> dict:
     else:
         network_mode = "offline"
 
+    eth_ip = LAN_DIRECT_IP if lan_direct else (
+        get_usable_ipv4(eth_device) if eth and eth_device else ""
+    )
+    wifi_ip = ""
+    if wlan_mode in ("client", "hotspot") and _wlan_device_present():
+        wifi_ip = get_usable_ipv4(WLAN_IFACE)
+
     return {
         "network_mode": network_mode,
         "ethernet_connected": eth or lan_direct,
@@ -359,6 +372,8 @@ def get_network_status() -> dict:
         "wifi_client_active": wlan_mode == "client",
         "wlan_mode": wlan_mode,
         "wifi_connection": wifi_name,
+        "eth_ip": eth_ip,
+        "wifi_ip": wifi_ip,
     }
 
 

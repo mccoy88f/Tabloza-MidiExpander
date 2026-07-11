@@ -1,20 +1,16 @@
 # Tabloza MidiExpander
 
-**[Italiano](#italiano)** · **[English](#english)**
+**Italiano** · **[English](README-en.md)**
 
 Trasforma un Raspberry Pi in un expander MIDI headless con sintesi SoundFont, RTP-MIDI e pannello web da smartphone.
 
-Turns a Raspberry Pi into a headless MIDI expander with SoundFont synthesis, RTP-MIDI, and a smartphone-friendly web panel.
-
 ---
-
-## Italiano
 
 ### Cos'è Tabloza MidiExpander
 
 Tabloza MidiExpander è un **sintetizzatore MIDI standalone** basato su Raspberry Pi. Il dispositivo funziona **senza schermo e senza tasti**: tutto si controlla da browser (smartphone o PC) tramite una interfaccia web responsive.
 
-Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows) e le trasforma in audio in tempo reale usando **FluidSynth** e file SoundFont (`.sf2`), con uscita sul jack audio analogico del Pi.
+Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows) e le trasforma in audio in tempo reale usando **FluidSynth** e file SoundFont (`.sf2`), con uscita audio configurabile (jack, USB, HDMI).
 
 > **MIDI GPIO fisico** (porta DIN su GPIO 14/15): funzione pianificata, non ancora attiva. Vedi [docs/TODO.md](docs/TODO.md).
 
@@ -23,29 +19,115 @@ Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows)
 | Funzione | Descrizione |
 |----------|-------------|
 | **Sintesi SF2** | FluidSynth con libreria SoundFont gestibile da web |
+| **Motore synth** | Preset buffer, polifonia, riverbero, chorus, caricamento dinamico SF2 |
+| **Uscita audio** | Selezione dispositivo ALSA (jack integrato, USB, HDMI) con volume in percentuale |
 | **RTP-MIDI** | Visibile in rete come `tabloza-me.local` (rtpmidid + Avahi) |
-| **Pannello web** | UI responsive in italiano e inglese |
-| **Upload SF2** | Drag-and-drop con barra di progresso; auto-attivazione |
-| **Volume master** | Persistente tra reboot |
-| **WiFi provisioning** | Hotspot automatico → configurazione rete domestica |
-| **Monitor WiFi** | Riconnessione automatica se la rete cade |
+| **Pannello web** | UI responsive bilingue (IT/EN), sezioni espandibili |
+| **Upload SF2** | Drag-and-drop con barra di progresso (max 2 GB); attivazione manuale o automatica |
+| **Rete adattiva** | Ethernet, WiFi client, hotspot, link LAN diretto; UI che mostra solo le opzioni pertinenti |
+| **Link LAN diretto** | Cavo Pi ↔ computer senza router: DHCP automatico su `192.168.5.1` |
+| **WiFi provisioning** | Hotspot `Tabloza-MidiExpander` se non c’è rete; connessione a reti domestiche |
+| **Monitor rete** | Riconnessione WiFi, fallback hotspot, gestione automatica Ethernet |
+| **Diagnostica** | RAM, CPU, disco, temperatura, console eventi e verifica aggiornamenti |
 | **MIDI Reset** | Riavvio FluidSynth e routing MIDI con un click |
 | **Sicurezza** | Login con password (default: `tabloza`) |
 
 ### Interfaccia web (UI)
 
-Accesso: **http://tabloza-me.local** (o `http://192.168.4.1` in modalità hotspot)
+Accesso: **http://tabloza-me.local** (o l’IP mostrato in Stato)
 
 La UI è **bilingue** (IT/EN): usa i pulsanti **IT** / **EN** in alto. La lingua scelta viene salvata nel browser.
 
 | Sezione | Cosa fa |
 |---------|---------|
-| **Stato** | Indirizzo mDNS, IP, modalità rete, SF2 attivo, ingressi MIDI |
-| **MIDI Reset** | Riavvia rtpmidid + FluidSynth in caso di problemi |
-| **Volume Master** | Slider 0–127, salvato automaticamente |
+| **Stato** | Indirizzo mDNS, IP per interfaccia (con etichetta), modalità rete con nome WiFi, SF2 attivo, versione, indicatori attività, test suono/jack, MIDI Reset |
+| **Volume uscita audio** | Slider **0–100%**, salvato automaticamente |
+| **Uscita audio** | Elenco dispositivi ALSA playback; cambio uscita (jack, USB, HDMI…) con riavvio synth |
+| **Motore synth** | Preset buffer, polifonia, riverbero, chorus, caricamento dinamico; *Stop note* |
 | **Libreria SoundFont** | Lista, carica, elimina, upload `.sf2` |
-| **WiFi** | Scan reti, inserimento password, salvataggio profilo |
-| **Sicurezza** | Cambio password |
+| **Rete** | Badge modalità attiva; link LAN diretto, hotspot e WiFi client (mostrati in base allo stato) |
+| **Diagnostica** | Metriche sistema (RAM, CPU, disco, temperatura), verifica aggiornamenti, console eventi |
+| **Sicurezza** | Cambio password (sezione collassabile) |
+
+### Modalità di rete
+
+Il pannello rileva automaticamente la connettività e adatta i controlli disponibili.
+
+| Modalità (Stato) | Significato |
+|------------------|-------------|
+| **Ethernet** | Solo cavo LAN al router |
+| **WiFi · *nome rete*** | Solo WiFi client |
+| **Ethernet + WiFi · *nome rete*** | Cavo e WiFi client attivi insieme |
+| **Hotspot** | Pi emette `Tabloza-MidiExpander` (es. primo avvio o senza rete) |
+| **Link LAN diretto** | Cavo diretto Pi ↔ computer, Pi @ `192.168.5.1` |
+| **Offline** | Nessuna connessione utile |
+
+**IP in Stato:** con più interfacce attive vengono mostrati entrambi, es. `192.168.178.143 (Ethernet) · 192.168.178.50 (WiFi)`.
+
+**Ethernet con router:** il Pi tenta prima il DHCP normale. Se il cavo è collegato ma non arriva IP entro ~25 s (es. link diretto a un computer), passa automaticamente al **link LAN diretto** (`192.168.5.1`, DHCP sul cavo). Puoi forzare avvio/stop dal pannello.
+
+**Hotspot:** parte automaticamente se non c’è Ethernet né WiFi configurato; puoi avviarlo/fermarlo manualmente quando non sei su LAN router. Con cavo al router, l’hotspot resta opzionale (utile per configurare da smartphone).
+
+**WiFi client:** scan reti, password, profilo salvato in NetworkManager. Con Ethernet attiva puoi aggiungere anche il WiFi (dual-homed).
+
+### Motore synth (FluidSynth)
+
+Sezione **Motore synth** (collassabile). Le impostazioni sono salvate in `config.json` e persistono tra reboot.
+
+| Parametro | Descrizione | Riavvio synth |
+|-----------|-------------|---------------|
+| **Preset buffer audio** | `Standard` (512×6), `Bassa latenza` (256×4), `Stabile` (1024×8) | Sì |
+| **Polifonia** | 32–512 voci simultanee (default 256) | No |
+| **Riverbero** | Effetto reverb FluidSynth | No |
+| **Chorus** | Effetto chorus FluidSynth | No |
+| **Caricamento dinamico SF2** | Carica campioni SF2 on demand (meno RAM, più I/O) | Sì |
+
+- **Applica** — salva e applica; riavvia FluidSynth solo se necessario (buffer o caricamento dinamico).
+- **Ripristina standard** — torna al preset Standard con polifonia 256, reverb/chorus attivi.
+- **Stop note** — invia all-notes-off senza riavviare il motore.
+
+Consigli:
+- **Standard** — equilibrio generale su Pi 4/5.
+- **Bassa latenza** — live/performance; più carico CPU.
+- **Stabile** — SF2 molto grandi o sistemi sotto stress.
+
+### Uscita audio
+
+| Controllo | Descrizione |
+|-----------|-------------|
+| **Volume uscita audio** | Percentuale 0–100 sul mixer ALSA (PCM/Headphone/Master del dispositivo attivo) |
+| **Dispositivo** | Scheda ALSA per FluidSynth: jack `plughw:0,0`, USB `hw:N,0`, HDMI, ecc. |
+| **Applica uscita** | Cambia dispositivo e riavvia il synth |
+| **Test suono** | Nota di prova via FluidSynth (verifica SF2 + routing) |
+| **Test jack** | Beep diretto sull’hardware ALSA (bypass FluidSynth) |
+
+Su schede USB/HDMI il sample rate può passare automaticamente a 48 kHz.
+
+### Diagnostica
+
+Sezione collassabile **Diagnostica** con aggiornamento automatico ogni ~2 s mentre è aperta:
+
+| Blocco | Contenuto |
+|--------|-----------|
+| **RAM** | Utilizzo percentuale, MB usati/totali, memoria libera, RAM FluidSynth |
+| **CPU** | Percentuale utilizzo, load average, numero core |
+| **Disco** | Spazio usato/libero su `/var/lib/tabloza`, limite upload SF2 |
+| **Temperatura** | SoC Raspberry Pi (thermal zone o `vcgencmd`) |
+| **Aggiornamenti** | Pulsante **Verifica aggiornamenti** (GitHub → `sudo tabloza-update`) |
+| **Console eventi** | Log testuali (WiFi, rete, SF2, synth, web…) con pulsante **Svuota** |
+
+### Aggiornamenti software
+
+**Dal pannello:** **Diagnostica → Verifica aggiornamenti**. Se disponibile, l’installazione parte in background e i servizi vengono riavviati.
+
+**Da SSH:**
+
+```bash
+sudo tabloza-update              # installa ultima versione da GitHub
+sudo tabloza-update --check-only # solo controllo (exit 0=ok, 2=disponibile)
+```
+
+I dati in `/var/lib/tabloza/` (SF2, password, impostazioni synth) vengono preservati.
 
 ### Requisiti
 
@@ -106,6 +188,7 @@ Nel **pannello web** (sezione Stato):
 - **MIDI in** lampeggia verde quando arrivano note dal Mac
 - **Audio out** lampeggia quando FluidSynth sta effettivamente riproducendo
 - **Test suono** invia un Do direttamente al synth (bypassa RTP-MIDI)
+- **Test jack** verifica l'hardware ALSA direttamente (bypass FluidSynth)
 - Verifica SF2 attivo, volume > 0, badge **Collegato** su rtpmidid
 
 **Test rapidi SSH sul Pi:**
@@ -143,7 +226,7 @@ sudo journalctl -u tabloza-orchestrator -f
 
 ```bash
 sudo tabloza-test          # diagnostica completa
-sudo systemctl restart tabloza-web tabloza-orchestrator rtpmidid
+sudo systemctl restart tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid
 ```
 
 ### Disinstallazione e reinstallazione pulita
@@ -155,8 +238,8 @@ sudo systemctl restart tabloza-web tabloza-orchestrator rtpmidid
 sudo tabloza-uninstall
 
 # Se tabloza-uninstall non esiste ancora, disinstalla manualmente:
-sudo systemctl stop tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
-sudo systemctl disable tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo systemctl stop tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid
+sudo systemctl disable tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid
 sudo rm -f /etc/systemd/system/tabloza-*.service /etc/systemd/system/rtpmidid.service
 sudo rm -rf /opt/tabloza /etc/rtpmidid
 sudo rm -f /etc/avahi/services/tabloza-web.service
@@ -179,17 +262,42 @@ Durante `tabloza-uninstall` puoi scegliere se eliminare anche `/var/lib/tabloza`
 
 ```
 /var/lib/tabloza/
-├── config.json      # SoundFont attivo, volume
+├── config.json      # SF2 attivo, volume (%), fluidsynth (preset, polifonia, effetti…)
 ├── auth.json        # hash password
 ├── secret.key       # secret key Flask
 └── soundfonts/      # libreria .sf2
 ```
 
+Esempio sezione `fluidsynth` in `config.json`:
+
+```json
+{
+  "active_soundfont": "piano.sf2",
+  "volume": 85,
+  "fluidsynth": {
+    "audio_device": "plughw:0,0",
+    "audio_preset": "standard",
+    "polyphony": 256,
+    "reverb": true,
+    "chorus": true,
+    "dynamic_sample_loading": false
+  }
+}
+```
+
 ### Servizi
 
 ```bash
-sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
+sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid
 ```
+
+| Servizio | Ruolo |
+|----------|-------|
+| `tabloza-web` | Pannello Flask |
+| `tabloza-orchestrator` | FluidSynth, routing MIDI, caricamento SF2 |
+| `tabloza-wifi` | Monitor WiFi, hotspot fallback |
+| `tabloza-lan` | Monitor Ethernet, link LAN diretto automatico |
+| `rtpmidid` | Sessione RTP-MIDI di rete |
 
 ### Troubleshooting
 
@@ -198,198 +306,19 @@ Vedi [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 ### Aggiornamento
 
 ```bash
+sudo tabloza-update
+```
+
+Oppure dal pannello web: **Diagnostica → Verifica aggiornamenti**.
+
+Reinstallazione completa (mantiene i dati se non elimini `/var/lib/tabloza`):
+
+```bash
 curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
 ```
 
 ---
 
-## English
-
-### What is Tabloza MidiExpander
-
-Tabloza MidiExpander is a **standalone MIDI synthesizer** built on Raspberry Pi. The device runs **headless** (no screen, no buttons): everything is controlled from a browser (smartphone or PC) via a responsive web interface.
-
-It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Windows) and renders real-time audio using **FluidSynth** and SoundFont (`.sf2`) files, outputting to the Pi's analog audio jack.
-
-> **Physical GPIO MIDI** (DIN port on GPIO 14/15): planned feature, not yet active. See [docs/TODO.md](docs/TODO.md).
-
-### Features
-
-| Feature | Description |
-|---------|-------------|
-| **SF2 synthesis** | FluidSynth with web-managed SoundFont library |
-| **RTP-MIDI** | Discoverable as `tabloza-me.local` (rtpmidid + Avahi) |
-| **Web panel** | Responsive UI in Italian and English |
-| **SF2 upload** | Drag-and-drop with progress bar; auto-activation |
-| **Master volume** | Persists across reboots |
-| **WiFi provisioning** | Automatic hotspot → home network setup |
-| **WiFi monitor** | Auto-reconnect if network drops |
-| **MIDI Reset** | Restart FluidSynth and MIDI routing in one click |
-| **Security** | Password login (default: `tabloza`) |
-
-### Web interface (UI)
-
-Access: **http://tabloza-me.local** (or `http://192.168.4.1` in hotspot mode)
-
-The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Language preference is saved in the browser.
-
-| Section | Purpose |
-|---------|---------|
-| **Status** | mDNS address, IP, network mode, active SF2, MIDI inputs |
-| **MIDI Reset** | Restart rtpmidid + FluidSynth when troubleshooting |
-| **Master Volume** | Slider 0–127, auto-saved |
-| **SoundFont Library** | List, load, delete, upload `.sf2` files |
-| **WiFi** | Scan networks, enter password, save profile |
-| **Security** | Change password |
-
-### Requirements
-
-- Raspberry Pi **4 or 5** (recommended) — Pi 3 limited support
-- **Raspberry Pi OS Lite 64-bit**
-- Terminal access (SSH or local)
-
-### Installation
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
-sudo reboot
-```
-
-### First access
-
-1. Connect to the device network or hotspot `Tabloza-MidiExpander`
-2. Open **http://tabloza-me.local** (or `http://<Pi-IP>`)
-3. Password: `tabloza`
-
-### Wireless RTP-MIDI setup
-
-The Pi advertises an RTP-MIDI session on the network:
-- **Name:** `tabloza-me`
-- **UDP port:** `5004`
-- **mDNS:** `tabloza-me.local`
-
-Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza-test`.
-
-#### macOS / iOS
-
-1. Mac and Pi on the **same WiFi/LAN**
-2. Open **Audio MIDI Setup** → **Window → Show MIDI Studio**
-3. **macOS Sequoia / Tahoe (15+):** **Window → Configure Network Driver** (no longer double-click Network)
-   - **Older macOS:** double-click the **Network** globe icon
-4. Create an **RTP** session (**+** under My Sessions) and enable the checkbox
-5. Under **Directory** find **`tabloza-me`** → **Connect**
-6. If missing: connect manually to host `tabloza-me.local` (or Pi IP) port **5004**
-7. In your DAW: MIDI output to `tabloza-me`
-
-Verify discovery from the Mac:
-```bash
-dns-sd -B _apple-midi._udp
-# or
-dns-sd -L tabloza-me _apple-midi._udp
-```
-
-#### Windows
-
-1. Install [rtpMIDI](https://www.tobias-erichsen.de/software/rtpmidi.html)
-2. (Recommended) Install [Bonjour](https://support.apple.com/kb/DL999) for `.local` discovery
-3. Launch rtpMIDI → find **`tabloza-me`** → **Connect**
-4. Manual connection: host = Pi IP, port = **5004**
-
-#### No sound?
-
-In the **web panel** (Status section):
-- **MIDI in** pulses green when notes arrive from the Mac
-- **Audio out** pulses when FluidSynth is actually playing
-- **Sound test** sends middle C directly to the synth (bypasses RTP-MIDI)
-- Check active SF2, volume > 0, **Connected** badge on rtpmidid
-
-**Quick SSH tests on the Pi:**
-
-```bash
-sudo tabloza-test
-speaker-test -t wav -c 2 -l 1
-pgrep -a fluidsynth
-aconnect -l | grep -E 'fluidsynth|rtpmidid|Connected'
-FS=$(aconnect -i | grep -i fluidsynth | head -1 | awk '{print $2}')
-sudo amidi -p "$FS" -S "90 3C 64" && sleep 0.3 && sudo amidi -p "$FS" -S "80 3C 00"
-sudo journalctl -u tabloza-orchestrator -f
-```
-
-| Web sound test | MIDI in (web) | Likely cause |
-|----------------|---------------|--------------|
-| Heard | No pulse | Mac not sending MIDI or RTP → FluidSynth routing broken → **MIDI Reset** |
-| Silent | — | ALSA / jack / SF2 issue → `speaker-test`, check SF2 |
-| Heard | Pulsing | Audio OK — check Mac/DAW volume and MIDI channel |
-
-- Web panel → **MIDI Reset** after each new Mac connection
-- SSH: `sudo systemctl restart tabloza-orchestrator rtpmidid`
-
-### Useful commands (SSH)
-
-```bash
-sudo tabloza-test          # full diagnostics
-sudo systemctl restart tabloza-web tabloza-orchestrator rtpmidid
-```
-
-### Uninstall and clean reinstall
-
-**If you have a previous version** and want a fresh start:
-
-```bash
-# 1. Uninstall (if command exists)
-sudo tabloza-uninstall
-
-# If tabloza-uninstall is not available yet, remove manually:
-sudo systemctl stop tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
-sudo systemctl disable tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
-sudo rm -f /etc/systemd/system/tabloza-*.service /etc/systemd/system/rtpmidid.service
-sudo rm -rf /opt/tabloza /etc/rtpmidid
-sudo rm -f /etc/avahi/services/tabloza-web.service
-sudo systemctl daemon-reload
-
-# 2. (Optional) Delete saved SF2 and password
-sudo rm -rf /var/lib/tabloza
-
-# 3. Reinstall
-curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
-sudo reboot
-
-# 4. Verify
-sudo tabloza-test
-```
-
-During `tabloza-uninstall` you can choose whether to delete `/var/lib/tabloza` (SF2, password).
-
-### Persistent data
-
-```
-/var/lib/tabloza/
-├── config.json      # active SoundFont, volume
-├── auth.json        # password hash
-├── secret.key       # Flask secret key
-└── soundfonts/      # .sf2 library
-```
-
-### Services
-
-```bash
-sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid
-```
-
-### Troubleshooting
-
-See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
-
-### Update
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/install.sh | sudo bash
-```
-
-Data in `/var/lib/tabloza/` is preserved.
-
----
-
-## License / Licenza
+## Licenza
 
 MIT

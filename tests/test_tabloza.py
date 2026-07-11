@@ -34,7 +34,10 @@ from wifi_utils import connect_wifi_network, parse_nmcli_terse_fields  # noqa: E
 class TestSystemStats(unittest.TestCase):
     @patch("system_stats._read_meminfo_kb")
     @patch("system_stats._process_rss_mb")
-    def test_get_memory_stats(self, mock_rss, mock_mem):
+    @patch("system_stats._read_temperature_c", return_value=52.3)
+    @patch("system_stats._cpu_stats")
+    @patch("system_stats._disk_stats")
+    def test_get_device_stats(self, mock_disk, mock_cpu, _temp, mock_rss, mock_mem):
         mock_mem.return_value = {
             "MemTotal": 4 * 1024 * 1024,
             "MemAvailable": 2 * 1024 * 1024,
@@ -42,6 +45,40 @@ class TestSystemStats(unittest.TestCase):
             "SwapFree": 512 * 1024,
         }
         mock_rss.side_effect = lambda *a, **k: 120 if a[0] == "fluidsynth" else 40
+        mock_cpu.return_value = {"percent": 33.5, "load_1m": 0.42, "cores": 4}
+        mock_disk.return_value = {
+            "disk_total_mb": 32000,
+            "disk_used_mb": 8000,
+            "disk_free_mb": 24000,
+            "disk_used_percent": 25,
+        }
+        from system_stats import get_device_stats
+
+        stats = get_device_stats()
+        self.assertEqual(stats["total_mb"], 4096)
+        self.assertEqual(stats["used_percent"], 50)
+        self.assertEqual(stats["fluidsynth_mb"], 120)
+        self.assertEqual(stats["disk_used_percent"], 25)
+        self.assertEqual(stats["percent"], 33.5)
+        self.assertEqual(stats["temperature_c"], 52.3)
+
+    @patch("system_stats._read_meminfo_kb")
+    @patch("system_stats._process_rss_mb")
+    @patch("system_stats._disk_stats")
+    def test_get_memory_stats(self, mock_disk, mock_rss, mock_mem):
+        mock_mem.return_value = {
+            "MemTotal": 4 * 1024 * 1024,
+            "MemAvailable": 2 * 1024 * 1024,
+            "SwapTotal": 1024 * 1024,
+            "SwapFree": 512 * 1024,
+        }
+        mock_rss.side_effect = lambda *a, **k: 120 if a[0] == "fluidsynth" else 40
+        mock_disk.return_value = {
+            "disk_total_mb": 32000,
+            "disk_used_mb": 8000,
+            "disk_free_mb": 24000,
+            "disk_used_percent": 25,
+        }
         from system_stats import get_memory_stats
 
         stats = get_memory_stats()
@@ -51,6 +88,7 @@ class TestSystemStats(unittest.TestCase):
         self.assertEqual(stats["used_percent"], 50)
         self.assertEqual(stats["sf2_max_upload_mb"], 2048)
         self.assertEqual(stats["fluidsynth_mb"], 120)
+        self.assertEqual(stats["disk_free_mb"], 24000)
 
 
 class TestSynthConfig(unittest.TestCase):
@@ -378,6 +416,38 @@ class TestEventLog(unittest.TestCase):
             lines = el.read_events()
             self.assertEqual(len(lines), 1)
             self.assertIn("hello", lines[0])
+
+
+class TestNetworkIps(unittest.TestCase):
+    @patch("network_utils._eth_ipv4_addresses")
+    def test_get_usable_ipv4_skips_link_local(self, mock_addrs):
+        import network_utils as nu
+
+        mock_addrs.return_value = ["169.254.1.2", "192.168.178.143"]
+        self.assertEqual(nu.get_usable_ipv4("eth0"), "192.168.178.143")
+
+    @patch("network_utils.get_usable_ipv4")
+    @patch("network_utils.get_primary_ethernet_device")
+    @patch("wifi_utils._wlan_device_present", return_value=True)
+    @patch("wifi_utils._wlan_state", return_value="connected")
+    @patch("wifi_utils._active_wifi_connection", return_value="MyHome")
+    @patch("wifi_utils._eth_connected", return_value=True)
+    @patch("network_utils.is_lan_direct_active", return_value=False)
+    def test_get_network_status_dual_ips(
+        self, _lan, _eth, _wifi_name, _wlan, _wlan_dev, mock_eth_dev, mock_ipv4,
+    ):
+        import wifi_utils as wu
+
+        mock_eth_dev.return_value = "eth0"
+
+        def ipv4_side(device):
+            return "192.168.178.143" if device == "eth0" else "192.168.178.50"
+
+        mock_ipv4.side_effect = ipv4_side
+        status = wu.get_network_status()
+        self.assertEqual(status["network_mode"], "lan_wifi")
+        self.assertEqual(status["eth_ip"], "192.168.178.143")
+        self.assertEqual(status["wifi_ip"], "192.168.178.50")
 
 
 if __name__ == "__main__":
