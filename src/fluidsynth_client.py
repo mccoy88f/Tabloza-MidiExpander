@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import shlex
 import time
 from pathlib import Path
 
@@ -309,7 +310,7 @@ def load_soundfont(
     wait_sec = load_timeout_for(path)
     log_offset = _log_file_size()
     log.info("Caricamento SF2 %s (verifica fino a %.0fs)", path.name, wait_sec)
-    ok, detail = send_command(f"load {path} reset")
+    ok, detail = send_command(f"load {shlex.quote(str(path))} reset")
     if not ok:
         return ok, detail
     if should_cancel and should_cancel():

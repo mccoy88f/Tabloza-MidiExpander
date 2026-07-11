@@ -376,6 +376,26 @@ class TestFluidSynthClient(unittest.TestCase):
             sf.unlink(missing_ok=True)
 
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
+    @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
+    @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
+    @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.time.sleep")
+    def test_load_soundfont_quotes_path_with_spaces(self, _sleep, mock_send, _wait, _fonts, _match, _unload):
+        from fluidsynth_client import load_soundfont
+
+        sf = Path("/tmp/SD1000 Sound Family Map.sf2")
+        sf.write_bytes(b"x")
+        try:
+            ok, detail = load_soundfont(sf, lambda: True)
+            self.assertTrue(ok)
+            load_cmd = next(c.args[0] for c in mock_send.call_args_list if c.args[0].startswith("load "))
+            self.assertIn("SD1000 Sound Family Map.sf2", load_cmd)
+            self.assertTrue("'" in load_cmd or '"' in load_cmd)
+        finally:
+            sf.unlink(missing_ok=True)
+
+    @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=False)
     @patch("fluidsynth_client.query_loaded_fonts", return_value=[])
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
