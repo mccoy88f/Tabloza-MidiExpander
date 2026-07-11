@@ -186,6 +186,14 @@
           <p id="wifi-msg" class="msg hidden"></p>
           <div id="wifi-list" class="wifi-list"></div>
         </div>
+
+        <div id="block-wifi-power" class="network-block hidden">
+          <p id="hint-wifi-power" class="muted network-hint"></p>
+          <div class="network-mode-actions">
+            <button type="button" id="btn-wifi-disable" class="btn btn-secondary" data-i18n="disableWifi">Disattiva WiFi</button>
+            <button type="button" id="btn-wifi-enable" class="btn btn-secondary hidden" data-i18n="enableWifi">Attiva WiFi</button>
+          </div>
+        </div>
       </section>
 
       <!-- Diagnostica -->
@@ -224,7 +232,9 @@
           </div>
           <div class="device-actions">
             <button type="button" id="btn-check-update" class="btn btn-secondary" data-i18n="checkUpdates">Verifica aggiornamenti</button>
+            <button type="button" id="btn-device-reboot" class="btn btn-secondary btn-danger" data-i18n="rebootDevice">Riavvia dispositivo</button>
             <p id="update-msg" class="msg hidden"></p>
+            <p id="reboot-msg" class="msg hidden"></p>
           </div>
           <div class="diagnostics-console">
             <div class="console-toolbar">

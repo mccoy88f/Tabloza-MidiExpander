@@ -46,8 +46,8 @@ The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Lan
 | **Audio output** | ALSA playback device list; switch output (jack, USB, HDMI…) with synth restart |
 | **Synth engine** | Buffer preset, polyphony, reverb, chorus, dynamic loading; *Stop notes* |
 | **SoundFont Library** | List, load, delete, upload `.sf2` files |
-| **Network** | Active mode badge; direct LAN, hotspot and WiFi client (shown based on state) |
-| **Diagnostics** | System metrics (RAM, CPU, disk, temperature), update check, event console |
+| **Network** | Active mode badge; direct LAN, hotspot, WiFi client; **disable/enable Wi‑Fi** |
+| **Diagnostics** | System metrics (RAM, CPU, disk, temperature), update check, **device reboot**, event console |
 | **Security** | Change password (collapsible section) |
 
 ### Network modes
@@ -69,7 +69,7 @@ The panel detects connectivity automatically and adapts available controls.
 
 **Hotspot:** starts automatically when there is no Ethernet or configured WiFi; can be started/stopped manually when not on router LAN. With a router cable connected, hotspot remains optional (handy for phone setup).
 
-**WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed).
+**WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed). Use **Network → Disable Wi‑Fi** to turn off the radio (handy with Ethernet or direct LAN to avoid duplicate paths).
 
 ### MIDI inputs
 
@@ -161,10 +161,15 @@ sudo reboot
 
 ### Wireless RTP-MIDI setup
 
-The Pi advertises an RTP-MIDI session on the network:
+The Pi advertises **one** RTP-MIDI session on the network:
 - **Name:** `tabloza-me`
 - **UDP port:** `5004`
 - **mDNS:** `tabloza-me.local`
+
+> **Single announcement and dual interface (Ethernet + Wi‑Fi)**  
+> macOS Audio MIDI Setup shows **one** entry `tabloza-me` even when the Pi has both cable and Wi‑Fi up. mDNS does not label “Wi‑Fi” vs “Ethernet” in the name — it is for **discovery**, not for showing which path an active session uses.  
+> An RTP-MIDI session uses **one IP path** (e.g. Wi‑Fi IP *or* Ethernet IP). If you connect over Wi‑Fi and then disable Wi‑Fi on the Pi, MIDI **stops** even if Ethernet is still plugged in — you must **reconnect**, ideally via **manual connect** to the correct IP (below).  
+> **Status** shows per-interface IPs, e.g. `192.168.5.1 (Ethernet) · 192.168.178.50 (Wi‑Fi)`. For cable-only use: disable Wi‑Fi in the panel (**Network → Disable Wi‑Fi**) and connect manually to `192.168.5.1` port **5004**.
 
 Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza-test`.
 
@@ -176,7 +181,7 @@ Prerequisites on the Pi: upload a `.sf2` via the web panel and run `sudo tabloza
    - **Older macOS:** double-click the **Network** globe icon
 4. Create an **RTP** session (**+** under My Sessions) and enable the checkbox
 5. Under **Directory** find **`tabloza-me`** → **Connect**
-6. If missing: connect manually to host `tabloza-me.local` (or Pi IP) port **5004**
+6. If missing: connect manually to host = **Pi IP** (the one for the network you use — see Status) port **5004** — avoid `tabloza-me.local` if it resolves to the wrong IP with two interfaces up
 7. In your DAW: MIDI output to `tabloza-me`
 
 Verify discovery from the Mac:

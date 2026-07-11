@@ -121,7 +121,7 @@ input[type="text"] {
 .msg.ok { color: var(--success); }
 .msg.err { color: var(--danger); }
 
-.device-actions { margin-top: 0.85rem; }
+.device-actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .device-actions .msg { margin-top: 0.5rem; }
 .diagnostics-console {
   margin-top: 1rem;

@@ -28,7 +28,7 @@ from audio_utils import (  # noqa: E402
 )
 from event_log import clear_events, log_event, read_events  # noqa: E402
 from soundfont_config import startup_soundfont_name  # noqa: E402
-from wifi_utils import connect_wifi_network, parse_nmcli_terse_fields  # noqa: E402
+from wifi_utils import connect_wifi_network, disable_wifi, enable_wifi, parse_nmcli_terse_fields  # noqa: E402
 
 
 class TestSystemStats(unittest.TestCase):
@@ -255,6 +255,36 @@ class TestWifiConnect(unittest.TestCase):
         msg = self.wu._friendly_connect_error("Error: Timeout expired (45 seconds)")
         self.assertIn("Timeout", msg)
         self.assertIn("90s", msg)
+
+
+class TestWifiPower(unittest.TestCase):
+    @patch("wifi_utils._wlan_device_present", return_value=True)
+    @patch("wifi_utils._active_wifi_connection", return_value="tabloza-wifi-Home")
+    @patch("wifi_utils._run")
+    def test_disable_wifi(self, mock_run, _conn, _wlan):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = disable_wifi()
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+        radio_off = any(
+            call.args[0][:4] == ["nmcli", "radio", "wifi", "off"]
+            for call in mock_run.call_args_list
+        )
+        self.assertTrue(radio_off)
+
+    @patch("wifi_utils._wlan_device_present", return_value=False)
+    def test_disable_wifi_no_wlan(self, _wlan):
+        ok, err = disable_wifi()
+        self.assertFalse(ok)
+        self.assertIn("wlan0", err or "")
+
+    @patch("wifi_utils._wlan_device_present", return_value=True)
+    @patch("wifi_utils._run")
+    def test_enable_wifi(self, mock_run, _wlan):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        ok, err = enable_wifi()
+        self.assertTrue(ok)
+        mock_run.assert_called_with(["nmcli", "radio", "wifi", "on"], timeout=10)
 
 
 class TestUpdateUtils(unittest.TestCase):

@@ -55,6 +55,8 @@ from update_utils import apply_update_if_needed, check_for_update, read_update_s
 from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
 from wifi_utils import (  # noqa: E402
     connect_wifi_network,
+    disable_wifi,
+    enable_wifi,
     get_network_status,
     scan_wifi_networks,
     start_hotspot,
@@ -504,6 +506,40 @@ def api_wifi_hotspot_stop():
     if not ok:
         return jsonify({"error": err or "Spegnimento hotspot fallito"}), 500
     return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/wifi/disable", methods=["POST"])
+@require_auth
+def api_wifi_disable():
+    ok, err = disable_wifi()
+    if not ok:
+        return jsonify({"error": err or "Disattivazione WiFi fallita"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/wifi/enable", methods=["POST"])
+@require_auth
+def api_wifi_enable():
+    ok, err = enable_wifi()
+    if not ok:
+        return jsonify({"error": err or "Attivazione WiFi fallita"}), 500
+    return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/device/reboot", methods=["POST"])
+@require_auth
+def api_device_reboot():
+    log_event("system", "Riavvio dispositivo richiesto dal pannello web")
+    try:
+        subprocess.Popen(
+            ["/sbin/reboot"],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        return jsonify({"error": f"Riavvio fallito: {exc}"}), 500
+    return jsonify({"ok": True, "message": "Riavvio in corso…"})
 
 
 @app.route("/api/network/lan-direct/start", methods=["POST"])

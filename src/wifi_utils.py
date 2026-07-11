@@ -402,6 +402,8 @@ def get_network_status() -> dict:
         "wifi_profile": wifi_conn,
         "eth_ip": eth_ip,
         "wifi_ip": wifi_ip,
+        "wifi_enabled": _wifi_radio_enabled(),
+        "wlan_present": _wlan_device_present(),
     }
 
 
@@ -426,6 +428,52 @@ def start_hotspot() -> tuple[bool, str | None]:
             log_event("wifi", f"Hotspot fallito: {err}", "error")
             return False, err
         log_event("wifi", "Hotspot Tabloza-MidiExpander attivo")
+        return True, None
+
+
+def _wifi_radio_enabled() -> bool:
+    result = _run(["nmcli", "-t", "-f", "WIFI", "radio"], timeout=5)
+    return result.stdout.strip().lower() in ("enabled", "yes", "on")
+
+
+def disable_wifi() -> tuple[bool, str | None]:
+    """Disconnect WiFi/hotspot and turn off the wlan radio."""
+    if not _wlan_device_present():
+        return False, f"Interfaccia {WLAN_IFACE} non disponibile"
+
+    with _WifiConnectLock():
+        log_event("wifi", "Disattivazione WiFi…")
+        active = _active_wifi_connection()
+        if active:
+            _run([
+                "nmcli", "connection", "modify", active,
+                "connection.autoconnect", "no",
+            ], timeout=10)
+            _run(["nmcli", "connection", "down", active], timeout=15)
+        _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=15)
+        _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
+        result = _run(["nmcli", "radio", "wifi", "off"], timeout=10)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "spegnimento WiFi fallito").strip()
+            log_event("wifi", f"Disattivazione WiFi fallita: {err}", "error")
+            return False, err
+        log_event("wifi", "WiFi disattivato")
+        return True, None
+
+
+def enable_wifi() -> tuple[bool, str | None]:
+    """Turn the wlan radio back on (ready for scan/connect or hotspot)."""
+    if not _wlan_device_present():
+        return False, f"Interfaccia {WLAN_IFACE} non disponibile"
+
+    with _WifiConnectLock():
+        log_event("wifi", "Attivazione radio WiFi…")
+        result = _run(["nmcli", "radio", "wifi", "on"], timeout=10)
+        if result.returncode != 0:
+            err = (result.stderr or result.stdout or "attivazione WiFi fallita").strip()
+            log_event("wifi", f"Attivazione WiFi fallita: {err}", "error")
+            return False, err
+        log_event("wifi", "Radio WiFi attiva")
         return True, None
 
 

@@ -221,13 +221,17 @@ function renderNetworkSection(s) {
   const blockLan = document.getElementById("block-lan-direct");
   const blockHotspot = document.getElementById("block-hotspot");
   const blockWifi = document.getElementById("block-wifi-client");
+  const blockWifiPower = document.getElementById("block-wifi-power");
   const btnLanStart = document.getElementById("btn-lan-direct-start");
   const btnLanStop = document.getElementById("btn-lan-direct-stop");
   const btnHotspotStart = document.getElementById("btn-hotspot-start");
   const btnHotspotStop = document.getElementById("btn-hotspot-stop");
+  const btnWifiDisable = document.getElementById("btn-wifi-disable");
+  const btnWifiEnable = document.getElementById("btn-wifi-enable");
   const hintLan = document.getElementById("hint-lan-direct");
   const hintHotspot = document.getElementById("hint-hotspot");
   const hintWifi = document.getElementById("hint-wifi");
+  const hintWifiPower = document.getElementById("hint-wifi-power");
 
   if (!badge) return;
 
@@ -238,6 +242,8 @@ function renderNetworkSection(s) {
   const hotspot = !!(net.hotspot_active || mode === "hotspot");
   const ethRouter = !!(net.eth_on_router || mode === "ethernet" || mode === "lan_wifi");
   const wifiClient = !!(net.wifi_client_active || mode === "client" || mode === "lan_wifi");
+  const wifiEnabled = net.wifi_enabled !== false;
+  const wlanPresent = !!net.wlan_present;
 
   // Link LAN diretto: nascosto se Ethernet al router; altrimenti start O stop
   if (blockLan) {
@@ -262,9 +268,9 @@ function renderNetworkSection(s) {
     }
   }
 
-  // WiFi client: nascosto se hotspot o link LAN attivi (wlan occupato)
+  // WiFi client: nascosto se hotspot, link LAN attivi o radio WiFi spenta
   if (blockWifi) {
-    const showWifi = !hotspot && !lanDirect;
+    const showWifi = wifiEnabled && !hotspot && !lanDirect;
     blockWifi.classList.toggle("hidden", !showWifi);
     if (hintWifi) {
       if (ethRouter) {
@@ -273,6 +279,21 @@ function renderNetworkSection(s) {
         hintWifi.textContent = t("wifiConnectedHint", { name: net.wifi_connection });
       } else {
         hintWifi.textContent = t("wifiScanHint");
+      }
+    }
+  }
+
+  if (blockWifiPower) {
+    blockWifiPower.classList.toggle("hidden", !wlanPresent);
+    btnWifiDisable?.classList.toggle("hidden", !wifiEnabled);
+    btnWifiEnable?.classList.toggle("hidden", wifiEnabled);
+    if (hintWifiPower) {
+      if (!wifiEnabled) {
+        hintWifiPower.textContent = t("wifiDisabledHint");
+      } else if (lanDirect || ethRouter) {
+        hintWifiPower.textContent = lanDirect ? t("wifiDisableLanHint") : t("wifiDisableHint");
+      } else {
+        hintWifiPower.textContent = t("wifiDisableHint");
       }
     }
   }
@@ -379,6 +400,28 @@ document.getElementById("btn-check-update")?.addEventListener("click", async () 
     msg.textContent = e.message || t("updateFailed");
     msg.classList.add("err");
   } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-device-reboot")?.addEventListener("click", async () => {
+  if (!window.confirm(t("rebootConfirm"))) return;
+
+  const btn = document.getElementById("btn-device-reboot");
+  const msg = document.getElementById("reboot-msg");
+  btn.disabled = true;
+  msg.textContent = t("rebootWorking");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/device/reboot", { method: "POST" });
+    msg.textContent = t("rebootStarted");
+    msg.classList.add("ok");
+    stopStatusRefresh();
+    setTimeout(() => pollAfterUpdate(45), 5000);
+  } catch (err) {
+    msg.textContent = err.message || t("rebootFailed");
+    msg.classList.add("err");
     btn.disabled = false;
   }
 });
@@ -875,6 +918,46 @@ document.getElementById("btn-hotspot-stop")?.addEventListener("click", async () 
   try {
     await api("/api/wifi/hotspot/stop", { method: "POST" });
     msg.textContent = t("hotspotStopped");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
+document.getElementById("btn-wifi-disable")?.addEventListener("click", async () => {
+  const net = (await api("/api/status").catch(() => ({}))).network || {};
+  const hasEth = !!(net.ethernet_connected || net.eth_ip);
+  if (!hasEth && !window.confirm(t("wifiDisableConfirm"))) return;
+
+  const msg = document.getElementById("wifi-msg");
+  msg.textContent = t("wifiDisabling");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/wifi/disable", { method: "POST" });
+    msg.textContent = t("wifiDisabled");
+    msg.classList.add("ok");
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+    refreshConsole();
+  }
+});
+
+document.getElementById("btn-wifi-enable")?.addEventListener("click", async () => {
+  const msg = document.getElementById("wifi-msg");
+  msg.textContent = t("wifiEnabling");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/wifi/enable", { method: "POST" });
+    msg.textContent = t("wifiEnabled");
     msg.classList.add("ok");
     refreshStatus();
     refreshConsole();
