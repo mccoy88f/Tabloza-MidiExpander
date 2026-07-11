@@ -212,6 +212,32 @@ card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
         self.assertEqual(msg, "")
 
 
+class TestFluidSynthClient(unittest.TestCase):
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    @patch("fluidsynth_client.time.sleep")
+    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send):
+        from fluidsynth_client import load_soundfont
+
+        sf = Path("/tmp/tabloza-test-cancel.sf2")
+        sf.write_bytes(b"x")
+        try:
+            calls = {"n": 0}
+
+            def should_cancel():
+                calls["n"] += 1
+                return calls["n"] > 1
+
+            ok, detail = load_soundfont(
+                sf,
+                lambda: True,
+                should_cancel=should_cancel,
+            )
+            self.assertFalse(ok)
+            self.assertEqual(detail, "cancelled")
+        finally:
+            sf.unlink(missing_ok=True)
+
+
 class TestStartupSoundfont(unittest.TestCase):
     def test_coerce_default_soundfont(self):
         self.assertEqual(coerce_default_soundfont("a.sf2"), "a.sf2")

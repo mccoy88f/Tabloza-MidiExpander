@@ -1,6 +1,7 @@
 const API = "";
 const STATUS_REFRESH_MS = 2000;
 let lastSf2StateKey = "";
+let lastSf2Loading = false;
 
 async function api(path, opts = {}) {
   const res = await fetch(API + path, {
@@ -543,11 +544,11 @@ async function refreshSoundfonts() {
     error,
   });
   lastSf2StateKey = [loading, loaded, active, error].join("|");
+  lastSf2Loading = !!loading;
 
   const ejectBtn = document.getElementById("btn-sf2-eject");
   if (ejectBtn) {
     ejectBtn.classList.toggle("hidden", !(loaded || loading || active));
-    ejectBtn.disabled = !!loading;
   }
 
   const list = document.getElementById("sf2-list");
@@ -621,7 +622,9 @@ async function refreshSoundfonts() {
 }
 
 document.getElementById("btn-sf2-eject")?.addEventListener("click", async () => {
-  if (!confirm(t("ejectSf2Confirm"))) return;
+  const loading = lastSf2Loading;
+  const confirmMsg = loading ? t("ejectSf2ConfirmLoading") : t("ejectSf2Confirm");
+  if (!confirm(confirmMsg)) return;
   const btn = document.getElementById("btn-sf2-eject");
   const msg = document.getElementById("sf2-eject-msg");
   btn.disabled = true;

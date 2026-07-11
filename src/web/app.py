@@ -27,7 +27,7 @@ from audio_utils import (  # noqa: E402
     sample_rate_for_device,
 )
 from soundfont_config import resolve_default_soundfont, set_default_soundfont  # noqa: E402
-from fluidsynth_client import read_soundfont_state  # noqa: E402
+from fluidsynth_client import read_soundfont_state, request_cancel_soundfont_load  # noqa: E402
 from midi_utils import (
     get_midi_status,
     trigger_orchestrator_apply_synth_settings,
@@ -348,14 +348,24 @@ def api_eject_soundfont():
     sf_state = read_soundfont_state()
     loaded = sf_state.get("loaded", "")
     active = config.get("active_soundfont", "")
-    if not loaded and not active and not sf_state.get("loading"):
+    loading = bool(sf_state.get("loading"))
+    if not loaded and not active and not loading:
         return jsonify({"error": "Nessun SoundFont da espellere"}), 400
-    ejected = loaded or active
+    ejected = loaded or active or sf_state.get("selected", "")
+    if loading:
+        request_cancel_soundfont_load()
     config["active_soundfont"] = ""
     save_config(config)
-    log_event("web", f"SoundFont espulso: {ejected or '—'}")
+    log_event(
+        "web",
+        f"SoundFont espulso: {ejected or '—'}" + (" (caricamento interrotto)" if loading else ""),
+    )
     _reload_orchestrator()
-    return jsonify({"ok": True, "ejected": ejected})
+    return jsonify({
+        "ok": True,
+        "ejected": ejected,
+        "cancelled_load": loading,
+    })
 
 
 @app.route("/api/soundfonts/default", methods=["POST", "DELETE"])

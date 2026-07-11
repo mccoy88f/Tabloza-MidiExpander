@@ -8,6 +8,7 @@ from pathlib import Path
 log = logging.getLogger("tabloza.fluidsynth")
 
 STATE_FILE = Path("/run/tabloza/soundfont_state.json")
+CANCEL_LOAD_FLAG = Path("/run/tabloza/cancel_soundfont_load")
 _shell_stdin = None
 
 
@@ -44,6 +45,19 @@ def clear_soundfont_state() -> None:
     write_soundfont_state(**_default_state())
 
 
+def request_cancel_soundfont_load() -> None:
+    CANCEL_LOAD_FLAG.parent.mkdir(parents=True, exist_ok=True)
+    CANCEL_LOAD_FLAG.write_text("1")
+
+
+def cancel_soundfont_load_requested() -> bool:
+    return CANCEL_LOAD_FLAG.is_file()
+
+
+def clear_cancel_soundfont_load() -> None:
+    CANCEL_LOAD_FLAG.unlink(missing_ok=True)
+
+
 def bind_shell(stdin) -> None:
     global _shell_stdin
     _shell_stdin = stdin
@@ -72,9 +86,15 @@ def load_timeout_for(path: Path) -> float:
     return min(180.0, max(15.0, 10.0 + size_mb * 0.8))
 
 
-def load_soundfont(path: Path, process_alive) -> tuple[bool, str]:
+def load_soundfont(
+    path: Path,
+    process_alive,
+    should_cancel=None,
+) -> tuple[bool, str]:
     if not path.is_file():
         return False, f"File non trovato: {path}"
+    if should_cancel and should_cancel():
+        return False, "cancelled"
     try:
         size_mb = path.stat().st_size / (1024 * 1024)
     except OSError:
@@ -84,13 +104,22 @@ def load_soundfont(path: Path, process_alive) -> tuple[bool, str]:
     ok, detail = send_command(f"load {path} reset")
     if not ok:
         return ok, detail
+    if should_cancel and should_cancel():
+        send_command("reset")
+        return False, "cancelled"
     settle = min(wait_sec, max(8.0, size_mb * 0.15))
     log.info("Attesa stabilizzazione SF2 %.0fs", settle)
     deadline = time.time() + settle
     while time.time() < deadline:
+        if should_cancel and should_cancel():
+            send_command("reset")
+            return False, "cancelled"
         if not process_alive():
             return False, "FluidSynth terminato durante il caricamento SF2"
-        time.sleep(1.0)
+        time.sleep(0.25)
+    if should_cancel and should_cancel():
+        send_command("reset")
+        return False, "cancelled"
     if not process_alive():
         return False, "FluidSynth terminato dopo il caricamento SF2"
     return True, "loaded"

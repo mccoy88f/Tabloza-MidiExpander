@@ -21,6 +21,8 @@ from activity_status import touch_midi_activity
 from fluidsynth_client import (
     apply_runtime_synth_settings,
     bind_shell,
+    cancel_soundfont_load_requested,
+    clear_cancel_soundfont_load,
     clear_soundfont_state,
     load_soundfont,
     load_timeout_for,
@@ -337,6 +339,21 @@ def _process_alive() -> bool:
     return fluidsynth_engine_running()
 
 
+def _eject_soundfont_state() -> bool:
+    """Unload SF2 and clear loading state (also used after cancel)."""
+    ok, detail = reset_synth(_process_alive)
+    write_soundfont_state(
+        selected="", loaded="", loading=False, error=None, load_started_at=None,
+    )
+    if ok:
+        log.info("SoundFont espulso (reset synth)")
+        log_event("orchestrator", "SoundFont espulso")
+        return True
+    write_soundfont_state(loading=False, error=detail)
+    log.error("Espulsione SF2 fallita: %s", detail)
+    return False
+
+
 def apply_soundfont_from_config() -> bool:
     """Carica o scarica il SoundFont indicato in config (non riavvia FluidSynth)."""
     config = load_config()
@@ -344,28 +361,36 @@ def apply_soundfont_from_config() -> bool:
 
     if not fluidsynth_engine_running():
         log.warning("Richiesto caricamento SF2 ma FluidSynth non è attivo")
+        clear_cancel_soundfont_load()
         return False
     if not shell_bound():
         log.warning("Shell FluidSynth non collegata")
+        clear_cancel_soundfont_load()
         return False
 
     with soundfont_load_lock:
+        if cancel_soundfont_load_requested():
+            clear_cancel_soundfont_load()
+            return _eject_soundfont_state()
+
         write_soundfont_state(
             selected=selected, loaded="", loading=True, error=None,
             load_started_at=time.time(),
         )
         if not selected:
-            ok, detail = reset_synth(_process_alive)
-            if ok:
-                write_soundfont_state(loaded="", loading=False, error=None)
-                log.info("SoundFont scaricato (reset synth)")
-                return True
-            write_soundfont_state(loaded="", loading=False, error=detail)
-            log.error("Reset synth fallito: %s", detail)
-            return False
+            return _eject_soundfont_state()
 
         path = SOUNDFONTS_DIR / selected
-        ok, detail = load_soundfont(path, _process_alive)
+        ok, detail = load_soundfont(
+            path,
+            _process_alive,
+            should_cancel=cancel_soundfont_load_requested,
+        )
+        if not ok and detail == "cancelled":
+            clear_cancel_soundfont_load()
+            log.info("Caricamento SF2 annullato: %s", selected)
+            log_event("orchestrator", f"Caricamento SF2 annullato: {selected}")
+            return _eject_soundfont_state()
         if ok:
             write_soundfont_state(loaded=selected, loading=False, error=None)
             log.info("SoundFont caricato: %s", selected)
