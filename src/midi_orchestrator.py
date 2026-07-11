@@ -50,6 +50,7 @@ RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
 APPLY_SYNTH_SETTINGS_FLAG = Path("/run/tabloza/apply_synth_settings")
 STOP_SYNTH_NOTES_FLAG = Path("/run/tabloza/synth_stop_notes")
 FLUID_STARTUP_TIMEOUT = 35.0
+FLUID_RESTART_BACKOFF_SEC = 20.0
 ROUTING_INTERVAL = 5
 
 logging.basicConfig(
@@ -62,6 +63,7 @@ fluidsynth_proc: subprocess.Popen | None = None
 fluidsynth_log_fd = None
 shutdown = False
 reload_fluidsynth_pending = False
+fluidsynth_restart_after = 0.0
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
 soundfont_load_lock = threading.Lock()
@@ -400,7 +402,14 @@ def schedule_startup_soundfont():
 
 
 def start_fluidsynth(config: dict) -> bool:
-    global fluidsynth_proc
+    global fluidsynth_proc, fluidsynth_restart_after
+    from audio_utils import apply_audio_fallback_if_needed
+
+    config, fallback_used, fallback_msg = apply_audio_fallback_if_needed(config)
+    if fallback_used:
+        log.warning(fallback_msg)
+        log_event("orchestrator", fallback_msg, "error")
+
     _ensure_alsa_seq()
     stop_foreign_fluidsynth()
     stop_fluidsynth()
@@ -416,6 +425,7 @@ def start_fluidsynth(config: dict) -> bool:
         for line in _tail_fluidsynth_log():
             log.error("fluidsynth: %s", line)
         _reap_fluidsynth()
+        fluidsynth_restart_after = time.time() + FLUID_RESTART_BACKOFF_SEC
         return False
     if status == "loading":
         log.warning("FluidSynth avviato ma porta MIDI non ancora pronta")
@@ -441,6 +451,7 @@ def start_fluidsynth(config: dict) -> bool:
     if not ok:
         log.warning("Impostazioni synth runtime non applicate: %s", detail)
     log.info("FluidSynth avviato — seleziona e carica un SoundFont dal pannello web")
+    fluidsynth_restart_after = 0.0
     return True
 
 
@@ -565,6 +576,9 @@ def main():
     while not shutdown:
         _process_pending_fluidsynth_reload()
         if fluidsynth_proc is None or fluidsynth_proc.poll() is not None:
+            if time.time() < fluidsynth_restart_after:
+                time.sleep(ROUTING_INTERVAL)
+                continue
             if fluidsynth_proc and fluidsynth_proc.poll() is not None:
                 code = fluidsynth_proc.returncode
                 log.warning("FluidSynth terminato (exit %s), riavvio...", code)

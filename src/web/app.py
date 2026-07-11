@@ -23,6 +23,7 @@ from audio_utils import (  # noqa: E402
     device_label,
     list_playback_devices,
     play_stereo_tone,
+    probe_playback_device,
     resolve_audio_device,
     sample_rate_for_device,
 )
@@ -426,7 +427,10 @@ def api_audio_devices():
     current = resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0"))
     devices = list_playback_devices()
     current_label = device_label(current, devices)
-    if current and current not in {d["id"] for d in devices}:
+    current_dev = next((d for d in devices if d["id"] == current), None)
+    if current_dev and not current_dev.get("openable", True):
+        current_label = f"{current_label} (non disponibile)"
+    elif current and current not in {d["id"] for d in devices}:
         current_label = f"{current} (non rilevato)"
     return jsonify({
         "devices": devices,
@@ -446,8 +450,16 @@ def api_audio_select():
         return jsonify({"error": "Dispositivo non valido"}), 400
 
     devices = list_playback_devices()
-    if devices and device not in {d["id"] for d in devices}:
+    match = next((d for d in devices if d["id"] == device), None)
+    if devices and not match:
         return jsonify({"error": "Dispositivo non trovato"}), 404
+    openable, probe_err = probe_playback_device(device)
+    if not openable:
+        hint = "Collega un monitor/TV HDMI o scegli il jack integrato."
+        detail = probe_err or "dispositivo non apribile"
+        return jsonify({
+            "error": f"Uscita audio non disponibile ({detail}). {hint}",
+        }), 400
     if not audio_device_available(device):
         return jsonify({"error": "Uscita audio non disponibile"}), 400
 

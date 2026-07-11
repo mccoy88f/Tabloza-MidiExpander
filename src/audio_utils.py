@@ -11,6 +11,7 @@ log = logging.getLogger("tabloza.audio")
 
 PREFERRED_MIXER_CONTROLS = ("PCM", "Headphone", "HP", "Master", "Digital", "Playback")
 AUDIO_DEVICE_ID_RE = re.compile(r"^(?:plug)?hw:(\d+),(\d+)$")
+FALLBACK_AUDIO_DEVICE = "plughw:0,0"
 
 
 def card_from_audio_device(device: str) -> int:
@@ -78,13 +79,16 @@ def list_playback_devices() -> list[dict]:
     for card_i, name in enumerate(cards):
         dev_i = 0
         device_id = alsa_device_for_card(card_i, dev_i, name)
+        sample_rate = sample_rate_for_device(device_id)
+        openable, _ = probe_playback_device(device_id, sample_rate)
         devices.append({
             "card": card_i,
             "device": dev_i,
             "id": device_id,
             "name": name.strip(),
             "label": f"{name.strip()} (card {card_i})",
-            "sample_rate": sample_rate_for_device(device_id),
+            "sample_rate": sample_rate,
+            "openable": openable,
         })
     return devices
 
@@ -96,15 +100,47 @@ def device_label(device_id: str, devices: list[dict] | None = None) -> str:
     return device_id
 
 
+def probe_playback_device(device: str, sample_rate: int | None = None) -> tuple[bool, str | None]:
+    """True if ALSA can open the playback PCM (HDMI without a sink often fails here)."""
+    resolved = resolve_audio_device(device)
+    rate = sample_rate if sample_rate is not None else sample_rate_for_device(resolved)
+    try:
+        pcm = _open_playback_pcm(resolved, rate)
+        del pcm
+        return True, None
+    except alsaaudio.ALSAAudioError as exc:
+        return False, str(exc)
+
+
 def audio_device_available(device: str) -> bool:
-    match = AUDIO_DEVICE_ID_RE.match(device.strip())
-    if not match:
-        return False
-    card, dev = match.groups()
-    for d in list_playback_devices():
-        if d["card"] == int(card) and d["device"] == int(dev):
-            return True
-    return False
+    ok, _ = probe_playback_device(device)
+    return ok
+
+
+def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
+    """Use jack/built-in output when the configured device cannot be opened."""
+    from synth_config import merge_fluidsynth_config
+
+    fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
+    device = resolve_audio_device(fs_cfg.get("audio_device", FALLBACK_AUDIO_DEVICE))
+    if probe_playback_device(device)[0]:
+        return config, False, ""
+
+    fallback = FALLBACK_AUDIO_DEVICE
+    if device == fallback:
+        return config, False, f"Uscita {device} non apribile"
+
+    log.warning("Uscita %s non apribile — fallback %s", device, fallback)
+    updated = dict(config)
+    updated["fluidsynth"] = {
+        **fs_cfg,
+        "audio_device": fallback,
+        "alsa_card": 0,
+        "sample_rate": sample_rate_for_device(fallback),
+    }
+    from tabloza_common import save_config
+    save_config(updated)
+    return updated, True, f"Uscita {device} non disponibile — ripristino {fallback}"
 
 
 def _open_playback_pcm(device: str, sample_rate: int, channels: int = 2) -> alsaaudio.PCM:

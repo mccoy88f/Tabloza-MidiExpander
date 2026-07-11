@@ -724,7 +724,9 @@ async function refreshAudioDevices() {
     data.devices.forEach((dev) => {
       const opt = document.createElement("option");
       opt.value = dev.id;
-      opt.textContent = dev.label;
+      const suffix = dev.openable === false ? ` (${t("audioDeviceUnavailable")})` : "";
+      opt.textContent = `${dev.label}${suffix}`;
+      opt.disabled = dev.openable === false;
       if (dev.id === data.current) opt.selected = true;
       select.appendChild(opt);
     });

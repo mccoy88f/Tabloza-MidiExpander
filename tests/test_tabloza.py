@@ -20,9 +20,11 @@ if "alsaaudio" not in sys.modules:
 
 from audio_utils import (  # noqa: E402
     alsa_device_for_card,
+    apply_audio_fallback_if_needed,
     card_from_audio_device,
     list_playback_devices,
     normalize_volume,
+    probe_playback_device,
     resolve_audio_device,
     volume_to_alsa_percent,
 )
@@ -146,16 +148,37 @@ class TestAudioUtils(unittest.TestCase):
         with patch("audio_utils._card_names", return_value=["Headphones", "USB", "vc4hdmi0"]):
             self.assertEqual(resolve_audio_device("hw:2,0"), "plughw:2,0")
 
+    @patch("audio_utils.probe_playback_device", return_value=(True, None))
     @patch("audio_utils.alsaaudio.cards")
-    def test_list_playback_devices(self, mock_cards):
+    def test_list_playback_devices(self, mock_cards, _probe):
         mock_cards.return_value = ["Headphones", "USB Audio Device", "vc4hdmi0"]
         devices = list_playback_devices()
         self.assertEqual(len(devices), 3)
         self.assertEqual(devices[0]["id"], "plughw:0,0")
+        self.assertTrue(devices[0]["openable"])
         self.assertEqual(devices[1]["id"], "hw:1,0")
         self.assertEqual(devices[1]["sample_rate"], 48000)
         self.assertEqual(devices[2]["id"], "plughw:2,0")
         self.assertIn("vc4hdmi0", devices[2]["name"])
+
+    @patch("audio_utils._open_playback_pcm")
+    def test_probe_playback_device_open_fails(self, mock_open):
+        import alsaaudio
+        mock_open.side_effect = alsaaudio.ALSAAudioError("No such device")
+        ok, err = probe_playback_device("plughw:2,0")
+        self.assertFalse(ok)
+        self.assertIn("No such device", err or "")
+
+    @patch("audio_utils.probe_playback_device", return_value=(False, "busy"))
+    @patch("tabloza_common.save_config")
+    def test_apply_audio_fallback_if_needed(self, mock_save, _probe):
+        from audio_utils import apply_audio_fallback_if_needed
+
+        config = {"fluidsynth": {"audio_device": "plughw:2,0", "alsa_card": 2}}
+        updated, changed, msg = apply_audio_fallback_if_needed(config)
+        self.assertTrue(changed)
+        self.assertEqual(updated["fluidsynth"]["audio_device"], "plughw:0,0")
+        mock_save.assert_called_once()
 
 
 class TestStartupSoundfont(unittest.TestCase):
