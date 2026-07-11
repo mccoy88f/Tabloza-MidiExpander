@@ -87,6 +87,7 @@
           <button id="btn-audio-test" class="btn btn-secondary" data-i18n="audioTest">Test suono</button>
           <button id="btn-jack-test" class="btn btn-secondary" data-i18n="jackTest">Test jack</button>
           <button id="btn-midi-reset" class="btn btn-secondary" data-i18n="midiReset">MIDI Reset</button>
+          <button type="button" id="btn-midi-stop-notes" class="btn btn-secondary" data-i18n="stopNotes">Stop note</button>
           <p id="audio-test-msg" class="msg hidden"></p>
           <p id="midi-reset-msg" class="msg hidden"></p>
         </div>
@@ -136,7 +137,6 @@
             <div class="synth-actions">
               <button type="button" id="btn-synth-apply" class="btn btn-primary" data-i18n="applySynthSettings">Applica</button>
               <button type="button" id="btn-synth-standard" class="btn btn-secondary" data-i18n="restoreStandardPreset">Ripristina stabile</button>
-              <button type="button" id="btn-synth-stop-notes" class="btn btn-secondary" data-i18n="stopNotes">Stop note</button>
             </div>
             <p id="synth-msg" class="msg hidden"></p>
           </div>
@@ -158,6 +158,12 @@
               <span data-i18n="labelRtpJitterBuffer">Buffer anti-jitter RTP-MIDI</span>
             </label>
             <p id="midi-jitter-hint" class="muted synth-hint" data-i18n="midiJitterHint">Ritarda gli eventi di rete (~25 ms) per ridurre note irregolari su WiFi. Aggiunge una piccola latenza MIDI.</p>
+            <label class="synth-toggle">
+              <input type="checkbox" id="midi-sysex-auto" checked>
+              <span data-i18n="labelSysexBankAuto">Modalità banchi automatica via SysEx</span>
+            </label>
+            <p id="midi-sysex-hint" class="muted synth-hint" data-i18n="midiSysexHint">Rileva SysEx GM/GS/XG/GM2 e cambia la modalità banchi in tempo reale (come hardware). Richiede il gateway Tabloza attivo.</p>
+            <p id="midi-runtime-bank" class="muted synth-hint hidden"></p>
             <div class="synth-actions">
               <button type="button" id="btn-midi-apply" class="btn btn-primary" data-i18n="applyMidiSettings">Applica</button>
             </div>

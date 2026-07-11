@@ -309,7 +309,8 @@ def api_midi_settings_post():
     log_event(
         "web",
         f"MIDI → bank {midi_cfg.get('bank_select', 'gs')}, "
-        f"buffer RTP {'on' if midi_cfg.get('jitter_buffer_enabled') else 'off'}",
+        f"buffer RTP {'on' if midi_cfg.get('jitter_buffer_enabled') else 'off'}, "
+        f"SysEx auto {'on' if midi_cfg.get('sysex_bank_auto') else 'off'}",
     )
 
     if needs_restart:

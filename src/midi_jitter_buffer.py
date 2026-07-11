@@ -1,8 +1,9 @@
-"""Tabloza — playout buffer MIDI (anti-jitter rete RTP).
+"""Tabloza — gateway MIDI verso FluidSynth (buffer RTP + SysEx mode).
 
 rtpmidid inoltra gli eventi ALSA in tempo reale senza usare i timestamp RTP.
-Tabloza inserisce un buffer configurabile (default 25 ms) tra le sorgenti MIDI
-e FluidSynth, in linea con le linee guida RTP-MIDI per reti con jitter.
+Tabloza inserisce un gateway configurabile tra le sorgenti MIDI e FluidSynth:
+- buffer anti-jitter RTP (opzionale, default 25 ms)
+- cambio modalità banchi GM/GS/XG/MMA via SysEx (hardware-like)
 """
 
 from __future__ import annotations
@@ -31,9 +32,10 @@ class _QueuedMsg:
     message: tuple = field(compare=False)
 
 
-class MidiJitterBuffer:
-    def __init__(self, buffer_ms: int):
-        self.buffer_ms = buffer_ms
+class MidiGateway:
+    def __init__(self, buffer_ms: int, *, sysex_auto: bool = True):
+        self.buffer_ms = max(0, buffer_ms)
+        self.sysex_auto = sysex_auto
         self._stop = threading.Event()
         self._midi_in = None
         self._midi_out = None
@@ -49,10 +51,8 @@ class MidiJitterBuffer:
         return self._active
 
     def start(self) -> bool:
-        if self.buffer_ms <= 0:
-            return False
         if rtmidi is None:
-            log.warning("python-rtmidi non disponibile — buffer MIDI disattivato")
+            log.warning("python-rtmidi non disponibile — gateway MIDI disattivato")
             return False
 
         self.stop()
@@ -64,18 +64,24 @@ class MidiJitterBuffer:
 
             self._midi_out = rtmidi.MidiOut(rtmidi.API_UNIX_ALSA)
             if not self._connect_output_to_fluidsynth():
-                log.warning("Buffer MIDI: FluidSynth non trovato")
+                log.warning("Gateway MIDI: FluidSynth non trovato")
                 self.stop()
                 return False
 
             self._stop.clear()
-            self._writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
-            self._writer_thread.start()
+            if self.buffer_ms > 0:
+                self._writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+                self._writer_thread.start()
             self._active = True
-            log.info("Buffer MIDI RTP attivo: %d ms prima di FluidSynth", self.buffer_ms)
+            if self.buffer_ms > 0 and self.sysex_auto:
+                log.info("Gateway MIDI: buffer %d ms + SysEx auto", self.buffer_ms)
+            elif self.buffer_ms > 0:
+                log.info("Gateway MIDI RTP attivo: %d ms prima di FluidSynth", self.buffer_ms)
+            elif self.sysex_auto:
+                log.info("Gateway MIDI: SysEx auto (passthrough)")
             return True
         except Exception as exc:
-            log.error("Buffer MIDI non avviato: %s", exc)
+            log.error("Gateway MIDI non avviato: %s", exc)
             self.stop()
             return False
 
@@ -116,7 +122,7 @@ class MidiJitterBuffer:
             self._midi_out = rtmidi.MidiOut(rtmidi.API_UNIX_ALSA)
             ok = self._connect_output_to_fluidsynth()
             if not ok:
-                log.warning("Buffer MIDI: riconnessione FluidSynth fallita")
+                log.warning("Gateway MIDI: riconnessione FluidSynth fallita")
             return ok
 
     def _connect_output_to_fluidsynth(self) -> bool:
@@ -133,20 +139,48 @@ class MidiJitterBuffer:
             label = name.lower()
             if target_addr in name or target_client in label:
                 self._midi_out.open_port(i)
-                log.info("Buffer MIDI → %s (%s)", target_addr, name)
+                log.info("Gateway MIDI → %s (%s)", target_addr, name)
                 return True
         return False
 
+    def _inspect_sysex(self, message: tuple) -> bool:
+        if not self.sysex_auto:
+            return False
+        from midi_sysex_mode import maybe_apply_sysex_bank_mode
+        return maybe_apply_sysex_bank_mode(message)
+
+    def _forward_message(self, message: tuple):
+        from activity_status import touch_midi_activity
+
+        with self._output_lock:
+            if not self._midi_out:
+                return
+            try:
+                self._midi_out.send_message(list(message))
+                touch_midi_activity()
+            except Exception as exc:
+                log.warning("Invio gateway MIDI fallito: %s", exc)
+                if self.reconnect_output():
+                    try:
+                        self._midi_out.send_message(list(message))
+                        touch_midi_activity()
+                    except Exception:
+                        pass
+
     def _on_message(self, message, _data=None):
+        msg = tuple(message)
+        if self._inspect_sysex(msg):
+            return
+        if self.buffer_ms <= 0:
+            self._forward_message(msg)
+            return
         release_at = time.monotonic() + (self.buffer_ms / 1000.0)
         self._seq += 1
-        item = _QueuedMsg(release_at, self._seq, tuple(message))
+        item = _QueuedMsg(release_at, self._seq, msg)
         with self._queue_lock:
             heapq.heappush(self._queue, item)
 
     def _writer_loop(self):
-        from activity_status import touch_midi_activity
-
         while not self._stop.is_set():
             now = time.monotonic()
             batch: list[tuple] = []
@@ -158,70 +192,67 @@ class MidiJitterBuffer:
                 time.sleep(0.001)
                 continue
 
-            with self._output_lock:
-                if not self._midi_out:
-                    continue
-                for msg in batch:
-                    try:
-                        self._midi_out.send_message(list(msg))
-                        touch_midi_activity()
-                    except Exception as exc:
-                        log.warning("Invio buffer MIDI fallito: %s", exc)
-                        if not self.reconnect_output():
-                            break
-                        try:
-                            self._midi_out.send_message(list(msg))
-                            touch_midi_activity()
-                        except Exception:
-                            break
+            for msg in batch:
+                self._forward_message(msg)
 
 
-_buffer: MidiJitterBuffer | None = None
-_buffer_lock = threading.Lock()
+_gateway: MidiGateway | None = None
+_gateway_lock = threading.Lock()
 
 
-def ensure_jitter_buffer(buffer_ms: int) -> bool:
-    """Start or update the MIDI jitter buffer; return True if active."""
-    global _buffer
-    with _buffer_lock:
-        if buffer_ms <= 0:
-            if _buffer:
-                _buffer.stop()
-                _buffer = None
+def ensure_midi_gateway(buffer_ms: int, *, sysex_auto: bool = True) -> bool:
+    """Start or update the MIDI gateway; return True if active."""
+    global _gateway
+    need = buffer_ms > 0 or sysex_auto
+    with _gateway_lock:
+        if not need:
+            if _gateway:
+                _gateway.stop()
+                _gateway = None
             return False
-        if _buffer and _buffer.active and _buffer.buffer_ms == buffer_ms:
+        if (
+            _gateway
+            and _gateway.active
+            and _gateway.buffer_ms == max(0, buffer_ms)
+            and _gateway.sysex_auto == sysex_auto
+        ):
             return True
-        if _buffer:
-            _buffer.stop()
-        _buffer = MidiJitterBuffer(buffer_ms)
-        if _buffer.start():
+        if _gateway:
+            _gateway.stop()
+        _gateway = MidiGateway(max(0, buffer_ms), sysex_auto=sysex_auto)
+        if _gateway.start():
             return True
-        _buffer = None
+        _gateway = None
         return False
 
 
+def ensure_jitter_buffer(buffer_ms: int, *, sysex_auto: bool = True) -> bool:
+    """Backward-compatible alias."""
+    return ensure_midi_gateway(buffer_ms, sysex_auto=sysex_auto)
+
+
 def stop_jitter_buffer():
-    global _buffer
-    with _buffer_lock:
-        if _buffer:
-            _buffer.stop()
-            _buffer = None
+    global _gateway
+    with _gateway_lock:
+        if _gateway:
+            _gateway.stop()
+            _gateway = None
 
 
 def reconnect_jitter_buffer_output() -> bool:
-    with _buffer_lock:
-        if _buffer and _buffer.active:
-            return _buffer.reconnect_output()
+    with _gateway_lock:
+        if _gateway and _gateway.active:
+            return _gateway.reconnect_output()
         return False
 
 
 def jitter_buffer_active() -> bool:
-    with _buffer_lock:
-        return bool(_buffer and _buffer.active)
+    with _gateway_lock:
+        return bool(_gateway and _gateway.active)
 
 
 def get_buffer_input_port() -> dict | None:
-    """Return ALSA input port dict for routing sources into the buffer."""
+    """Return ALSA input port dict for routing sources into the gateway."""
     if not jitter_buffer_active():
         return None
     from midi_utils import get_input_ports
@@ -235,13 +266,18 @@ def get_buffer_input_port() -> dict | None:
 
 
 def jitter_buffer_status() -> dict:
-    with _buffer_lock:
-        active = bool(_buffer and _buffer.active)
-        ms = _buffer.buffer_ms if _buffer else 0
+    with _gateway_lock:
+        active = bool(_gateway and _gateway.active)
+        ms = _gateway.buffer_ms if _gateway else 0
+        sysex_auto = _gateway.sysex_auto if _gateway else False
     port = get_buffer_input_port() if active else None
+    from midi_sysex_mode import get_runtime_bank_select
+
     return {
         "active": active,
         "buffer_ms": ms if active else 0,
+        "sysex_auto": sysex_auto,
+        "runtime_bank_select": get_runtime_bank_select(),
         "input_port": port,
         "rtmidi_available": rtmidi is not None,
     }

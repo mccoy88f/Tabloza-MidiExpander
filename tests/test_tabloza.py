@@ -147,6 +147,7 @@ class TestMidiConfig(unittest.TestCase):
         midi = merge_midi_config(None)
         self.assertEqual(midi["jitter_buffer_ms"], DEFAULT_MIDI_JITTER_BUFFER_MS)
         self.assertTrue(midi["jitter_buffer_enabled"])
+        self.assertTrue(midi["sysex_bank_auto"])
         self.assertEqual(midi["bank_select"], DEFAULT_MIDI_BANK_SELECT)
 
     def test_normalize_clamps_range(self):
@@ -185,10 +186,10 @@ class TestMidiConfig(unittest.TestCase):
         self.assertTrue(buffer)
 
     @patch("midi_jitter_buffer.rtmidi", None)
-    def test_ensure_jitter_buffer_without_rtmidi(self):
-        from midi_jitter_buffer import ensure_jitter_buffer, jitter_buffer_status
+    def test_ensure_gateway_without_rtmidi(self):
+        from midi_jitter_buffer import ensure_midi_gateway, jitter_buffer_status
 
-        self.assertFalse(ensure_jitter_buffer(25))
+        self.assertFalse(ensure_midi_gateway(0, sysex_auto=True))
         self.assertFalse(jitter_buffer_status()["active"])
 
     def test_route_destination_prefers_buffer(self):
@@ -199,6 +200,49 @@ class TestMidiConfig(unittest.TestCase):
         with patch("midi_jitter_buffer.get_buffer_input_port", return_value=buf_port):
             with patch("midi_utils.find_fluidsynth_input", return_value=fs_port):
                 self.assertEqual(_route_destination(), buf_port)
+
+
+class TestMidiSysexMode(unittest.TestCase):
+    def test_detect_gm_system_on(self):
+        from midi_sysex_mode import detect_bank_mode_from_sysex
+
+        payload = bytes([0x7E, 0x7F, 0x09, 0x01])
+        self.assertEqual(detect_bank_mode_from_sysex(payload), "gm")
+
+    def test_detect_gm2_system_on_maps_mma(self):
+        from midi_sysex_mode import detect_bank_mode_from_sysex
+
+        payload = bytes([0x7E, 0x7F, 0x09, 0x03])
+        self.assertEqual(detect_bank_mode_from_sysex(payload), "mma")
+
+    def test_detect_gs_mode_set(self):
+        from midi_sysex_mode import detect_bank_mode_from_sysex
+
+        payload = bytes([0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41])
+        self.assertEqual(detect_bank_mode_from_sysex(payload), "gs")
+
+    def test_detect_xg_reset(self):
+        from midi_sysex_mode import detect_bank_mode_from_sysex
+
+        payload = bytes([0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00])
+        self.assertEqual(detect_bank_mode_from_sysex(payload), "xg")
+
+    @patch("fluidsynth_client.shell_bound", return_value=True)
+    @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
+    def test_maybe_apply_consumes_mode_sysex(self, mock_send, _bound):
+        from midi_sysex_mode import maybe_apply_sysex_bank_mode, reset_runtime_bank_select
+
+        reset_runtime_bank_select("gs")
+        msg = (0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7)
+        self.assertTrue(maybe_apply_sysex_bank_mode(msg))
+        mock_send.assert_any_call("set synth.midi-bank-select gm")
+        mock_send.assert_any_call("reset")
+
+    def test_non_mode_sysex_not_consumed(self):
+        from midi_sysex_mode import maybe_apply_sysex_bank_mode
+
+        msg = (0xF0, 0x7E, 0x7F, 0x08, 0x01, 0xF7)
+        self.assertFalse(maybe_apply_sysex_bank_mode(msg))
 
 
 class TestActivityStatus(unittest.TestCase):

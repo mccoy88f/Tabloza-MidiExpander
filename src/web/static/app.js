@@ -16,6 +16,8 @@ function midiSettingsKey(settings) {
   return JSON.stringify({
     bank_select: settings.bank_select,
     jitter_buffer_enabled: settings.jitter_buffer_enabled,
+    sysex_bank_auto: settings.sysex_bank_auto,
+    runtime_bank_select: settings.runtime_bank_select,
   });
 }
 
@@ -571,6 +573,25 @@ document.getElementById("btn-midi-reset").addEventListener("click", async () => 
   } finally {
     btn.disabled = false;
     btn.textContent = t("midiReset");
+  }
+});
+
+document.getElementById("btn-midi-stop-notes")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-midi-stop-notes");
+  const msg = document.getElementById("midi-reset-msg");
+  btn.disabled = true;
+  try {
+    await api("/api/synth/stop-notes", { method: "POST" });
+    msg.textContent = t("synthStopNotesDone");
+    msg.className = "msg ok";
+    msg.classList.remove("hidden");
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+    msg.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -1274,21 +1295,6 @@ document.getElementById("btn-synth-standard")?.addEventListener("click", async (
   document.getElementById("btn-synth-apply").click();
 });
 
-document.getElementById("btn-synth-stop-notes")?.addEventListener("click", async () => {
-  const msg = document.getElementById("synth-msg");
-  try {
-    await api("/api/synth/stop-notes", { method: "POST" });
-    msg.textContent = t("synthStopNotesDone");
-    msg.className = "msg ok";
-    msg.classList.remove("hidden");
-    refreshConsole();
-  } catch (err) {
-    msg.textContent = err.message;
-    msg.className = "msg err";
-    msg.classList.remove("hidden");
-  }
-});
-
 function updateMidiBankHint(mode) {
   const hint = document.getElementById("midi-bank-hint");
   if (!hint) return;
@@ -1312,7 +1318,13 @@ function renderMidiSettings(settings) {
   });
 
   document.getElementById("midi-jitter-enabled").checked = !!settings.jitter_buffer_enabled;
+  document.getElementById("midi-sysex-auto").checked = !!settings.sysex_bank_auto;
   updateMidiBankHint(current);
+  const runtime = document.getElementById("midi-runtime-bank");
+  if (runtime && settings.runtime_bank_select) {
+    runtime.textContent = t("midiRuntimeBank", { mode: settings.runtime_bank_select.toUpperCase() });
+    runtime.classList.remove("hidden");
+  }
 }
 
 async function refreshMidiSettings() {
@@ -1329,6 +1341,7 @@ function collectMidiSettingsPayload() {
   return {
     bank_select: document.getElementById("midi-bank-select").value,
     jitter_buffer_enabled: document.getElementById("midi-jitter-enabled").checked,
+    sysex_bank_auto: document.getElementById("midi-sysex-auto").checked,
   };
 }
 

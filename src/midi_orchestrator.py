@@ -44,12 +44,18 @@ from midi_utils import (
 )
 
 from event_log import log_event
-from midi_config import get_jitter_buffer_ms, get_midi_bank_select, merge_midi_config
+from midi_config import (
+    get_jitter_buffer_ms,
+    get_midi_bank_select,
+    is_sysex_bank_auto_enabled,
+    merge_midi_config,
+)
 from midi_jitter_buffer import (
-    ensure_jitter_buffer,
+    ensure_midi_gateway,
     reconnect_jitter_buffer_output,
     stop_jitter_buffer,
 )
+from midi_sysex_mode import reset_runtime_bank_select
 from soundfont_config import startup_soundfont_name
 from synth_config import merge_fluidsynth_config, fluidsynth_startup_options
 
@@ -85,7 +91,11 @@ soundfont_load_lock = threading.Lock()
 
 def _apply_midi_jitter_buffer(config: dict | None = None) -> bool:
     cfg = config or load_config()
-    return ensure_jitter_buffer(get_jitter_buffer_ms(cfg))
+    reset_runtime_bank_select(get_midi_bank_select(cfg))
+    return ensure_midi_gateway(
+        get_jitter_buffer_ms(cfg),
+        sysex_auto=is_sysex_bank_auto_enabled(cfg),
+    )
 
 
 def load_config() -> dict:
@@ -130,6 +140,8 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-o", "synth.default-soundfont=",
         "-o", f"synth.midi-bank-select={get_midi_bank_select(config)}",
     ]
+    if is_sysex_bank_auto_enabled(config):
+        cmd.extend(["-o", "synth.device-id=127"])
     for opt in fluidsynth_startup_options(fs_cfg):
         cmd.extend(["-o", opt])
     return cmd

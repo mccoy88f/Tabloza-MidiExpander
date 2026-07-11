@@ -133,6 +133,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   "midi": {
     "jitter_buffer_ms": 25,
     "jitter_buffer_enabled": true,
+    "sysex_bank_auto": true,
     "bank_select": "gs"
   }
 }
@@ -155,6 +156,9 @@ if p.is_file():
         changed = True
     if "bank_select" not in midi:
         midi["bank_select"] = "gs"
+        changed = True
+    if "sysex_bank_auto" not in midi:
+        midi["sysex_bank_auto"] = True
         changed = True
     if changed:
         cfg["midi"] = midi
