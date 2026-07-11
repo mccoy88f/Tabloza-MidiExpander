@@ -502,7 +502,7 @@ document.getElementById("btn-device-reboot")?.addEventListener("click", async ()
   if (!window.confirm(t("rebootConfirm"))) return;
 
   const btn = document.getElementById("btn-device-reboot");
-  const msg = document.getElementById("reboot-msg");
+  const msg = document.getElementById("device-power-msg");
   btn.disabled = true;
   msg.textContent = t("rebootWorking");
   msg.className = "msg";
@@ -515,6 +515,27 @@ document.getElementById("btn-device-reboot")?.addEventListener("click", async ()
     setTimeout(() => pollAfterUpdate(45), 5000);
   } catch (err) {
     msg.textContent = err.message || t("rebootFailed");
+    msg.classList.add("err");
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-device-shutdown")?.addEventListener("click", async () => {
+  if (!window.confirm(t("shutdownConfirm"))) return;
+
+  const btn = document.getElementById("btn-device-shutdown");
+  const msg = document.getElementById("device-power-msg");
+  btn.disabled = true;
+  msg.textContent = t("shutdownWorking");
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/device/shutdown", { method: "POST" });
+    msg.textContent = t("shutdownStarted");
+    msg.classList.add("ok");
+    stopStatusRefresh();
+  } catch (err) {
+    msg.textContent = err.message || t("shutdownFailed");
     msg.classList.add("err");
     btn.disabled = false;
   }

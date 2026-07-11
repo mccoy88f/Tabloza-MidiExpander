@@ -114,15 +114,17 @@ input[type="text"] {
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-secondary { background: #2a2d3a; color: var(--text); }
 .btn-small { padding: 0.4rem 0.8rem; font-size: 0.8rem; background: #2a2d3a; color: var(--text); border: none; border-radius: 6px; cursor: pointer; }
-.btn-danger { background: var(--danger); color: #fff; padding: 0.4rem 0.8rem; font-size: 0.8rem; border: none; border-radius: 6px; cursor: pointer; }
+.btn.btn-danger { background: var(--danger); color: #fff; }
+.btn.btn-danger:hover { background: #c0392b; }
 
 .error { color: var(--danger); margin-top: 0.5rem; font-size: 0.9rem; }
 .msg { margin-top: 0.5rem; font-size: 0.9rem; }
 .msg.ok { color: var(--success); }
 .msg.err { color: var(--danger); }
 
-.device-actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
-.device-actions .msg { margin-top: 0.5rem; }
+.device-actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+.device-actions .btn { flex: 1 1 8rem; min-width: 0; }
+.device-actions .msg { width: 100%; margin-top: 0.25rem; }
 .diagnostics-console {
   margin-top: 1rem;
   padding-top: 0.85rem;

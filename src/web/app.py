@@ -675,6 +675,22 @@ def api_device_reboot():
     return jsonify({"ok": True, "message": "Riavvio in corso…"})
 
 
+@app.route("/api/device/shutdown", methods=["POST"])
+@require_auth
+def api_device_shutdown():
+    log_event("system", "Spegnimento dispositivo richiesto dal pannello web")
+    try:
+        subprocess.Popen(
+            ["/sbin/shutdown", "-h", "now"],
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        return jsonify({"error": f"Spegnimento fallito: {exc}"}), 500
+    return jsonify({"ok": True, "message": "Spegnimento in corso…"})
+
+
 @app.route("/api/network/lan-direct/start", methods=["POST"])
 @require_auth
 def api_lan_direct_start():
