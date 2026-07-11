@@ -217,12 +217,6 @@ def get_midi_status() -> dict:
                 "status": "connected" if any_connected else "available",
                 "port_count": len(ports),
             })
-    routes.append({
-        "type": "gpio",
-        "name": "MIDI GPIO (UART)",
-        "address": None,
-        "status": "planned",
-    })
     return {
         "fluidsynth": fs,
         "sources": routes,

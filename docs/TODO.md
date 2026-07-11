@@ -26,4 +26,4 @@ Ricevere MIDI da porta DIN IN collegata a GPIO 14/15 (31250 bps) tramite optoiso
 `scripts/configure-midi-uart.sh` può essere attivato manualmente quando la funzione sarà implementata.
 
 ### UI
-Il pannello web mostra "MIDI GPIO (UART)" con badge **In arrivo**.
+Il pannello web elenca solo ingressi attivi (RTP-MIDI, USB); GPIO non è mostrato finché non implementato.

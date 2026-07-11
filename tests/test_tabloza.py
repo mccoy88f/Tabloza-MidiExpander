@@ -514,7 +514,7 @@ class TestUsbMidi(unittest.TestCase):
 
         status = mu.get_midi_status()
         types = [s["type"] for s in status["sources"]]
-        self.assertEqual(types, ["rtpmidi", "usb", "gpio"])
+        self.assertEqual(types, ["rtpmidi", "usb"])
         usb = status["sources"][1]
         self.assertEqual(usb["name"], "USB MIDI Interface")
         self.assertEqual(usb["status"], "connected")

@@ -76,30 +76,35 @@ document.getElementById("btn-choose-file").addEventListener("click", () => {
 });
 
 // --- Status ---
-function renderMidiInputs(midi) {
+function renderMidiInputs(midi, activity) {
   const list = document.getElementById("midi-inputs-list");
+  const receivingMsg = document.getElementById("midi-receiving-msg");
+  const receiving = !!(activity?.midi?.receiving);
+
+  if (receivingMsg) {
+    receivingMsg.textContent = receiving ? t("midiReceiving") : "";
+    receivingMsg.classList.toggle("hidden", !receiving);
+  }
+
   list.innerHTML = "";
-  if (!midi || !midi.sources || !midi.sources.length) {
+  const sources = (midi?.sources || []).filter((src) => src.type !== "gpio");
+  if (!sources.length) {
     list.innerHTML = `<li class="midi-item muted">${t("noMidiInputs")}</li>`;
     return;
   }
-  midi.sources.forEach((src) => {
+  sources.forEach((src) => {
     const li = document.createElement("li");
     li.className = "midi-item";
-    const name = src.type === "gpio"
-      ? t("midiGpioName")
-      : src.type === "usb"
-        ? (src.port_count > 1
-          ? t("midiUsbNamedPorts", { name: src.name, count: src.port_count })
-          : t("midiUsbNamed", { name: src.name }))
-        : (src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name);
-    const badge = src.status === "planned"
-      ? `<span class="badge badge-planned">${t("badgePlanned")}</span>`
-      : src.status === "connected"
-        ? `<span class="badge badge-connected">${t("badgeConnected")}</span>`
-        : src.status === "available"
-          ? `<span class="badge badge-ok">${t("badgeActive")}</span>`
-          : '<span class="badge">—</span>';
+    const name = src.type === "usb"
+      ? (src.port_count > 1
+        ? t("midiUsbNamedPorts", { name: src.name, count: src.port_count })
+        : t("midiUsbNamed", { name: src.name }))
+      : (src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name);
+    const badge = src.status === "connected"
+      ? `<span class="badge badge-connected">${t("badgeConnected")}</span>`
+      : src.status === "available"
+        ? `<span class="badge badge-ok">${t("badgeActive")}</span>`
+        : '<span class="badge">—</span>';
     li.innerHTML = `<span>${escapeHtml(name)}</span>${badge}`;
     list.appendChild(li);
   });
@@ -334,7 +339,7 @@ async function refreshStatus() {
     document.getElementById("volume-slider").value = pct;
     document.getElementById("volume-value").textContent = pct;
   }
-  renderMidiInputs(s.midi);
+  renderMidiInputs(s.midi, s.activity);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
   if (s.synth_settings) renderSynthSettings(s.synth_settings);
   if (s.version) document.getElementById("status-version").textContent = `v${s.version}`;
