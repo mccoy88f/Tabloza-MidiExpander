@@ -4,6 +4,7 @@ import logging
 import math
 import re
 import struct
+import subprocess
 
 import alsaaudio
 
@@ -11,6 +12,9 @@ log = logging.getLogger("tabloza.audio")
 
 PREFERRED_MIXER_CONTROLS = ("PCM", "Headphone", "HP", "Master", "Digital", "Playback")
 AUDIO_DEVICE_ID_RE = re.compile(r"^(?:plug)?hw:(\d+),(\d+)$")
+APLAY_PLAYBACK_RE = re.compile(
+    r"^card (\d+): (.+?), device (\d+): (.+)$",
+)
 FALLBACK_AUDIO_DEVICE = "plughw:0,0"
 
 
@@ -68,28 +72,95 @@ def volume_to_alsa_percent(volume: int) -> int:
     return normalize_volume(volume)
 
 
+def _short_aplay_name(text: str) -> str:
+    text = text.strip()
+    if "[" in text:
+        return text.split("[", 1)[0].strip()
+    return text
+
+
+def parse_aplay_playback(output: str) -> list[tuple[int, int, str, str]]:
+    """Parse `aplay -l` playback lines → (card, device, card_name, pcm_name)."""
+    entries: list[tuple[int, int, str, str]] = []
+    for line in output.splitlines():
+        match = APLAY_PLAYBACK_RE.match(line.strip())
+        if not match:
+            continue
+        card_i = int(match.group(1))
+        dev_i = int(match.group(3))
+        card_name = _short_aplay_name(match.group(2))
+        pcm_name = _short_aplay_name(match.group(4))
+        entries.append((card_i, dev_i, card_name, pcm_name))
+    return entries
+
+
+def _playback_entries_from_aplay() -> list[tuple[int, int, str, str]] | None:
+    try:
+        result = subprocess.run(
+            ["aplay", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    entries = parse_aplay_playback(result.stdout)
+    return entries or None
+
+
+def _build_playback_device(
+    card_i: int,
+    dev_i: int,
+    card_name: str,
+    pcm_name: str = "",
+) -> dict:
+    device_id = alsa_device_for_card(card_i, dev_i, card_name)
+    sample_rate = sample_rate_for_device(device_id)
+    openable, _ = probe_playback_device(device_id, sample_rate)
+    label = card_name.strip()
+    if pcm_name and pcm_name.lower() != label.lower():
+        label = f"{label} — {pcm_name.strip()}"
+    label = f"{label} (card {card_i})"
+    return {
+        "card": card_i,
+        "device": dev_i,
+        "id": device_id,
+        "name": card_name.strip(),
+        "pcm_name": pcm_name.strip(),
+        "label": label,
+        "sample_rate": sample_rate,
+        "openable": openable,
+    }
+
+
 def list_playback_devices() -> list[dict]:
-    """List ALSA playback devices via pyalsaaudio."""
+    """List all ALSA playback devices (jack, USB, HDMI…) via aplay or pyalsaaudio."""
+    devices: list[dict] = []
+    seen: set[str] = set()
+
+    aplay_entries = _playback_entries_from_aplay()
+    if aplay_entries:
+        for card_i, dev_i, card_name, pcm_name in aplay_entries:
+            dev = _build_playback_device(card_i, dev_i, card_name, pcm_name)
+            if dev["id"] not in seen:
+                seen.add(dev["id"])
+                devices.append(dev)
+        if devices:
+            return devices
+
     try:
         cards = alsaaudio.cards()
     except alsaaudio.ALSAAudioError:
         return []
 
-    devices = []
     for card_i, name in enumerate(cards):
-        dev_i = 0
-        device_id = alsa_device_for_card(card_i, dev_i, name)
-        sample_rate = sample_rate_for_device(device_id)
-        openable, _ = probe_playback_device(device_id, sample_rate)
-        devices.append({
-            "card": card_i,
-            "device": dev_i,
-            "id": device_id,
-            "name": name.strip(),
-            "label": f"{name.strip()} (card {card_i})",
-            "sample_rate": sample_rate,
-            "openable": openable,
-        })
+        dev = _build_playback_device(card_i, 0, name)
+        if dev["id"] not in seen:
+            seen.add(dev["id"])
+            devices.append(dev)
     return devices
 
 
@@ -118,29 +189,8 @@ def audio_device_available(device: str) -> bool:
 
 
 def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
-    """Use jack/built-in output when the configured device cannot be opened."""
-    from synth_config import merge_fluidsynth_config
-
-    fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
-    device = resolve_audio_device(fs_cfg.get("audio_device", FALLBACK_AUDIO_DEVICE))
-    if probe_playback_device(device)[0]:
-        return config, False, ""
-
-    fallback = FALLBACK_AUDIO_DEVICE
-    if device == fallback:
-        return config, False, f"Uscita {device} non apribile"
-
-    log.warning("Uscita %s non apribile — fallback %s", device, fallback)
-    updated = dict(config)
-    updated["fluidsynth"] = {
-        **fs_cfg,
-        "audio_device": fallback,
-        "alsa_card": 0,
-        "sample_rate": sample_rate_for_device(fallback),
-    }
-    from tabloza_common import save_config
-    save_config(updated)
-    return updated, True, f"Uscita {device} non disponibile — ripristino {fallback}"
+    """Keep the user-selected output; FluidSynth retry backoff handles transient failures."""
+    return config, False, ""
 
 
 def _open_playback_pcm(device: str, sample_rate: int, channels: int = 2) -> alsaaudio.PCM:

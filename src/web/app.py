@@ -18,7 +18,6 @@ from event_log import clear_events, log_event, read_events  # noqa: E402
 import alsaaudio
 from audio_utils import (  # noqa: E402
     apply_output_volume,
-    audio_device_available,
     card_from_audio_device,
     device_label,
     list_playback_devices,
@@ -27,6 +26,7 @@ from audio_utils import (  # noqa: E402
     resolve_audio_device,
     sample_rate_for_device,
 )
+from soundfont_config import resolve_default_soundfont, set_default_soundfont  # noqa: E402
 from fluidsynth_client import read_soundfont_state  # noqa: E402
 from midi_utils import (
     get_midi_status,
@@ -49,7 +49,11 @@ from tabloza_common import (  # noqa: E402
     save_config,
     verify_password,
 )
-from soundfont_config import startup_soundfont_name  # noqa: E402
+from soundfont_config import (  # noqa: E402
+    resolve_default_soundfont,
+    set_default_soundfont,
+    startup_soundfont_name,
+)
 from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
@@ -296,7 +300,7 @@ def api_synth_stop_notes():
 def api_soundfonts():
     config = load_config()
     active = config.get("active_soundfont", "")
-    default = config.get("default_soundfont", "")
+    default = resolve_default_soundfont(config)
     sf_state = read_soundfont_state()
     loaded = sf_state.get("loaded", "")
     loading = sf_state.get("loading", False)
@@ -337,24 +341,52 @@ def api_select_soundfont():
     return jsonify({"ok": True, "active": name})
 
 
+@app.route("/api/soundfonts/eject", methods=["POST"])
+@require_auth
+def api_eject_soundfont():
+    config = load_config()
+    sf_state = read_soundfont_state()
+    loaded = sf_state.get("loaded", "")
+    active = config.get("active_soundfont", "")
+    if not loaded and not active and not sf_state.get("loading"):
+        return jsonify({"error": "Nessun SoundFont da espellere"}), 400
+    ejected = loaded or active
+    config["active_soundfont"] = ""
+    save_config(config)
+    log_event("web", f"SoundFont espulso: {ejected or '—'}")
+    _reload_orchestrator()
+    return jsonify({"ok": True, "ejected": ejected})
+
+
 @app.route("/api/soundfonts/default", methods=["POST", "DELETE"])
 @require_auth
 def api_default_soundfont():
     if request.method == "DELETE":
-        save_config({"default_soundfont": ""})
+        config = load_config()
+        previous = resolve_default_soundfont(config)
+        config = set_default_soundfont(config, None)
+        save_config(config)
         log_event("web", "SF2 predefinito rimosso")
-        return jsonify({"ok": True, "default": ""})
+        return jsonify({"ok": True, "default": "", "previous": previous})
 
     data = request.get_json(silent=True) or {}
-    name = data.get("name", "")
+    name = data.get("name", "").strip()
     path = SOUNDFONTS_DIR / name
     if not path.is_file():
         return jsonify({"error": "SoundFont non trovato"}), 404
     config = load_config()
-    config["default_soundfont"] = name
+    previous = resolve_default_soundfont(config)
+    config = set_default_soundfont(config, name)
     save_config(config)
-    log_event("web", f"SF2 predefinito: {name}")
-    return jsonify({"ok": True, "default": name})
+    if previous and previous != name:
+        log_event("web", f"SF2 predefinito: {name} (sostituisce {previous})")
+    else:
+        log_event("web", f"SF2 predefinito: {name}")
+    return jsonify({
+        "ok": True,
+        "default": name,
+        "previous": previous if previous != name else "",
+    })
 
 
 @app.route("/api/soundfonts/upload", methods=["POST"])
@@ -454,14 +486,6 @@ def api_audio_select():
     if devices and not match:
         return jsonify({"error": "Dispositivo non trovato"}), 404
     openable, probe_err = probe_playback_device(device)
-    if not openable:
-        hint = "Collega un monitor/TV HDMI o scegli il jack integrato."
-        detail = probe_err or "dispositivo non apribile"
-        return jsonify({
-            "error": f"Uscita audio non disponibile ({detail}). {hint}",
-        }), 400
-    if not audio_device_available(device):
-        return jsonify({"error": "Uscita audio non disponibile"}), 400
 
     config = load_config()
     card = card_from_audio_device(device)
@@ -487,6 +511,8 @@ def api_audio_select():
         "alsa_card": card,
         "alsa": alsa_detail,
         "alsa_ok": ok_alsa,
+        "openable": openable,
+        "probe_warning": None if openable else (probe_err or "dispositivo non verificato"),
         "startup_soundfont": startup_soundfont_name(config),
     })
 

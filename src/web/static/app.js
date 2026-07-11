@@ -116,29 +116,36 @@ function renderMidiInputs(midi, activity) {
   }
 }
 
+function activityDotClass(state) {
+  const base = "activity-dot";
+  switch (state) {
+    case "error": return `${base} error`;
+    case "ready": return `${base} ready`;
+    case "live": return `${base} live pulse`;
+    case "loading": return `${base} loading pulse`;
+    default: return `${base} inactive`;
+  }
+}
+
 function renderSoundfontUi(soundfont, synth = null) {
   if (!soundfont) return;
   const sf2Loaded = soundfont.loaded || "";
   const sf2Loading = !!soundfont.loading;
   const sf2Error = soundfont.error;
-  const engineRunning = synth ? !!synth.engine_running : false;
   const starting = synth ? !!synth.starting : false;
-  const sf2Pending = sf2Loading || (
-    !sf2Loaded && !sf2Error && (
-      soundfont.selected || (synth && (starting || engineRunning))
-    )
-  );
 
   const dotSf2 = document.getElementById("dot-sf2");
   const valSf2 = document.getElementById("value-sf2");
   if (dotSf2) {
-    dotSf2.className = "activity-dot " + (
-      sf2Error ? "off"
-        : sf2Loading ? "active pulse"
-          : sf2Loaded ? "idle"
-            : sf2Pending ? "pending pulse"
-              : "pending"
-    );
+    let dotState = "inactive";
+    if (sf2Error) {
+      dotState = "error";
+    } else if (sf2Loading || (starting && soundfont.selected && !sf2Loaded)) {
+      dotState = "loading";
+    } else if (sf2Loaded) {
+      dotState = "ready";
+    }
+    dotSf2.className = activityDotClass(dotState);
   }
   if (valSf2) {
     if (sf2Error) {
@@ -177,11 +184,13 @@ function renderActivity(activity, midi, synth, soundfont) {
   const engineRunning = !!(synth?.engine_running);
   const midiReady = !!(synth?.midi_ready);
   const starting = !!(synth?.starting);
-  dotSynth.className = "activity-dot " + (
-    engineRunning
-      ? (midiReady ? "idle" : "active pulse")
-      : starting ? "pending pulse" : "off"
-  );
+  let synthDotState = "inactive";
+  if (starting || (engineRunning && !midiReady)) {
+    synthDotState = "loading";
+  } else if (engineRunning && midiReady) {
+    synthDotState = "ready";
+  }
+  dotSynth.className = activityDotClass(synthDotState);
   valSynth.textContent = engineRunning
     ? (midiReady ? t("synthReady") : t("synthMidiPending"))
     : starting ? t("synthStarting") : t("synthStopped");
@@ -189,12 +198,15 @@ function renderActivity(activity, midi, synth, soundfont) {
   renderSoundfontUi(soundfont, synth);
 
   const midiReceiving = !!midiAct.receiving;
-  dotMidi.className = "activity-dot " + (
-    midiReceiving ? "active pulse"
-      : midiReady ? "idle"
-        : starting ? "pending pulse"
-          : "off"
-  );
+  let midiDotState = "inactive";
+  if (midiReceiving) {
+    midiDotState = "live";
+  } else if (starting || (engineRunning && !midiReady)) {
+    midiDotState = "loading";
+  } else if (midiReady) {
+    midiDotState = "ready";
+  }
+  dotMidi.className = activityDotClass(midiDotState);
   valMidi.textContent = midiReceiving
     ? t("midiReceiving")
     : midiReady
@@ -203,12 +215,16 @@ function renderActivity(activity, midi, synth, soundfont) {
 
   const audioPlaying = !!audioAct.output_active;
   const sf2Loaded = soundfont?.loaded || "";
-  dotAudio.className = "activity-dot " + (
-    audioPlaying ? "active pulse"
-      : engineRunning ? (sf2Loaded ? "idle" : "pending pulse")
-        : starting ? "pending pulse"
-          : "off"
-  );
+  const sf2Loading = !!soundfont?.loading;
+  let audioDotState = "inactive";
+  if (audioPlaying) {
+    audioDotState = "live";
+  } else if (sf2Loading || starting || (engineRunning && !sf2Loaded)) {
+    audioDotState = "loading";
+  } else if (engineRunning && sf2Loaded) {
+    audioDotState = "ready";
+  }
+  dotAudio.className = activityDotClass(audioDotState);
   valAudio.textContent = audioPlaying
     ? t("audioPlaying")
     : engineRunning
@@ -519,7 +535,7 @@ document.getElementById("btn-midi-reset").addEventListener("click", async () => 
 // --- SoundFonts ---
 async function refreshSoundfonts() {
   const data = await api("/api/soundfonts");
-  const { soundfonts, loading, loaded, active, error } = data;
+  const { soundfonts, loading, loaded, active, error, default: defaultSf = "" } = data;
   renderSoundfontUi({
     selected: active,
     loaded,
@@ -527,6 +543,12 @@ async function refreshSoundfonts() {
     error,
   });
   lastSf2StateKey = [loading, loaded, active, error].join("|");
+
+  const ejectBtn = document.getElementById("btn-sf2-eject");
+  if (ejectBtn) {
+    ejectBtn.classList.toggle("hidden", !(loaded || loading || active));
+    ejectBtn.disabled = !!loading;
+  }
 
   const list = document.getElementById("sf2-list");
   list.innerHTML = "";
@@ -545,7 +567,8 @@ async function refreshSoundfonts() {
         : sf.selected
           ? `<span class="sf2-selected"> ${t("sf2SelectedBadge")}</span>`
           : "";
-    const defaultBadge = sf.default
+    const isDefault = sf.name === defaultSf;
+    const defaultBadge = isDefault
       ? `<span class="sf2-default"> ${t("sf2DefaultBadge")}</span>`
       : "";
     div.innerHTML = `
@@ -556,9 +579,7 @@ async function refreshSoundfonts() {
       </div>
       <div class="sf2-actions">
         ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? t("loading") : t("load")}</button>` : ""}
-        ${sf.default
-          ? `<button class="btn btn-secondary" data-clear-default="${escapeHtml(sf.name)}" title="${t("clearDefaultSf2")}">☆</button>`
-          : `<button class="btn btn-secondary" data-default="${escapeHtml(sf.name)}" title="${t("setDefaultSf2")}">★</button>`}
+        <button type="button" class="btn btn-secondary sf2-default-btn${isDefault ? " is-default" : ""}" data-toggle-default="${escapeHtml(sf.name)}" title="${isDefault ? t("clearDefaultSf2") : t("setDefaultSf2")}" aria-pressed="${isDefault}">${isDefault ? "★" : "☆"}</button>
         <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;
     list.appendChild(div);
@@ -574,19 +595,18 @@ async function refreshSoundfonts() {
     });
   });
 
-  list.querySelectorAll("[data-default]").forEach((btn) => {
+  list.querySelectorAll("[data-toggle-default]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      await api("/api/soundfonts/default", {
-        method: "POST",
-        body: JSON.stringify({ name: btn.dataset.default }),
-      });
-      refreshAll();
-    });
-  });
-
-  list.querySelectorAll("[data-clear-default]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      await api("/api/soundfonts/default", { method: "DELETE" });
+      const name = btn.dataset.toggleDefault;
+      const isDefault = btn.classList.contains("is-default");
+      if (isDefault) {
+        await api("/api/soundfonts/default", { method: "DELETE" });
+      } else {
+        await api("/api/soundfonts/default", {
+          method: "POST",
+          body: JSON.stringify({ name }),
+        });
+      }
       refreshAll();
     });
   });
@@ -599,6 +619,27 @@ async function refreshSoundfonts() {
     });
   });
 }
+
+document.getElementById("btn-sf2-eject")?.addEventListener("click", async () => {
+  if (!confirm(t("ejectSf2Confirm"))) return;
+  const btn = document.getElementById("btn-sf2-eject");
+  const msg = document.getElementById("sf2-eject-msg");
+  btn.disabled = true;
+  btn.textContent = t("ejectSf2Working");
+  msg.className = "msg hidden";
+  try {
+    await api("/api/soundfonts/eject", { method: "POST" });
+    msg.textContent = t("ejectSf2Done");
+    msg.className = "msg ok";
+    await refreshAll();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t("ejectSf2");
+  }
+});
 
 function escapeHtml(str) {
   const d = document.createElement("div");
@@ -702,6 +743,7 @@ volumeSlider.addEventListener("input", (e) => {
 
 // --- Audio output ---
 let currentAudioDevice = "";
+let lastAudioDevices = [];
 
 async function refreshAudioDevices() {
   const select = document.getElementById("audio-device-select");
@@ -709,6 +751,7 @@ async function refreshAudioDevices() {
   if (!select || !currentEl) return;
   try {
     const data = await api("/api/audio/devices");
+    lastAudioDevices = data.devices || [];
     currentAudioDevice = data.current || "";
     currentEl.textContent = data.current_label || data.current || "—";
     select.innerHTML = "";
@@ -726,7 +769,6 @@ async function refreshAudioDevices() {
       opt.value = dev.id;
       const suffix = dev.openable === false ? ` (${t("audioDeviceUnavailable")})` : "";
       opt.textContent = `${dev.label}${suffix}`;
-      opt.disabled = dev.openable === false;
       if (dev.id === data.current) opt.selected = true;
       select.appendChild(opt);
     });
@@ -747,7 +789,12 @@ document.getElementById("btn-audio-apply").addEventListener("click", async () =>
     msg.classList.remove("hidden");
     return;
   }
-  if (!confirm(t("audioDeviceConfirm"))) return;
+  const selected = lastAudioDevices.find((d) => d.id === device);
+  let confirmMsg = t("audioDeviceConfirm");
+  if (selected?.openable === false) {
+    confirmMsg = `${confirmMsg}\n\n${t("audioDeviceConfirmUnverified")}`;
+  }
+  if (!confirm(confirmMsg)) return;
   const btn = document.getElementById("btn-audio-apply");
   btn.disabled = true;
   msg.textContent = t("audioDeviceApplying");

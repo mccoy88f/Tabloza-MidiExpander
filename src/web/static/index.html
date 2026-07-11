@@ -145,7 +145,11 @@
 
       <!-- SoundFonts -->
       <section class="card">
-        <h2 data-i18n="sectionSoundfonts">Libreria SoundFont</h2>
+        <div class="sf2-section-header">
+          <h2 data-i18n="sectionSoundfonts">Libreria SoundFont</h2>
+          <button type="button" id="btn-sf2-eject" class="btn btn-secondary hidden" data-i18n="ejectSf2">Espelli SF2</button>
+        </div>
+        <p id="sf2-eject-msg" class="msg hidden"></p>
         <div id="sf2-list" class="sf2-list"></div>
         <div class="upload-zone" id="upload-zone">
           <p data-i18n="uploadDrag">Trascina un file .sf2 qui</p>

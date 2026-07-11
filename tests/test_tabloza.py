@@ -24,12 +24,18 @@ from audio_utils import (  # noqa: E402
     card_from_audio_device,
     list_playback_devices,
     normalize_volume,
+    parse_aplay_playback,
     probe_playback_device,
     resolve_audio_device,
     volume_to_alsa_percent,
 )
 from event_log import clear_events, log_event, read_events  # noqa: E402
-from soundfont_config import startup_soundfont_name  # noqa: E402
+from soundfont_config import (  # noqa: E402
+    coerce_default_soundfont,
+    resolve_default_soundfont,
+    set_default_soundfont,
+    startup_soundfont_name,
+)
 from wifi_utils import connect_wifi_network, disable_wifi, enable_wifi, parse_nmcli_terse_fields  # noqa: E402
 
 
@@ -148,9 +154,22 @@ class TestAudioUtils(unittest.TestCase):
         with patch("audio_utils._card_names", return_value=["Headphones", "USB", "vc4hdmi0"]):
             self.assertEqual(resolve_audio_device("hw:2,0"), "plughw:2,0")
 
+    def test_parse_aplay_playback_hdmi(self):
+        sample = """
+**** List of PLAYBACK Hardware Devices ****
+card 0: Headphones [bcm2835 Headphones], device 0: bcm2835 Headphones [bcm2835 Headphones]
+card 1: vc4hdmi0 [vc4-hdmi-0], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
+"""
+        entries = parse_aplay_playback(sample)
+        self.assertEqual(len(entries), 3)
+        self.assertEqual(entries[1][:3], (1, 0, "vc4hdmi0"))
+        self.assertEqual(entries[2][:3], (2, 0, "vc4hdmi1"))
+
+    @patch("audio_utils._playback_entries_from_aplay", return_value=None)
     @patch("audio_utils.probe_playback_device", return_value=(True, None))
     @patch("audio_utils.alsaaudio.cards")
-    def test_list_playback_devices(self, mock_cards, _probe):
+    def test_list_playback_devices(self, mock_cards, _probe, _aplay):
         mock_cards.return_value = ["Headphones", "USB Audio Device", "vc4hdmi0"]
         devices = list_playback_devices()
         self.assertEqual(len(devices), 3)
@@ -161,6 +180,21 @@ class TestAudioUtils(unittest.TestCase):
         self.assertEqual(devices[2]["id"], "plughw:2,0")
         self.assertIn("vc4hdmi0", devices[2]["name"])
 
+    @patch("audio_utils.probe_playback_device")
+    @patch("audio_utils._playback_entries_from_aplay")
+    def test_list_playback_devices_from_aplay(self, mock_aplay, mock_probe):
+        mock_aplay.return_value = [
+            (0, 0, "Headphones", "bcm2835 Headphones"),
+            (1, 0, "vc4hdmi0", "MAI PCM i2s-hifi-0"),
+            (2, 0, "vc4hdmi1", "MAI PCM i2s-hifi-0"),
+        ]
+        mock_probe.side_effect = [(True, None), (False, "busy"), (False, "busy")]
+        devices = list_playback_devices()
+        self.assertEqual(len(devices), 3)
+        self.assertEqual(devices[1]["id"], "plughw:1,0")
+        self.assertFalse(devices[1]["openable"])
+        self.assertIn("vc4hdmi1", devices[2]["name"])
+
     @patch("audio_utils._open_playback_pcm")
     def test_probe_playback_device_open_fails(self, mock_open):
         import alsaaudio
@@ -170,18 +204,27 @@ class TestAudioUtils(unittest.TestCase):
         self.assertIn("No such device", err or "")
 
     @patch("audio_utils.probe_playback_device", return_value=(False, "busy"))
-    @patch("tabloza_common.save_config")
-    def test_apply_audio_fallback_if_needed(self, mock_save, _probe):
-        from audio_utils import apply_audio_fallback_if_needed
-
+    def test_apply_audio_fallback_if_needed(self, _probe):
         config = {"fluidsynth": {"audio_device": "plughw:2,0", "alsa_card": 2}}
         updated, changed, msg = apply_audio_fallback_if_needed(config)
-        self.assertTrue(changed)
-        self.assertEqual(updated["fluidsynth"]["audio_device"], "plughw:0,0")
-        mock_save.assert_called_once()
+        self.assertFalse(changed)
+        self.assertEqual(updated, config)
+        self.assertEqual(msg, "")
 
 
 class TestStartupSoundfont(unittest.TestCase):
+    def test_coerce_default_soundfont(self):
+        self.assertEqual(coerce_default_soundfont("a.sf2"), "a.sf2")
+        self.assertEqual(coerce_default_soundfont(["b.sf2", "c.sf2"]), "b.sf2")
+        self.assertEqual(coerce_default_soundfont([]), "")
+        self.assertEqual(coerce_default_soundfont(None), "")
+
+    def test_set_default_soundfont_replaces_previous(self):
+        config = {"default_soundfont": "old.sf2", "active_soundfont": "x.sf2"}
+        updated = set_default_soundfont(config, "new.sf2")
+        self.assertEqual(updated["default_soundfont"], "new.sf2")
+        self.assertEqual(resolve_default_soundfont({"default_soundfont": ["a.sf2", "b.sf2"]}), "")
+
     def test_prefers_default_over_active(self):
         root = Path("/tmp/tabloza-test-sf2")
         root.mkdir(exist_ok=True)

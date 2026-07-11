@@ -180,23 +180,41 @@ input[type="text"] {
   flex-shrink: 0;
 }
 
-.activity-dot.idle { background: var(--success); opacity: 0.45; }
-.activity-dot.active { background: var(--success); }
-.activity-dot.pending { background: var(--muted, #888); opacity: 0.85; }
-.activity-dot.off { background: var(--danger); opacity: 0.7; }
-
-.activity-dot.pulse,
-.activity-dot.pending.pulse {
-  animation: activity-pulse 1s ease-in-out infinite;
+.activity-dot.inactive { background: var(--muted, #888); opacity: 0.85; }
+.activity-dot.error { background: var(--danger); }
+.activity-dot.ready { background: var(--success); opacity: 0.45; }
+.activity-dot.live {
+  background: var(--success);
+  opacity: 1;
+  box-shadow: 0 0 6px rgba(46, 204, 113, 0.65);
 }
 
-.activity-dot.pending.pulse {
-  --activity-pulse-color: rgba(160, 160, 160, 0.45);
+.activity-dot.loading { background: #f39c12; }
+
+.activity-dot.live.pulse {
+  --activity-pulse-color: rgba(46, 204, 113, 0.75);
+  animation: activity-pulse-live 1s ease-in-out infinite;
 }
 
-@keyframes activity-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--activity-pulse-color, rgba(46, 204, 113, 0.5)); }
-  50% { box-shadow: 0 0 0 6px rgba(46, 204, 113, 0); }
+.activity-dot.loading.pulse {
+  --activity-pulse-color: rgba(243, 156, 18, 0.45);
+  animation: activity-pulse-loading 1s ease-in-out infinite;
+}
+
+@keyframes activity-pulse-live {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--activity-pulse-color);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(46, 204, 113, 0);
+    opacity: 0.82;
+  }
+}
+
+@keyframes activity-pulse-loading {
+  0%, 100% { box-shadow: 0 0 0 0 var(--activity-pulse-color); }
+  50% { box-shadow: 0 0 0 6px rgba(243, 156, 18, 0); }
 }
 
 #volume-slider { width: 100%; vertical-align: middle; accent-color: var(--accent); }
@@ -219,6 +237,16 @@ input[type="text"] {
 .audio-device-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 #btn-audio-apply { margin-top: 0.25rem; }
 
+.sf2-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.sf2-section-header h2 { margin: 0; }
+
 .sf2-item, .wifi-item {
   display: flex;
   justify-content: space-between;
@@ -233,6 +261,7 @@ input[type="text"] {
 .sf2-selected { color: var(--accent); font-size: 0.8rem; }
 .sf2-loading { color: #f39c12; font-size: 0.8rem; }
 .sf2-default { color: #f1c40f; font-size: 0.8rem; }
+.sf2-default-btn.is-default { color: #f1c40f; }
 .sf2-actions { display: flex; gap: 0.5rem; }
 
 .upload-zone {
