@@ -167,32 +167,27 @@ card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
         self.assertEqual(entries[2][:3], (2, 0, "vc4hdmi1"))
 
     @patch("audio_utils._playback_entries_from_aplay", return_value=None)
-    @patch("audio_utils.probe_playback_device", return_value=(True, None))
     @patch("audio_utils.alsaaudio.cards")
-    def test_list_playback_devices(self, mock_cards, _probe, _aplay):
+    def test_list_playback_devices(self, mock_cards, _aplay):
         mock_cards.return_value = ["Headphones", "USB Audio Device", "vc4hdmi0"]
         devices = list_playback_devices()
         self.assertEqual(len(devices), 3)
         self.assertEqual(devices[0]["id"], "plughw:0,0")
-        self.assertTrue(devices[0]["openable"])
         self.assertEqual(devices[1]["id"], "hw:1,0")
         self.assertEqual(devices[1]["sample_rate"], 48000)
         self.assertEqual(devices[2]["id"], "plughw:2,0")
         self.assertIn("vc4hdmi0", devices[2]["name"])
 
-    @patch("audio_utils.probe_playback_device")
     @patch("audio_utils._playback_entries_from_aplay")
-    def test_list_playback_devices_from_aplay(self, mock_aplay, mock_probe):
+    def test_list_playback_devices_from_aplay(self, mock_aplay):
         mock_aplay.return_value = [
             (0, 0, "Headphones", "bcm2835 Headphones"),
             (1, 0, "vc4hdmi0", "MAI PCM i2s-hifi-0"),
             (2, 0, "vc4hdmi1", "MAI PCM i2s-hifi-0"),
         ]
-        mock_probe.side_effect = [(True, None), (False, "busy"), (False, "busy")]
         devices = list_playback_devices()
         self.assertEqual(len(devices), 3)
         self.assertEqual(devices[1]["id"], "plughw:1,0")
-        self.assertFalse(devices[1]["openable"])
         self.assertIn("vc4hdmi1", devices[2]["name"])
 
     @patch("audio_utils._open_playback_pcm")

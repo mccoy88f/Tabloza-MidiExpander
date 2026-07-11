@@ -746,7 +746,6 @@ volumeSlider.addEventListener("input", (e) => {
 
 // --- Audio output ---
 let currentAudioDevice = "";
-let lastAudioDevices = [];
 
 async function refreshAudioDevices() {
   const select = document.getElementById("audio-device-select");
@@ -754,7 +753,6 @@ async function refreshAudioDevices() {
   if (!select || !currentEl) return;
   try {
     const data = await api("/api/audio/devices");
-    lastAudioDevices = data.devices || [];
     currentAudioDevice = data.current || "";
     currentEl.textContent = data.current_label || data.current || "—";
     select.innerHTML = "";
@@ -770,8 +768,7 @@ async function refreshAudioDevices() {
     data.devices.forEach((dev) => {
       const opt = document.createElement("option");
       opt.value = dev.id;
-      const suffix = dev.openable === false ? ` (${t("audioDeviceUnavailable")})` : "";
-      opt.textContent = `${dev.label}${suffix}`;
+      opt.textContent = dev.label;
       if (dev.id === data.current) opt.selected = true;
       select.appendChild(opt);
     });
@@ -792,12 +789,7 @@ document.getElementById("btn-audio-apply").addEventListener("click", async () =>
     msg.classList.remove("hidden");
     return;
   }
-  const selected = lastAudioDevices.find((d) => d.id === device);
-  let confirmMsg = t("audioDeviceConfirm");
-  if (selected?.openable === false) {
-    confirmMsg = `${confirmMsg}\n\n${t("audioDeviceConfirmUnverified")}`;
-  }
-  if (!confirm(confirmMsg)) return;
+  if (!confirm(t("audioDeviceConfirm"))) return;
   const btn = document.getElementById("btn-audio-apply");
   btn.disabled = true;
   msg.textContent = t("audioDeviceApplying");

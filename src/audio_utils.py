@@ -119,7 +119,6 @@ def _build_playback_device(
 ) -> dict:
     device_id = alsa_device_for_card(card_i, dev_i, card_name)
     sample_rate = sample_rate_for_device(device_id)
-    openable, _ = probe_playback_device(device_id, sample_rate)
     label = card_name.strip()
     if pcm_name and pcm_name.lower() != label.lower():
         label = f"{label} — {pcm_name.strip()}"
@@ -132,7 +131,6 @@ def _build_playback_device(
         "pcm_name": pcm_name.strip(),
         "label": label,
         "sample_rate": sample_rate,
-        "openable": openable,
     }
 
 
