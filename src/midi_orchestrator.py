@@ -44,6 +44,12 @@ from midi_utils import (
 )
 
 from event_log import log_event
+from midi_config import get_jitter_buffer_ms, merge_midi_config
+from midi_jitter_buffer import (
+    ensure_jitter_buffer,
+    reconnect_jitter_buffer_output,
+    stop_jitter_buffer,
+)
 from soundfont_config import startup_soundfont_name
 from synth_config import merge_fluidsynth_config, fluidsynth_startup_options
 
@@ -77,6 +83,11 @@ midi_monitor_stop = threading.Event()
 soundfont_load_lock = threading.Lock()
 
 
+def _apply_midi_jitter_buffer(config: dict | None = None) -> bool:
+    cfg = config or load_config()
+    return ensure_jitter_buffer(get_jitter_buffer_ms(cfg))
+
+
 def load_config() -> dict:
     defaults = {
         "active_soundfont": "",
@@ -89,6 +100,7 @@ def load_config() -> dict:
             stored = json.load(f)
         defaults.update(stored)
         defaults["fluidsynth"] = merge_fluidsynth_config(stored.get("fluidsynth"))
+        defaults["midi"] = merge_midi_config(stored.get("midi"))
         if "volume" in defaults:
             from audio_utils import normalize_volume
             defaults["volume"] = normalize_volume(defaults["volume"])
@@ -488,6 +500,8 @@ def start_fluidsynth(config: dict) -> bool:
         load_started_at=None,
     )
     route_rtpmidi_to_fluidsynth()
+    _apply_midi_jitter_buffer(config)
+    reconnect_jitter_buffer_output()
     refresh_midi_routes()
     apply_volume(config)
     ok, detail = apply_runtime_synth_settings(config.get("fluidsynth", {}))
@@ -577,6 +591,7 @@ def handle_sigterm(signum, frame):
     global shutdown
     log.info("Arresto orchestratore...")
     shutdown = True
+    stop_jitter_buffer()
     stop_fluidsynth(shutdown_monitor=True)
 
 

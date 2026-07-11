@@ -53,6 +53,12 @@ def save_config(config: dict):
         merged["fluidsynth"] = {**existing_fs, **incoming_fs}
     elif existing_fs:
         merged["fluidsynth"] = existing_fs
+    existing_midi = existing.get("midi") if isinstance(existing.get("midi"), dict) else {}
+    incoming_midi = config.get("midi") if isinstance(config.get("midi"), dict) else None
+    if incoming_midi is not None:
+        merged["midi"] = {**existing_midi, **incoming_midi}
+    elif existing_midi:
+        merged["midi"] = existing_midi
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(merged, f, indent=2)

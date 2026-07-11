@@ -29,6 +29,7 @@ from soundfont_config import resolve_default_soundfont, set_default_soundfont  #
 from fluidsynth_client import read_soundfont_state, request_cancel_soundfont_load  # noqa: E402
 from midi_utils import (
     get_midi_status,
+    get_midi_settings_for_api,
     trigger_orchestrator_apply_synth_settings,
     trigger_orchestrator_apply_volume,
     trigger_orchestrator_reload_fluidsynth,
@@ -201,6 +202,7 @@ def api_status():
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
         },
         "synth_settings": synth_settings_for_api(config),
+        "midi_settings": get_midi_settings_for_api(config),
         "version": get_version(),
     })
 

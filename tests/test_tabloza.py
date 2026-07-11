@@ -136,6 +136,43 @@ class TestSynthConfig(unittest.TestCase):
         self.assertEqual(fs["polyphony"], 512)
 
 
+class TestMidiConfig(unittest.TestCase):
+    def test_merge_defaults(self):
+        from midi_config import DEFAULT_MIDI_JITTER_BUFFER_MS, merge_midi_config
+
+        midi = merge_midi_config(None)
+        self.assertEqual(midi["jitter_buffer_ms"], DEFAULT_MIDI_JITTER_BUFFER_MS)
+
+    def test_normalize_clamps_range(self):
+        from midi_config import MAX_MIDI_JITTER_BUFFER_MS, MIN_MIDI_JITTER_BUFFER_MS, normalize_jitter_buffer_ms
+
+        self.assertEqual(normalize_jitter_buffer_ms(-5), MIN_MIDI_JITTER_BUFFER_MS)
+        self.assertEqual(normalize_jitter_buffer_ms(999), MAX_MIDI_JITTER_BUFFER_MS)
+        self.assertEqual(normalize_jitter_buffer_ms("40"), 40)
+
+    def test_get_jitter_buffer_ms_from_config(self):
+        from midi_config import get_jitter_buffer_ms
+
+        self.assertEqual(get_jitter_buffer_ms({}), 25)
+        self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_ms": 50}}), 50)
+
+    @patch("midi_jitter_buffer.rtmidi", None)
+    def test_ensure_jitter_buffer_without_rtmidi(self):
+        from midi_jitter_buffer import ensure_jitter_buffer, jitter_buffer_status
+
+        self.assertFalse(ensure_jitter_buffer(25))
+        self.assertFalse(jitter_buffer_status()["active"])
+
+    def test_route_destination_prefers_buffer(self):
+        from midi_utils import _route_destination
+
+        buf_port = {"client": "Tabloza Buffer", "name": "Tabloza Buffer", "address": "129:0"}
+        fs_port = {"client": "FLUID Synth", "name": "Synth input port", "address": "128:0"}
+        with patch("midi_jitter_buffer.get_buffer_input_port", return_value=buf_port):
+            with patch("midi_utils.find_fluidsynth_input", return_value=fs_port):
+                self.assertEqual(_route_destination(), buf_port)
+
+
 class TestActivityStatus(unittest.TestCase):
     def test_aseqdump_event_lines(self):
         from activity_status import is_aseqdump_midi_event

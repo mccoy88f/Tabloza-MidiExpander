@@ -118,6 +118,7 @@ def find_rtpmidid_outputs() -> list[dict]:
 _RESERVED_MIDI_CLIENTS = (
     "fluid synth",
     "rtpmidid",
+    "tabloza buffer",
     "midi through",
     "system",
     "sampler",
@@ -197,32 +198,45 @@ def disconnect_source_routes(src_addr: str) -> int:
     return removed
 
 
+def _route_destination() -> dict | None:
+    """ALSA port where MIDI sources should connect (buffer input or FluidSynth)."""
+    from midi_jitter_buffer import get_buffer_input_port
+
+    buf = get_buffer_input_port()
+    if buf:
+        return buf
+    return find_fluidsynth_input()
+
+
 def get_active_routes() -> list[dict]:
-    """Return MIDI sources connected to FluidSynth from `aconnect -l`."""
-    output = _aconnect_list_output()
-    if not output:
+    """Return MIDI sources connected to the active route destination."""
+    dest = _route_destination()
+    if not dest:
         return []
 
-    fs = find_fluidsynth_input()
-    if not fs:
-        return []
-
+    dest_addr = dest["address"]
+    source_addrs = {src["address"] for src in _midi_sources_for_routing()}
     routes = []
-    fs_addr = fs["address"]
-    in_fluid_client = False
-    for line in output.splitlines():
+    current_client_num = None
+    current_port_addr = None
+    for line in _aconnect_list_output().splitlines():
         client_match = CLIENT_RE.match(line)
         if client_match:
-            in_fluid_client = client_match.group(2).lower().startswith("fluid synth")
+            current_client_num = client_match.group(1)
+            current_port_addr = None
             continue
-        if in_fluid_client and "Connected From:" in line:
-            for addr in PORT_RE.findall(line.split("Connected From:", 1)[1]):
-                routes.append({"from": addr, "to": fs_addr})
-            break
-        if in_fluid_client and "Connecting To:" in line and fs_addr in line:
-            for addr in PORT_RE.findall(line.split("Connecting To:", 1)[1]):
-                if addr != fs_addr:
-                    routes.append({"from": fs_addr, "to": addr})
+        num_match = CLIENT_NUM_RE.match(line)
+        if num_match and not line.startswith(" "):
+            current_client_num = num_match.group(1)
+            current_port_addr = None
+            continue
+        port_match = PORT_LINE_RE.match(line)
+        if port_match and current_client_num is not None:
+            current_port_addr = f"{current_client_num}:{port_match.group(1)}"
+            continue
+        if current_port_addr in source_addrs and "Connecting To:" in line:
+            if dest_addr in line.split("Connecting To:", 1)[1]:
+                routes.append({"from": current_port_addr, "to": dest_addr})
     return routes
 
 
@@ -236,10 +250,13 @@ def midi_monitor_port() -> tuple[str | None, str | None]:
 
 def get_midi_status() -> dict:
     """Return structured MIDI routing status for API/frontend."""
+    from midi_jitter_buffer import jitter_buffer_status
+
     fs = find_fluidsynth_input()
     rtp_sources = find_rtpmidid_outputs()
     usb_sources = find_usb_midi_outputs()
     active_routes = get_active_routes()
+    buffer_status = jitter_buffer_status()
     routes = []
     if rtp_sources:
         any_connected = any(
@@ -274,23 +291,38 @@ def get_midi_status() -> dict:
         "sources": routes,
         "active_routes": active_routes,
         "routing_ok": fs is not None and len(active_routes) > 0,
+        "jitter_buffer": buffer_status,
+    }
+
+
+def get_midi_settings_for_api(config: dict) -> dict:
+    from midi_config import get_jitter_buffer_ms
+    from midi_jitter_buffer import jitter_buffer_status
+
+    status = jitter_buffer_status()
+    configured_ms = get_jitter_buffer_ms(config)
+    return {
+        "jitter_buffer_ms": configured_ms,
+        "jitter_buffer_active": status["active"],
+        "jitter_buffer_effective_ms": status["buffer_ms"] if status["active"] else 0,
+        "rtmidi_available": status["rtmidi_available"],
     }
 
 
 def route_midi_to_fluidsynth() -> int:
-    """Connect network (rtpmidid) and USB MIDI sources to FluidSynth."""
-    fs = find_fluidsynth_input()
-    if not fs:
+    """Connect network (rtpmidid) and USB MIDI sources to buffer or FluidSynth."""
+    dest = _route_destination()
+    if not dest:
         return 0
     count = 0
     for src in _midi_sources_for_routing():
         disconnect_source_routes(src["address"])
         try:
             subprocess.run(
-                ["aconnect", src["address"], fs["address"]],
+                ["aconnect", src["address"], dest["address"]],
                 capture_output=True, timeout=3, check=False,
             )
-            log.info("Routed %s (%s) → %s", src["client"], src["address"], fs["address"])
+            log.info("Routed %s (%s) → %s", src["client"], src["address"], dest["address"])
             count += 1
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass

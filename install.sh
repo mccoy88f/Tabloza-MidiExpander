@@ -80,6 +80,8 @@ apt-get install -y -qq \
 
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
+python3 -m pip install --break-system-packages python-rtmidi 2>/dev/null \
+    || python3 -m pip install python-rtmidi
 
 # FluidSynth di sistema (pacchetto fluid-soundfont-gm) confligge con Tabloza.
 log "Disabilito FluidSynth di sistema..."
@@ -127,10 +129,26 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "reverb": true,
     "chorus": true,
     "dynamic_sample_loading": false
+  },
+  "midi": {
+    "jitter_buffer_ms": 25
   }
 }
 EOF
 fi
+
+python3 <<PY
+import json
+from pathlib import Path
+p = Path("${CONFIG_FILE}")
+if p.is_file():
+    cfg = json.loads(p.read_text())
+    midi = cfg.get("midi") if isinstance(cfg.get("midi"), dict) else {}
+    if "jitter_buffer_ms" not in midi:
+        midi["jitter_buffer_ms"] = 25
+        cfg["midi"] = midi
+        p.write_text(json.dumps(cfg, indent=2) + "\n")
+PY
 
 if [[ ! -f "${AUTH_FILE}" ]]; then
     log "Impostazione password predefinita: ${DEFAULT_PASSWORD}"
