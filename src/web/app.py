@@ -56,7 +56,7 @@ from soundfont_config import (  # noqa: E402
     startup_soundfont_name,
 )
 from midi_config import parse_midi_settings_update  # noqa: E402
-from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
+from synth_config import merge_fluidsynth_config, normalize_synth_gain, parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
 from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
@@ -199,6 +199,7 @@ def api_status():
         },
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
+        "synth_gain": merge_fluidsynth_config(config.get("fluidsynth")).get("gain", 2.0),
         "audio": {
             "device": resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")),
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
@@ -506,6 +507,23 @@ def api_volume():
         "alsa": alsa_detail,
         "alsa_ok": ok_alsa,
     })
+
+
+@app.route("/api/synth-gain", methods=["POST"])
+@require_auth
+def api_synth_gain():
+    data = request.get_json(silent=True) or {}
+    if "gain" not in data:
+        return jsonify({"error": "Parametro gain mancante"}), 400
+    gain = normalize_synth_gain(data["gain"])
+    config = load_config()
+    fs = merge_fluidsynth_config(config.get("fluidsynth"))
+    fs["gain"] = gain
+    save_config({"fluidsynth": fs})
+    if not trigger_orchestrator_apply_volume():
+        return jsonify({"error": "Impossibile applicare guadagno synth (orchestrator non attivo)"}), 503
+    log_event("web", f"Guadagno SoundFont → {gain:.2f}")
+    return jsonify({"ok": True, "gain": gain})
 
 
 # --- Audio output ---

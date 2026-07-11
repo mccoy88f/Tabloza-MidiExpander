@@ -20,6 +20,10 @@ AUDIO_PRESETS: dict[str, dict] = {
 
 DEFAULT_AUDIO_PRESET = "stable"
 
+MIN_SYNTH_GAIN = 0.0
+MAX_SYNTH_GAIN = 4.0
+DEFAULT_SYNTH_GAIN = 2.0
+
 DEFAULT_FLUIDSYNTH_CONFIG: dict = {
     "audio_driver": "alsa",
     "audio_device": "plughw:0,0",
@@ -37,6 +41,14 @@ DEFAULT_FLUIDSYNTH_CONFIG: dict = {
 }
 
 
+def normalize_synth_gain(value) -> float:
+    try:
+        gain = float(value)
+    except (TypeError, ValueError):
+        gain = DEFAULT_SYNTH_GAIN
+    return round(max(MIN_SYNTH_GAIN, min(MAX_SYNTH_GAIN, gain)), 2)
+
+
 def merge_fluidsynth_config(stored: dict | None) -> dict:
     """Merge stored fluidsynth section with defaults."""
     merged = dict(DEFAULT_FLUIDSYNTH_CONFIG)
@@ -50,6 +62,7 @@ def merge_fluidsynth_config(stored: dict | None) -> dict:
     merged["reverb"] = bool(merged.get("reverb", True))
     merged["chorus"] = bool(merged.get("chorus", True))
     merged["dynamic_sample_loading"] = bool(merged.get("dynamic_sample_loading", False))
+    merged["gain"] = normalize_synth_gain(merged.get("gain"))
     if merged.get("audio_preset") not in AUDIO_PRESETS:
         merged["audio_preset"] = DEFAULT_AUDIO_PRESET
     return merged
@@ -85,6 +98,7 @@ def synth_settings_for_api(config: dict) -> dict:
         "reverb": fs["reverb"],
         "chorus": fs["chorus"],
         "dynamic_sample_loading": fs["dynamic_sample_loading"],
+        "gain": fs["gain"],
         "presets": presets,
     }
 
@@ -116,6 +130,8 @@ def parse_synth_settings_update(data: dict, current: dict) -> tuple[dict, bool]:
         fs["chorus"] = bool(data["chorus"])
     if "dynamic_sample_loading" in data:
         fs["dynamic_sample_loading"] = bool(data["dynamic_sample_loading"])
+    if "gain" in data:
+        fs["gain"] = normalize_synth_gain(data["gain"])
 
     new_restart_key = (
         fs["period_size"],

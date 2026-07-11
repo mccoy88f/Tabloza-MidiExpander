@@ -96,10 +96,21 @@
       <!-- Volume -->
       <section class="card">
         <h2 data-i18n="sectionVolume">Volume uscita audio</h2>
-        <div class="volume-row">
-          <input type="range" id="volume-slider" min="0" max="100" value="100" aria-valuemin="0" aria-valuemax="100">
-          <span id="volume-value">100</span><span class="volume-unit">%</span>
-        </div>
+        <label class="synth-field">
+          <span class="label" data-i18n="labelOutputVolume">Volume uscita (ALSA)</span>
+          <div class="volume-row">
+            <input type="range" id="volume-slider" min="0" max="100" value="100" aria-valuemin="0" aria-valuemax="100">
+            <span id="volume-value">100</span><span class="volume-unit">%</span>
+          </div>
+        </label>
+        <label class="synth-field">
+          <span class="label" data-i18n="labelSf2Gain">Volume SoundFont</span>
+          <div class="volume-row">
+            <input type="range" id="sf2-gain-slider" min="0" max="400" step="5" value="200" aria-valuemin="0" aria-valuemax="400">
+            <span id="sf2-gain-value">2.0</span><span class="volume-unit">×</span>
+          </div>
+        </label>
+        <p class="muted synth-hint" data-i18n="sf2GainHint">Regola il guadagno del motore synth. Abbassa se alcuni SF2 suonano troppo forte rispetto ad altri.</p>
       </section>
 
       <!-- Audio output -->

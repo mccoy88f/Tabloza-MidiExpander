@@ -386,6 +386,12 @@ async function refreshStatus() {
     document.getElementById("volume-slider").value = pct;
     document.getElementById("volume-value").textContent = pct;
   }
+  if (!sf2GainAdjusting) {
+    const gain = Number(s.synth_gain);
+    const sliderVal = Number.isFinite(gain) ? Math.round(gain * 100) : 200;
+    document.getElementById("sf2-gain-slider").value = sliderVal;
+    document.getElementById("sf2-gain-value").textContent = formatSf2Gain(sliderVal / 100);
+  }
   renderMidiInputs(s.midi, s.activity);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
   if (s.synth_settings) {
@@ -805,6 +811,28 @@ volumeSlider.addEventListener("input", (e) => {
     volumeAdjusting = false;
   }, 200);
 });
+
+function formatSf2Gain(gain) {
+  return (Math.round(gain * 10) / 10).toFixed(1);
+}
+
+let sf2GainTimer;
+let sf2GainAdjusting = false;
+const sf2GainSlider = document.getElementById("sf2-gain-slider");
+if (sf2GainSlider) {
+  sf2GainSlider.addEventListener("pointerdown", () => { sf2GainAdjusting = true; });
+  sf2GainSlider.addEventListener("pointerup", () => { sf2GainAdjusting = false; });
+  sf2GainSlider.addEventListener("pointercancel", () => { sf2GainAdjusting = false; });
+  sf2GainSlider.addEventListener("input", (e) => {
+    const gain = parseInt(e.target.value, 10) / 100;
+    document.getElementById("sf2-gain-value").textContent = formatSf2Gain(gain);
+    clearTimeout(sf2GainTimer);
+    sf2GainTimer = setTimeout(async () => {
+      await api("/api/synth-gain", { method: "POST", body: JSON.stringify({ gain }) });
+      sf2GainAdjusting = false;
+    }, 200);
+  });
+}
 
 // --- Audio output ---
 let currentAudioDevice = "";

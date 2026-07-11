@@ -18,8 +18,10 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 
 | Feature | Description |
 |---------|-------------|
-| **SF2 synthesis** | FluidSynth with web-managed SoundFont library |
-| **Synth engine** | Buffer presets, polyphony, reverb, chorus, dynamic SF2 loading |
+| **SF2 synthesis** | FluidSynth with web-managed SoundFont library; load verification; **Eject SF2** frees RAM |
+| **Synth engine** | Audio buffer presets (default **Stable**), polyphony, reverb, chorus, dynamic SF2 loading |
+| **MIDI settings** | Bank modes GM/GS/XG/MMA (default GS), RTP anti-jitter buffer, hardware-like **SysEx auto** |
+| **MIDI gateway** | ALSA port `Tabloza Buffer`: RTP buffer (~25 ms) + SysEx interception toward FluidSynth |
 | **Audio output** | ALSA device selection (built-in jack, USB, HDMI) with volume in percent |
 | **RTP-MIDI** | Discoverable as `tabloza-me.local` (rtpmidid + Avahi) |
 | **USB MIDI** | USB‑MIDI dongle/interface on the Pi, auto-routed in parallel with network MIDI |
@@ -30,7 +32,7 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 | **WiFi provisioning** | `Tabloza-MidiExpander` hotspot when offline; connect to home networks |
 | **Network monitor** | WiFi reconnect, hotspot fallback, automatic Ethernet management |
 | **Diagnostics** | RAM, CPU, disk, temperature, event console and update check |
-| **MIDI Reset** | Restart FluidSynth and MIDI routing in one click |
+| **MIDI Reset / Stop notes** | Restart FluidSynth + routing; silence all notes without restart |
 | **Security** | Password login (default: `tabloza`) |
 
 ### Web interface (UI)
@@ -41,11 +43,12 @@ The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Lan
 
 | Section | Purpose |
 |---------|---------|
-| **Status** | mDNS address, per-interface IP, network mode `Ethernet + Wi‑Fi (name)`, SF2, version, **MIDI inputs**, sound/jack test, MIDI Reset |
+| **Status** | mDNS address, per-interface IP, network mode, SF2, version, **MIDI inputs**, sound/jack test, **MIDI Reset**, **Stop notes** |
 | **Audio output volume** | **0–100%** slider, auto-saved |
 | **Audio output** | ALSA playback device list; switch output (jack, USB, HDMI…) with synth restart |
-| **Synth engine** | Buffer preset, polyphony, reverb, chorus, dynamic loading; *Stop notes* |
-| **SoundFont Library** | List, load, delete, upload `.sf2` files |
+| **Synth engine** | Audio buffer preset, polyphony, reverb, chorus, dynamic loading |
+| **MIDI settings** | Bank mode, RTP anti-jitter buffer, automatic SysEx; shows active runtime mode |
+| **SoundFont Library** | List, load, delete, upload `.sf2`, **Eject SF2** (unload from RAM) |
 | **Network** | Active mode badge; direct LAN, hotspot, WiFi client; **disable/enable Wi‑Fi** |
 | **Diagnostics** | System metrics (RAM, CPU, disk, temperature), update check, **device reboot**, event console |
 | **Security** | Change password (collapsible section) |
@@ -79,7 +82,43 @@ The panel detects connectivity automatically and adapts available controls.
 | **USB‑MIDI (dongle on Pi)** | ✅ Active | Keyboard/controller via USB adapter; auto-routing + hot-plug |
 | **GPIO DIN (UART)** | 🔜 Future development | Classic MIDI jack on GPIO 14/15 with optoisolator; UART script ready, ALSA bridge TBD |
 
-Under **Status → MIDI inputs** you see active sources. After plugging a USB dongle, wait ~5 s or use **MIDI Reset**.
+Under **Status → MIDI inputs** you see active sources (rtpmidid, USB, routing status). After plugging a USB dongle, wait ~5 s or use **MIDI Reset**.
+
+#### MIDI path (network and USB)
+
+Sources no longer connect directly to FluidSynth: they go through the **Tabloza gateway** (ALSA port `Tabloza Buffer`), which can:
+
+1. **RTP buffer** (optional, ~25 ms) — smooth Wi‑Fi jitter before the synth  
+2. **SysEx auto** (optional) — detect GM/GS/XG/GM2 SysEx and switch bank mode at runtime  
+
+```
+Mac/iPad/USB  →  rtpmidid / USB-MIDI  →  Tabloza Buffer  →  FluidSynth
+```
+
+With RTP buffer off but SysEx auto on, the gateway stays up in **passthrough** (minimum MIDI latency, SysEx interception active).
+
+### MIDI settings
+
+**MIDI settings** section (collapsible). Stored in `config.json` → `midi` section.
+
+| Setting | Description | Synth restart |
+|---------|-------------|---------------|
+| **Bank mode** | `GM`, `GS` (default), `XG`, `MMA/GM2` — how FluidSynth interprets bank select | Yes |
+| **RTP anti-jitter buffer** | Delays network events ~25 ms (default **on**); useful on Wi‑Fi | No (gateway only) |
+| **Automatic SysEx** | Switch bank mode on GM/GS/XG/GM2 SysEx (default **on**) | No |
+
+**When to use which bank mode:**
+
+| Mode | Recommended for |
+|------|-----------------|
+| **GM** | Simple apps, pure GM MIDI files (ignores bank select) |
+| **GS** | General compromise, GM/GS SoundFonts, Roland gear |
+| **XG** | Yamaha SoundFonts (e.g. SD1000), XG files/arrangers |
+| **MMA** | GM2 files or DAWs with explicit MSB+LSB |
+
+With **automatic SysEx** enabled, a file or app sending e.g. *XG System On* temporarily switches to XG mode (shown as “active mode now” in the panel) without changing the saved default. GM2 SysEx is mapped to **MMA**.
+
+Other SysEx (tuning, GS DT1 rhythm parts, etc.) are forwarded normally to FluidSynth.
 
 ### Synth engine (FluidSynth)
 
@@ -87,20 +126,30 @@ Under **Status → MIDI inputs** you see active sources. After plugging a USB do
 
 | Setting | Description | Synth restart |
 |---------|-------------|---------------|
-| **Audio buffer preset** | `Standard` (512×6), `Low latency` (256×4), `Stable` (1024×8) | Yes |
-| **Polyphony** | 32–512 simultaneous voices (default 256) | No |
+| **Audio buffer preset** | `Standard` (512×6), `Low latency` (256×4), `Stable` (1024×8) — **default: Stable** | Yes |
+| **Polyphony** | 32–512 simultaneous voices (default 256) | Yes |
 | **Reverb** | FluidSynth reverb effect | No |
 | **Chorus** | FluidSynth chorus effect | No |
 | **Dynamic SF2 loading** | Load SF2 samples on demand (less RAM, more I/O) | Yes |
 
-- **Apply** — save and apply; restarts FluidSynth only when needed (buffer or dynamic loading).
-- **Restore standard** — reset to Standard preset with polyphony 256, reverb/chorus on.
-- **Stop notes** — sends all-notes-off without restarting the engine.
+- **Apply** — save and apply; restarts FluidSynth only when needed (audio buffer or dynamic loading).
+- **Restore stable** — reset to **Stable** preset (1024×8) with polyphony 256, reverb/chorus on.
 
 Tips:
-- **Standard** — good default on Pi 4/5.
-- **Low latency** — live performance; higher CPU load.
-- **Stable** — very large SF2 files or stressed systems.
+- **Stable** (default) — large SF2 (e.g. SD1000), Wi‑Fi/RTP, stressed systems; ~185 ms audio latency.
+- **Standard** — good balance on Pi 4/5 (~70 ms audio latency).
+- **Low latency** — live performance; higher CPU load (~40 ms audio latency).
+
+> The **RTP MIDI buffer** (~25 ms) is separate from the audio buffer and is configured under **MIDI settings**.
+
+### SoundFont library
+
+In addition to selecting and uploading `.sf2` files:
+
+- **Load** — load the selected SF2 into FluidSynth (with stack verification and adaptive timeout for large files).
+- **Eject SF2** — unload all SF2 from RAM while keeping FluidSynth running (handy with 1+ GB maps).
+- Before each new load, any previous SF2 is unloaded automatically.
+- Filenames with **spaces** are supported (e.g. `SD1000 Sound Family Map.sf2`).
 
 ### Audio output
 
@@ -111,6 +160,7 @@ Tips:
 | **Apply output** | Change device and restart the synth |
 | **Sound test** | Test note via FluidSynth (checks SF2 + routing) |
 | **Jack test** | Direct beep on ALSA hardware (bypasses FluidSynth) |
+| **Stop notes** | Silence all notes (in **Status**, next to MIDI Reset) |
 
 USB/HDMI cards may automatically use a 48 kHz sample rate.
 
@@ -213,7 +263,7 @@ In the **web panel** (Status section):
 sudo tabloza-test
 speaker-test -t wav -c 2 -l 1
 pgrep -a fluidsynth
-aconnect -l | grep -E 'fluidsynth|rtpmidid|Connected'
+aconnect -l | grep -E 'Tabloza|fluidsynth|rtpmidid|Connected'
 FS=$(aconnect -i | grep -i fluidsynth | head -1 | awk '{print $2}')
 sudo amidi -p "$FS" -S "90 3C 64" && sleep 0.3 && sudo amidi -p "$FS" -S "80 3C 00"
 sudo journalctl -u tabloza-orchestrator -f
@@ -221,7 +271,7 @@ sudo journalctl -u tabloza-orchestrator -f
 
 | Web sound test | MIDI in (web) | Likely cause |
 |----------------|---------------|--------------|
-| Heard | No pulse | Mac not sending MIDI or RTP → FluidSynth routing broken → **MIDI Reset** |
+| Heard | No pulse | Mac not sending MIDI or RTP → gateway/FluidSynth routing broken → **MIDI Reset** |
 | Silent | — | ALSA / jack / SF2 issue → `speaker-test`, check SF2 |
 | Heard | Pulsing | Audio OK — check Mac/DAW volume and MIDI channel |
 
@@ -268,13 +318,13 @@ During `tabloza-uninstall` you can choose whether to delete `/var/lib/tabloza` (
 
 ```
 /var/lib/tabloza/
-├── config.json      # active SF2, volume (%), fluidsynth (preset, polyphony, effects…)
+├── config.json      # active SF2, volume (%), fluidsynth, midi (banks, RTP buffer, SysEx)…
 ├── auth.json        # password hash
 ├── secret.key       # Flask secret key
 └── soundfonts/      # .sf2 library
 ```
 
-Example `fluidsynth` section in `config.json`:
+Example `config.json` (excerpt):
 
 ```json
 {
@@ -282,11 +332,19 @@ Example `fluidsynth` section in `config.json`:
   "volume": 85,
   "fluidsynth": {
     "audio_device": "plughw:0,0",
-    "audio_preset": "standard",
+    "audio_preset": "stable",
+    "period_size": 1024,
+    "period_count": 8,
     "polyphony": 256,
     "reverb": true,
     "chorus": true,
     "dynamic_sample_loading": false
+  },
+  "midi": {
+    "bank_select": "gs",
+    "jitter_buffer_enabled": true,
+    "jitter_buffer_ms": 25,
+    "sysex_bank_auto": true
   }
 }
 ```
@@ -300,7 +358,7 @@ sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan 
 | Service | Role |
 |---------|------|
 | `tabloza-web` | Flask web panel |
-| `tabloza-orchestrator` | FluidSynth, MIDI routing, SF2 loading |
+| `tabloza-orchestrator` | FluidSynth, MIDI gateway (`Tabloza Buffer`), routing, SF2 loading, SysEx auto |
 | `tabloza-wifi` | WiFi monitor, hotspot fallback |
 | `tabloza-lan` | Ethernet monitor, automatic direct LAN link |
 | `rtpmidid` | Network RTP-MIDI session |

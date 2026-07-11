@@ -135,6 +135,14 @@ class TestSynthConfig(unittest.TestCase):
         self.assertTrue(restart)
         self.assertEqual(fs["polyphony"], 512)
 
+    def test_normalize_synth_gain(self):
+        from synth_config import MAX_SYNTH_GAIN, MIN_SYNTH_GAIN, normalize_synth_gain
+
+        self.assertEqual(normalize_synth_gain(2.0), 2.0)
+        self.assertEqual(normalize_synth_gain("1.5"), 1.5)
+        self.assertEqual(normalize_synth_gain(-1), MIN_SYNTH_GAIN)
+        self.assertEqual(normalize_synth_gain(99), MAX_SYNTH_GAIN)
+
 
 class TestMidiConfig(unittest.TestCase):
     def test_merge_defaults(self):

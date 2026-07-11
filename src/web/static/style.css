@@ -217,10 +217,13 @@ input[type="text"] {
   50% { box-shadow: 0 0 0 6px rgba(243, 156, 18, 0); }
 }
 
-#volume-slider { width: 100%; vertical-align: middle; accent-color: var(--accent); }
+#volume-slider,
+#sf2-gain-slider { width: 100%; vertical-align: middle; accent-color: var(--accent); }
 .volume-row { display: flex; align-items: center; gap: 0.75rem; }
-.volume-row #volume-slider { flex: 1; min-width: 0; }
-#volume-value { display: inline-block; min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
+.volume-row #volume-slider,
+.volume-row #sf2-gain-slider { flex: 1; min-width: 0; }
+#volume-value,
+#sf2-gain-value { display: inline-block; min-width: 2rem; text-align: right; font-variant-numeric: tabular-nums; }
 .volume-unit { font-variant-numeric: tabular-nums; color: var(--muted, #888); }
 
 .audio-device-current { margin: 0 0 0.75rem; color: var(--text); }
