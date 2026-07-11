@@ -298,6 +298,7 @@ def api_soundfonts():
         "default": default,
         "loaded": loaded,
         "loading": loading,
+        "error": sf_state.get("error"),
     })
 
 

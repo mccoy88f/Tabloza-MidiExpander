@@ -349,7 +349,7 @@ def apply_soundfont_from_config() -> bool:
 
     with soundfont_load_lock:
         write_soundfont_state(
-            selected=selected, loading=True, error=None,
+            selected=selected, loaded="", loading=True, error=None,
             load_started_at=time.time(),
         )
         if not selected:

@@ -111,14 +111,49 @@ function renderMidiInputs(midi) {
   }
 }
 
+function renderSoundfontUi(soundfont) {
+  if (!soundfont) return;
+  const sf2Loaded = soundfont.loaded || "";
+  const sf2Loading = !!soundfont.loading;
+  const sf2Error = soundfont.error;
+
+  const dotSf2 = document.getElementById("dot-sf2");
+  const valSf2 = document.getElementById("value-sf2");
+  if (dotSf2) {
+    dotSf2.className = "activity-dot " + (
+      sf2Error ? "off"
+        : sf2Loading ? "active pulse"
+          : sf2Loaded ? "idle"
+            : "off"
+    );
+  }
+  if (valSf2) {
+    if (sf2Error) {
+      valSf2.textContent = sf2Error;
+    } else if (sf2Loading) {
+      valSf2.textContent = t("sf2Loading", { name: soundfont.selected || "…" });
+    } else if (sf2Loaded) {
+      valSf2.textContent = sf2Loaded;
+    } else if (soundfont.selected) {
+      valSf2.textContent = t("sf2SelectedNotLoaded", { name: soundfont.selected });
+    } else {
+      valSf2.textContent = t("sf2NotLoaded");
+    }
+  }
+
+  const statusSf2 = document.getElementById("status-sf2");
+  if (statusSf2) {
+    statusSf2.textContent = sf2Loaded
+      || (soundfont.selected ? `${soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
+  }
+}
+
 function renderActivity(activity, midi, synth, soundfont) {
   const midiAct = activity?.midi || {};
   const audioAct = activity?.audio || {};
 
   const dotSynth = document.getElementById("dot-synth");
   const valSynth = document.getElementById("value-synth");
-  const dotSf2 = document.getElementById("dot-sf2");
-  const valSf2 = document.getElementById("value-sf2");
   const dotMidi = document.getElementById("dot-midi-in");
   const valMidi = document.getElementById("value-midi-in");
   const dotAudio = document.getElementById("dot-audio-out");
@@ -133,26 +168,7 @@ function renderActivity(activity, midi, synth, soundfont) {
     ? (midiReady ? t("synthReady") : t("synthMidiPending"))
     : t("synthStopped");
 
-  const sf2Loaded = soundfont?.loaded || "";
-  const sf2Loading = !!soundfont?.loading;
-  const sf2Error = soundfont?.error;
-  dotSf2.className = "activity-dot " + (
-    sf2Error ? "off"
-      : sf2Loading ? "active pulse"
-        : sf2Loaded ? "idle"
-          : "off"
-  );
-  if (sf2Error) {
-    valSf2.textContent = sf2Error;
-  } else if (sf2Loading) {
-    valSf2.textContent = t("sf2Loading", { name: soundfont?.selected || "…" });
-  } else if (sf2Loaded) {
-    valSf2.textContent = sf2Loaded;
-  } else if (soundfont?.selected) {
-    valSf2.textContent = t("sf2SelectedNotLoaded", { name: soundfont.selected });
-  } else {
-    valSf2.textContent = t("sf2NotLoaded");
-  }
+  renderSoundfontUi(soundfont);
 
   const midiReceiving = !!midiAct.receiving;
   dotMidi.className = "activity-dot " + (midiReceiving ? "active pulse" : midi?.routing_ok ? "idle" : "off");
@@ -163,6 +179,7 @@ function renderActivity(activity, midi, synth, soundfont) {
       : t("midiNoRoute");
 
   const audioPlaying = !!audioAct.output_active;
+  const sf2Loaded = soundfont?.loaded || "";
   dotAudio.className = "activity-dot " + (audioPlaying ? "active pulse" : engineRunning ? "idle" : "off");
   valAudio.textContent = audioPlaying
     ? t("audioPlaying")
@@ -267,9 +284,7 @@ async function refreshStatus() {
   document.getElementById("status-ip").textContent = formatStatusIp(s.network, s.ip || "—");
   document.getElementById("status-network").textContent = networkModeLabel(s.network_mode, s.network || {});
   renderNetworkSection(s);
-  const sf2Label = s.soundfont?.loaded
-    || (s.soundfont?.selected ? `${s.soundfont.selected} (${t("sf2Pending")})` : t("noSoundfont"));
-  document.getElementById("status-sf2").textContent = sf2Label;
+  renderSoundfontUi(s.soundfont);
   if (!volumeAdjusting) {
     const pct = Math.min(100, Math.max(0, Number(s.volume) || 0));
     document.getElementById("volume-slider").value = pct;
@@ -432,7 +447,16 @@ document.getElementById("btn-midi-reset").addEventListener("click", async () => 
 
 // --- SoundFonts ---
 async function refreshSoundfonts() {
-  const { soundfonts, loading } = await api("/api/soundfonts");
+  const data = await api("/api/soundfonts");
+  const { soundfonts, loading, loaded, active, error } = data;
+  renderSoundfontUi({
+    selected: active,
+    loaded,
+    loading,
+    error,
+  });
+  lastSf2StateKey = [loading, loaded, active, error].join("|");
+
   const list = document.getElementById("sf2-list");
   list.innerHTML = "";
   if (!soundfonts.length) {
@@ -1084,8 +1108,7 @@ document.getElementById("change-password-form").addEventListener("submit", async
 function refreshAll() {
   const onDashboard = !document.getElementById("dashboard").classList.contains("hidden");
   if (onDashboard) {
-    refreshStatus();
-    refreshSoundfonts();
+    void refreshStatus().then(() => refreshSoundfonts());
     refreshAudioDevices();
     refreshSynthSettings();
   }
