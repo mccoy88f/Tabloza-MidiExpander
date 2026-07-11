@@ -10,9 +10,9 @@ Trasforma un Raspberry Pi in un expander MIDI headless con sintesi SoundFont, RT
 
 Tabloza MidiExpander è un **sintetizzatore MIDI standalone** basato su Raspberry Pi. Il dispositivo funziona **senza schermo e senza tasti**: tutto si controlla da browser (smartphone o PC) tramite una interfaccia web responsive.
 
-Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows) e le trasforma in audio in tempo reale usando **FluidSynth** e file SoundFont (`.sf2`), con uscita audio configurabile (jack, USB, HDMI).
+Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows) e, in parallelo, da **dongle USB‑MIDI** collegato al Pi. L’audio usa **FluidSynth** e file SoundFont (`.sf2`), con uscita configurabile (jack, USB, HDMI).
 
-> **MIDI GPIO fisico** (porta DIN su GPIO 14/15): funzione pianificata, non ancora attiva. Vedi [docs/TODO.md](docs/TODO.md).
+> **Sviluppi futuri:** ingresso **MIDI GPIO** (porta DIN su UART GPIO 14/15 + optoisolatore) — non ancora implementato. Dettagli in [docs/TODO.md](docs/TODO.md).
 
 ### Funzionalità
 
@@ -22,6 +22,7 @@ Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows)
 | **Motore synth** | Preset buffer, polifonia, riverbero, chorus, caricamento dinamico SF2 |
 | **Uscita audio** | Selezione dispositivo ALSA (jack integrato, USB, HDMI) con volume in percentuale |
 | **RTP-MIDI** | Visibile in rete come `tabloza-me.local` (rtpmidid + Avahi) |
+| **MIDI USB** | Dongle/interfaccia USB‑MIDI sul Pi, routing automatico in parallelo alla rete |
 | **Pannello web** | UI responsive bilingue (IT/EN), sezioni espandibili |
 | **Upload SF2** | Drag-and-drop con barra di progresso (max 2 GB); attivazione manuale o automatica |
 | **Rete adattiva** | Ethernet, WiFi client, hotspot, link LAN diretto; UI che mostra solo le opzioni pertinenti |
@@ -40,7 +41,7 @@ La UI è **bilingue** (IT/EN): usa i pulsanti **IT** / **EN** in alto. La lingua
 
 | Sezione | Cosa fa |
 |---------|---------|
-| **Stato** | Indirizzo mDNS, IP per interfaccia (con etichetta), modalità rete con nome WiFi, SF2 attivo, versione, indicatori attività, test suono/jack, MIDI Reset |
+| **Stato** | Indirizzo mDNS, IP per interfaccia, modalità rete `Ethernet + WiFi (nome)`, SF2, versione, **ingressi MIDI**, test suono/jack, MIDI Reset |
 | **Volume uscita audio** | Slider **0–100%**, salvato automaticamente |
 | **Uscita audio** | Elenco dispositivi ALSA playback; cambio uscita (jack, USB, HDMI…) con riavvio synth |
 | **Motore synth** | Preset buffer, polifonia, riverbero, chorus, caricamento dinamico; *Stop note* |
@@ -56,8 +57,8 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 | Modalità (Stato) | Significato |
 |------------------|-------------|
 | **Ethernet** | Solo cavo LAN al router |
-| **WiFi · *nome rete*** | Solo WiFi client |
-| **Ethernet + WiFi · *nome rete*** | Cavo e WiFi client attivi insieme |
+| **WiFi (*nome rete*)** | Solo WiFi client |
+| **Ethernet + WiFi (*nome rete*)** | Cavo e WiFi client attivi insieme |
 | **Hotspot** | Pi emette `Tabloza-MidiExpander` (es. primo avvio o senza rete) |
 | **Link LAN diretto** | Cavo diretto Pi ↔ computer, Pi @ `192.168.5.1` |
 | **Offline** | Nessuna connessione utile |
@@ -69,6 +70,16 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 **Hotspot:** parte automaticamente se non c’è Ethernet né WiFi configurato; puoi avviarlo/fermarlo manualmente quando non sei su LAN router. Con cavo al router, l’hotspot resta opzionale (utile per configurare da smartphone).
 
 **WiFi client:** scan reti, password, profilo salvato in NetworkManager. Con Ethernet attiva puoi aggiungere anche il WiFi (dual-homed).
+
+### Ingressi MIDI
+
+| Sorgente | Stato | Note |
+|----------|-------|------|
+| **RTP-MIDI (rete)** | ✅ Attivo | Da Mac/PC/iPad verso `tabloza-me` — vedi sezione RTP-MIDI sotto |
+| **USB‑MIDI (dongle sul Pi)** | ✅ Attivo | Tastiera/controller via adattatore USB; routing automatico + hot‑plug |
+| **GPIO DIN (UART)** | 🔜 Sviluppo futuro | Presa MIDI classica su GPIO 14/15 con optoisolatore; script UART pronto, bridge ALSA da integrare |
+
+In **Stato → Ingressi MIDI** compaiono le sorgenti attive. Dopo aver collegato un dongle USB, attendi ~5 s o usa **MIDI Reset**.
 
 ### Motore synth (FluidSynth)
 

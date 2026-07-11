@@ -430,11 +430,12 @@ class TestNetworkIps(unittest.TestCase):
     @patch("network_utils.get_primary_ethernet_device")
     @patch("wifi_utils._wlan_device_present", return_value=True)
     @patch("wifi_utils._wlan_state", return_value="connected")
-    @patch("wifi_utils._active_wifi_connection", return_value="MyHome")
+    @patch("wifi_utils._active_wifi_ssid", return_value="CasaMesserangeli")
+    @patch("wifi_utils._active_wifi_connection", return_value="tabloza-wifi-CasaMesserangeli")
     @patch("wifi_utils._eth_connected", return_value=True)
     @patch("network_utils.is_lan_direct_active", return_value=False)
     def test_get_network_status_dual_ips(
-        self, _lan, _eth, _wifi_name, _wlan, _wlan_dev, mock_eth_dev, mock_ipv4,
+        self, _lan, _eth, _wifi_conn, _wifi_ssid, _wlan, _wlan_dev, mock_eth_dev, mock_ipv4,
     ):
         import wifi_utils as wu
 
@@ -448,6 +449,45 @@ class TestNetworkIps(unittest.TestCase):
         self.assertEqual(status["network_mode"], "lan_wifi")
         self.assertEqual(status["eth_ip"], "192.168.178.143")
         self.assertEqual(status["wifi_ip"], "192.168.178.50")
+        self.assertEqual(status["wifi_connection"], "CasaMesserangeli")
+        self.assertEqual(status["wifi_profile"], "tabloza-wifi-CasaMesserangeli")
+
+
+class TestUsbMidi(unittest.TestCase):
+    @patch("midi_utils.get_output_ports")
+    def test_find_usb_midi_outputs_excludes_system_clients(self, mock_ports):
+        import midi_utils as mu
+
+        mock_ports.return_value = [
+            {"client": "USB MIDI Interface", "name": "USB MIDI Interface MIDI 1", "address": "24:0"},
+            {"client": "FLUID Synth", "name": "Synth input port", "address": "128:0"},
+            {"client": "rtpmidid", "name": "Network", "address": "16:0"},
+            {"client": "Midi Through", "name": "Midi Through Port-0", "address": "14:0"},
+        ]
+        ports = mu.find_usb_midi_outputs()
+        self.assertEqual(len(ports), 1)
+        self.assertEqual(ports[0]["address"], "24:0")
+
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_usb_midi_outputs")
+    @patch("midi_utils.find_rtpmidid_outputs")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_get_midi_status_lists_usb(self, mock_fs, mock_rtp, mock_usb, mock_routes):
+        import midi_utils as mu
+
+        mock_fs.return_value = {"client": "FLUID Synth", "name": "in", "address": "128:0"}
+        mock_rtp.return_value = [{"client": "rtpmidid", "name": "Network", "address": "16:0"}]
+        mock_usb.return_value = [
+            {"client": "USB MIDI Interface", "name": "MIDI 1", "address": "24:0"},
+        ]
+        mock_routes.return_value = [{"from": "24:0", "to": "128:0"}]
+
+        status = mu.get_midi_status()
+        types = [s["type"] for s in status["sources"]]
+        self.assertEqual(types, ["rtpmidi", "usb", "gpio"])
+        usb = status["sources"][1]
+        self.assertEqual(usb["name"], "USB MIDI Interface")
+        self.assertEqual(usb["status"], "connected")
 
 
 if __name__ == "__main__":

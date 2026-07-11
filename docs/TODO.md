@@ -1,5 +1,14 @@
 # Funzionalità pianificate
 
+## MIDI USB (dongle)
+
+**Stato:** attivo — routing automatico in parallelo a RTP-MIDI di rete
+
+- Dongle USB‑MIDI o interfaccia USB collegata al Pi
+- L'orchestrator esegue `aconnect` periodico verso FluidSynth (come per `rtpmidid`)
+- Visibile in pannello → Stato → **Ingressi MIDI** con badge **Attivo** / **Collegato**
+- Hot‑plug: inserire il dongle e attendere ~5 s, oppure **MIDI Reset**
+
 ## MIDI GPIO fisico (UART)
 
 **Stato:** pianificato — non ancora implementato

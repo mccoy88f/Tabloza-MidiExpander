@@ -4,6 +4,7 @@
 Avvia FluidSynth senza SoundFont; il caricamento SF2 avviene su richiesta (UI / SIGHUP).
 
 GPIO UART MIDI: planned — see docs/TODO.md
+USB MIDI dongle: auto-routed in parallel with rtpmidid
 """
 
 import json

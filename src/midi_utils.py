@@ -115,8 +115,41 @@ def find_rtpmidid_outputs() -> list[dict]:
     return sources
 
 
+_RESERVED_MIDI_CLIENTS = (
+    "fluid synth",
+    "rtpmidid",
+    "midi through",
+    "system",
+    "sampler",
+    "virmidi",
+    "dummy",
+)
+
+
+def _is_reserved_midi_client(client_name: str) -> bool:
+    label = client_name.lower()
+    return any(token in label for token in _RESERVED_MIDI_CLIENTS)
+
+
+def find_usb_midi_outputs() -> list[dict]:
+    """Hardware/USB ALSA MIDI sources (parallel to rtpmidid network MIDI)."""
+    sources = []
+    for port in get_output_ports():
+        if _is_reserved_midi_client(port["client"]):
+            continue
+        label = f"{port['client']} {port['name']}".lower()
+        if "rtpmidid" in label or "fluid" in label or "synth input" in label:
+            continue
+        sources.append(port)
+    return sources
+
+
+def _midi_sources_for_routing() -> list[dict]:
+    return find_rtpmidid_outputs() + find_usb_midi_outputs()
+
+
 def get_active_routes() -> list[dict]:
-    """Return rtpmidid → fluidsynth connections from `aconnect -l`."""
+    """Return MIDI sources connected to FluidSynth from `aconnect -l`."""
     try:
         result = subprocess.run(
             ["aconnect", "-l"],
@@ -153,6 +186,7 @@ def get_midi_status() -> dict:
     """Return structured MIDI routing status for API/frontend."""
     fs = find_fluidsynth_input()
     rtp_sources = find_rtpmidid_outputs()
+    usb_sources = find_usb_midi_outputs()
     active_routes = get_active_routes()
     routes = []
     if rtp_sources:
@@ -167,6 +201,22 @@ def get_midi_status() -> dict:
             "status": "connected" if any_connected else "available",
             "port_count": len(rtp_sources),
         })
+    if usb_sources:
+        by_client: dict[str, list[dict]] = {}
+        for port in usb_sources:
+            by_client.setdefault(port["client"] or port["name"], []).append(port)
+        for client, ports in sorted(by_client.items()):
+            any_connected = any(
+                any(r["from"] == port["address"] for r in active_routes)
+                for port in ports
+            )
+            routes.append({
+                "type": "usb",
+                "name": client,
+                "address": ports[0]["address"],
+                "status": "connected" if any_connected else "available",
+                "port_count": len(ports),
+            })
     routes.append({
         "type": "gpio",
         "name": "MIDI GPIO (UART)",
@@ -181,23 +231,28 @@ def get_midi_status() -> dict:
     }
 
 
-def route_rtpmidi_to_fluidsynth() -> int:
-    """Connect rtpmidid outputs to FluidSynth input. Returns number of routes made."""
+def route_midi_to_fluidsynth() -> int:
+    """Connect network (rtpmidid) and USB MIDI sources to FluidSynth."""
     fs = find_fluidsynth_input()
     if not fs:
         return 0
     count = 0
-    for src in find_rtpmidid_outputs():
+    for src in _midi_sources_for_routing():
         try:
             subprocess.run(
                 ["aconnect", src["address"], fs["address"]],
                 capture_output=True, timeout=3, check=False,
             )
-            log.info("Routed %s → %s", src["address"], fs["address"])
+            log.info("Routed %s (%s) → %s", src["client"], src["address"], fs["address"])
             count += 1
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
     return count
+
+
+def route_rtpmidi_to_fluidsynth() -> int:
+    """Backward-compatible alias — routes all MIDI sources including USB."""
+    return route_midi_to_fluidsynth()
 
 
 def volume_to_gain(volume: int, max_gain: float = 2.0) -> float:

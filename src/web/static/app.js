@@ -86,9 +86,13 @@ function renderMidiInputs(midi) {
   midi.sources.forEach((src) => {
     const li = document.createElement("li");
     li.className = "midi-item";
-    const name = src.type === "gpio" ? t("midiGpioName") : (
-      src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name
-    );
+    const name = src.type === "gpio"
+      ? t("midiGpioName")
+      : src.type === "usb"
+        ? (src.port_count > 1
+          ? t("midiUsbNamedPorts", { name: src.name, count: src.port_count })
+          : t("midiUsbNamed", { name: src.name }))
+        : (src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name);
     const badge = src.status === "planned"
       ? `<span class="badge badge-planned">${t("badgePlanned")}</span>`
       : src.status === "connected"

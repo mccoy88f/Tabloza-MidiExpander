@@ -56,6 +56,31 @@ def _active_wifi_connection() -> str:
     return ""
 
 
+def _active_wifi_ssid(connection_name: str = "") -> str:
+    """Human-readable SSID for the active WiFi client (not NM profile name)."""
+    result = _run(["nmcli", "-t", "-f", "IN-USE,SSID", "device", "wifi", "list"], timeout=5)
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if len(fields) >= 2 and fields[0] == "*":
+            ssid = fields[1].strip()
+            if ssid and ssid != "--":
+                return ssid
+
+    conn = connection_name or _active_wifi_connection()
+    if not conn or conn == HOTSPOT_CONN:
+        return ""
+
+    result = _run(["nmcli", "-g", "802-11-wireless.ssid", "connection", "show", conn], timeout=5)
+    ssid = result.stdout.strip()
+    if ssid and ssid != "--":
+        return ssid
+
+    prefix = "tabloza-wifi-"
+    if conn.startswith(prefix):
+        return conn[len(prefix):]
+    return conn
+
+
 def prepare_wifi_scan() -> tuple[bool, str]:
     """Switch wlan0 out of AP mode so scans can run."""
     if not _wlan_device_present():
@@ -332,15 +357,17 @@ def get_network_status() -> dict:
     eth_device = get_primary_ethernet_device()
     lan_direct = is_lan_direct_active()
     wlan_mode = "disconnected"
-    wifi_name = ""
+    wifi_conn = ""
+    wifi_ssid = ""
 
     wlan_state = _wlan_state()
     if wlan_state == "connected":
-        wifi_name = _active_wifi_connection()
-        if wifi_name == HOTSPOT_CONN:
+        wifi_conn = _active_wifi_connection()
+        if wifi_conn == HOTSPOT_CONN:
             wlan_mode = "hotspot"
-        elif wifi_name:
+        elif wifi_conn:
             wlan_mode = "client"
+            wifi_ssid = _active_wifi_ssid(wifi_conn)
 
     if lan_direct:
         network_mode = "lan_direct"
@@ -371,7 +398,8 @@ def get_network_status() -> dict:
         "hotspot_active": wlan_mode == "hotspot",
         "wifi_client_active": wlan_mode == "client",
         "wlan_mode": wlan_mode,
-        "wifi_connection": wifi_name,
+        "wifi_connection": wifi_ssid,
+        "wifi_profile": wifi_conn,
         "eth_ip": eth_ip,
         "wifi_ip": wifi_ip,
     }

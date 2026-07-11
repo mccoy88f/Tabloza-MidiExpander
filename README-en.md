@@ -10,9 +10,9 @@ Turns a Raspberry Pi into a headless MIDI expander with SoundFont synthesis, RTP
 
 Tabloza MidiExpander is a **standalone MIDI synthesizer** built on Raspberry Pi. The device runs **headless** (no screen, no buttons): everything is controlled from a browser (smartphone or PC) via a responsive web interface.
 
-It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Windows) and renders real-time audio using **FluidSynth** and SoundFont (`.sf2`) files, with configurable audio output (jack, USB, HDMI).
+It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Windows) and, in parallel, from a **USB‑MIDI dongle** plugged into the Pi. Audio uses **FluidSynth** and SoundFont (`.sf2`) files, with configurable output (jack, USB, HDMI).
 
-> **Physical GPIO MIDI** (DIN port on GPIO 14/15): planned feature, not yet active. See [docs/TODO.md](docs/TODO.md).
+> **Future development:** **GPIO MIDI** input (DIN port on UART GPIO 14/15 + optoisolator) — not implemented yet. See [docs/TODO.md](docs/TODO.md).
 
 ### Features
 
@@ -22,6 +22,7 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 | **Synth engine** | Buffer presets, polyphony, reverb, chorus, dynamic SF2 loading |
 | **Audio output** | ALSA device selection (built-in jack, USB, HDMI) with volume in percent |
 | **RTP-MIDI** | Discoverable as `tabloza-me.local` (rtpmidid + Avahi) |
+| **USB MIDI** | USB‑MIDI dongle/interface on the Pi, auto-routed in parallel with network MIDI |
 | **Web panel** | Responsive bilingual UI (IT/EN), collapsible sections |
 | **SF2 upload** | Drag-and-drop with progress bar (max 2 GB); manual or auto activation |
 | **Adaptive networking** | Ethernet, WiFi client, hotspot, direct LAN link; UI shows relevant controls only |
@@ -40,7 +41,7 @@ The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Lan
 
 | Section | Purpose |
 |---------|---------|
-| **Status** | mDNS address, per-interface IP (labeled), network mode with WiFi name, active SF2, version, activity meters, sound/jack test, MIDI Reset |
+| **Status** | mDNS address, per-interface IP, network mode `Ethernet + Wi‑Fi (name)`, SF2, version, **MIDI inputs**, sound/jack test, MIDI Reset |
 | **Audio output volume** | **0–100%** slider, auto-saved |
 | **Audio output** | ALSA playback device list; switch output (jack, USB, HDMI…) with synth restart |
 | **Synth engine** | Buffer preset, polyphony, reverb, chorus, dynamic loading; *Stop notes* |
@@ -56,8 +57,8 @@ The panel detects connectivity automatically and adapts available controls.
 | Mode (Status) | Meaning |
 |---------------|---------|
 | **Ethernet** | LAN cable to router only |
-| **Wi‑Fi · *network name*** | WiFi client only |
-| **Ethernet + Wi‑Fi · *network name*** | Cable and WiFi client active together |
+| **Wi‑Fi (*network name*)** | WiFi client only |
+| **Ethernet + Wi‑Fi (*network name*)** | Cable and WiFi client active together |
 | **Hotspot** | Pi broadcasts `Tabloza-MidiExpander` (e.g. first boot or offline) |
 | **Direct LAN link** | Direct Pi ↔ computer cable, Pi @ `192.168.5.1` |
 | **Offline** | No usable connectivity |
@@ -69,6 +70,16 @@ The panel detects connectivity automatically and adapts available controls.
 **Hotspot:** starts automatically when there is no Ethernet or configured WiFi; can be started/stopped manually when not on router LAN. With a router cable connected, hotspot remains optional (handy for phone setup).
 
 **WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed).
+
+### MIDI inputs
+
+| Source | Status | Notes |
+|--------|--------|-------|
+| **RTP-MIDI (network)** | ✅ Active | From Mac/PC/iPad to `tabloza-me` — see RTP-MIDI section below |
+| **USB‑MIDI (dongle on Pi)** | ✅ Active | Keyboard/controller via USB adapter; auto-routing + hot-plug |
+| **GPIO DIN (UART)** | 🔜 Future development | Classic MIDI jack on GPIO 14/15 with optoisolator; UART script ready, ALSA bridge TBD |
+
+Under **Status → MIDI inputs** you see active sources. After plugging a USB dongle, wait ~5 s or use **MIDI Reset**.
 
 ### Synth engine (FluidSynth)
 
