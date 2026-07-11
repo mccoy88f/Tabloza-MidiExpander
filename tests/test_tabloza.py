@@ -138,10 +138,16 @@ class TestSynthConfig(unittest.TestCase):
 
 class TestMidiConfig(unittest.TestCase):
     def test_merge_defaults(self):
-        from midi_config import DEFAULT_MIDI_JITTER_BUFFER_MS, merge_midi_config
+        from midi_config import (
+            DEFAULT_MIDI_BANK_SELECT,
+            DEFAULT_MIDI_JITTER_BUFFER_MS,
+            merge_midi_config,
+        )
 
         midi = merge_midi_config(None)
         self.assertEqual(midi["jitter_buffer_ms"], DEFAULT_MIDI_JITTER_BUFFER_MS)
+        self.assertTrue(midi["jitter_buffer_enabled"])
+        self.assertEqual(midi["bank_select"], DEFAULT_MIDI_BANK_SELECT)
 
     def test_normalize_clamps_range(self):
         from midi_config import MAX_MIDI_JITTER_BUFFER_MS, MIN_MIDI_JITTER_BUFFER_MS, normalize_jitter_buffer_ms
@@ -155,6 +161,28 @@ class TestMidiConfig(unittest.TestCase):
 
         self.assertEqual(get_jitter_buffer_ms({}), 25)
         self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_ms": 50}}), 50)
+        self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_enabled": False}}), 0)
+
+    def test_bank_select_normalization(self):
+        from midi_config import get_midi_bank_select, normalize_bank_select
+
+        self.assertEqual(normalize_bank_select("XG"), "xg")
+        self.assertEqual(normalize_bank_select("invalid"), "gs")
+        self.assertEqual(get_midi_bank_select({"midi": {"bank_select": "mma"}}), "mma")
+
+    def test_parse_midi_settings_update(self):
+        from midi_config import parse_midi_settings_update
+
+        current = {"midi": {"bank_select": "gs", "jitter_buffer_enabled": True, "jitter_buffer_ms": 25}}
+        midi, restart, buffer = parse_midi_settings_update({"bank_select": "xg"}, current)
+        self.assertEqual(midi["bank_select"], "xg")
+        self.assertTrue(restart)
+        self.assertFalse(buffer)
+
+        midi, restart, buffer = parse_midi_settings_update({"jitter_buffer_enabled": False}, current)
+        self.assertFalse(midi["jitter_buffer_enabled"])
+        self.assertFalse(restart)
+        self.assertTrue(buffer)
 
     @patch("midi_jitter_buffer.rtmidi", None)
     def test_ensure_jitter_buffer_without_rtmidi(self):

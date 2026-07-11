@@ -131,7 +131,9 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "dynamic_sample_loading": false
   },
   "midi": {
-    "jitter_buffer_ms": 25
+    "jitter_buffer_ms": 25,
+    "jitter_buffer_enabled": true,
+    "bank_select": "gs"
   }
 }
 EOF
@@ -144,8 +146,17 @@ p = Path("${CONFIG_FILE}")
 if p.is_file():
     cfg = json.loads(p.read_text())
     midi = cfg.get("midi") if isinstance(cfg.get("midi"), dict) else {}
+    changed = False
     if "jitter_buffer_ms" not in midi:
         midi["jitter_buffer_ms"] = 25
+        changed = True
+    if "jitter_buffer_enabled" not in midi:
+        midi["jitter_buffer_enabled"] = True
+        changed = True
+    if "bank_select" not in midi:
+        midi["bank_select"] = "gs"
+        changed = True
+    if changed:
         cfg["midi"] = midi
         p.write_text(json.dumps(cfg, indent=2) + "\n")
 PY

@@ -44,7 +44,7 @@ from midi_utils import (
 )
 
 from event_log import log_event
-from midi_config import get_jitter_buffer_ms, merge_midi_config
+from midi_config import get_jitter_buffer_ms, get_midi_bank_select, merge_midi_config
 from midi_jitter_buffer import (
     ensure_jitter_buffer,
     reconnect_jitter_buffer_output,
@@ -128,6 +128,7 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-m", "alsa_seq",
         "-o", "midi.autoconnect=false",
         "-o", "synth.default-soundfont=",
+        "-o", f"synth.midi-bank-select={get_midi_bank_select(config)}",
     ]
     for opt in fluidsynth_startup_options(fs_cfg):
         cmd.extend(["-o", opt])
@@ -543,6 +544,16 @@ def handle_sigusr1(signum, frame):
         log.warning("Nota di test fallita: %s", detail)
 
 
+def _apply_midi_settings():
+    config = load_config()
+    _apply_midi_jitter_buffer(config)
+    reconnect_jitter_buffer_output()
+    refresh_midi_routes()
+    log.info("Impostazioni MIDI applicate (buffer=%s, bank=%s)",
+             get_jitter_buffer_ms(config), get_midi_bank_select(config))
+    log_event("orchestrator", "Impostazioni MIDI aggiornate")
+
+
 def handle_sigusr2(signum, frame):
     global reload_fluidsynth_pending
     if RELOAD_FLUIDSYNTH_FLAG.is_file():
@@ -550,6 +561,12 @@ def handle_sigusr2(signum, frame):
         reload_fluidsynth_pending = True
         log.info("SIGUSR2 — richiesto riavvio FluidSynth (nuova uscita audio)")
         log_event("orchestrator", "Riavvio FluidSynth richiesto (cambio uscita audio)")
+        return
+    from midi_utils import APPLY_MIDI_SETTINGS_FLAG
+    if APPLY_MIDI_SETTINGS_FLAG.is_file():
+        APPLY_MIDI_SETTINGS_FLAG.unlink(missing_ok=True)
+        log.info("SIGUSR2 — applica impostazioni MIDI")
+        _apply_midi_settings()
         return
     if APPLY_SYNTH_SETTINGS_FLAG.is_file():
         APPLY_SYNTH_SETTINGS_FLAG.unlink(missing_ok=True)

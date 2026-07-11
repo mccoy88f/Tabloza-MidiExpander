@@ -143,6 +143,29 @@
         </details>
       </section>
 
+      <!-- MIDI settings -->
+      <section class="card console-card">
+        <details id="midi-section">
+          <summary data-i18n="sectionMidiSettings">Impostazioni MIDI</summary>
+          <div class="synth-form">
+            <label class="synth-field">
+              <span class="label" data-i18n="labelMidiBankSelect">Modalità banchi SoundFont</span>
+              <select id="midi-bank-select" class="audio-device-select"></select>
+            </label>
+            <p id="midi-bank-hint" class="muted synth-hint">—</p>
+            <label class="synth-toggle">
+              <input type="checkbox" id="midi-jitter-enabled" checked>
+              <span data-i18n="labelRtpJitterBuffer">Buffer anti-jitter RTP-MIDI</span>
+            </label>
+            <p id="midi-jitter-hint" class="muted synth-hint" data-i18n="midiJitterHint">Ritarda gli eventi di rete (~25 ms) per ridurre note irregolari su WiFi. Aggiunge una piccola latenza MIDI.</p>
+            <div class="synth-actions">
+              <button type="button" id="btn-midi-apply" class="btn btn-primary" data-i18n="applyMidiSettings">Applica</button>
+            </div>
+            <p id="midi-msg" class="msg hidden"></p>
+          </div>
+        </details>
+      </section>
+
       <!-- SoundFonts -->
       <section class="card">
         <div class="sf2-section-header">

@@ -14,6 +14,7 @@ log = logging.getLogger("tabloza.midi")
 
 RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
 APPLY_SYNTH_SETTINGS_FLAG = Path("/run/tabloza/apply_synth_settings")
+APPLY_MIDI_SETTINGS_FLAG = Path("/run/tabloza/apply_midi_settings")
 STOP_SYNTH_NOTES_FLAG = Path("/run/tabloza/synth_stop_notes")
 
 PORT_RE = re.compile(r"(\d+:\d+)")
@@ -296,17 +297,9 @@ def get_midi_status() -> dict:
 
 
 def get_midi_settings_for_api(config: dict) -> dict:
-    from midi_config import get_jitter_buffer_ms
-    from midi_jitter_buffer import jitter_buffer_status
+    from midi_config import midi_settings_for_api
 
-    status = jitter_buffer_status()
-    configured_ms = get_jitter_buffer_ms(config)
-    return {
-        "jitter_buffer_ms": configured_ms,
-        "jitter_buffer_active": status["active"],
-        "jitter_buffer_effective_ms": status["buffer_ms"] if status["active"] else 0,
-        "rtmidi_available": status["rtmidi_available"],
-    }
+    return midi_settings_for_api(config)
 
 
 def route_midi_to_fluidsynth() -> int:
@@ -421,6 +414,24 @@ def trigger_orchestrator_reload_fluidsynth() -> bool:
             return False
         RELOAD_FLUIDSYNTH_FLAG.parent.mkdir(parents=True, exist_ok=True)
         RELOAD_FLUIDSYNTH_FLAG.write_text("1")
+        os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def trigger_orchestrator_apply_midi_settings() -> bool:
+    """Ask orchestrator to apply MIDI buffer/routing from config (SIGUSR2 + flag)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        APPLY_MIDI_SETTINGS_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        APPLY_MIDI_SETTINGS_FLAG.write_text("1")
         os.kill(pid, signal.SIGUSR2)
         return True
     except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):

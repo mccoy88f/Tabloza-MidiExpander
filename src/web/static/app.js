@@ -2,6 +2,22 @@ const API = "";
 const STATUS_REFRESH_MS = 2000;
 let lastSf2StateKey = "";
 let lastAppliedSynthSettingsKey = "";
+let lastAppliedMidiSettingsKey = "";
+
+const MIDI_BANK_MODES = ["gm", "gs", "xg", "mma"];
+
+function midiBankLabel(mode) {
+  const key = `midiBank${mode.charAt(0).toUpperCase()}${mode.slice(1)}`;
+  return t(key);
+}
+
+function midiSettingsKey(settings) {
+  if (!settings) return "";
+  return JSON.stringify({
+    bank_select: settings.bank_select,
+    jitter_buffer_enabled: settings.jitter_buffer_enabled,
+  });
+}
 
 function synthSettingsKey(settings) {
   if (!settings) return "";
@@ -375,6 +391,13 @@ async function refreshStatus() {
     if (settingsKey !== lastAppliedSynthSettingsKey) {
       renderSynthSettings(s.synth_settings);
       lastAppliedSynthSettingsKey = settingsKey;
+    }
+  }
+  if (s.midi_settings) {
+    const midiKey = midiSettingsKey(s.midi_settings);
+    if (midiKey !== lastAppliedMidiSettingsKey) {
+      renderMidiSettings(s.midi_settings);
+      lastAppliedMidiSettingsKey = midiKey;
     }
   }
   if (s.version) document.getElementById("status-version").textContent = `v${s.version}`;
@@ -1266,6 +1289,79 @@ document.getElementById("btn-synth-stop-notes")?.addEventListener("click", async
   }
 });
 
+function updateMidiBankHint(mode) {
+  const hint = document.getElementById("midi-bank-hint");
+  if (!hint) return;
+  const key = `midiBank${mode.charAt(0).toUpperCase()}${mode.slice(1)}Hint`;
+  hint.textContent = t(key);
+}
+
+function renderMidiSettings(settings) {
+  if (!settings) return;
+  const select = document.getElementById("midi-bank-select");
+  if (!select) return;
+
+  const current = settings.bank_select || "gs";
+  select.innerHTML = "";
+  (settings.bank_select_modes || MIDI_BANK_MODES).forEach((mode) => {
+    const opt = document.createElement("option");
+    opt.value = mode;
+    opt.textContent = midiBankLabel(mode);
+    if (mode === current) opt.selected = true;
+    select.appendChild(opt);
+  });
+
+  document.getElementById("midi-jitter-enabled").checked = !!settings.jitter_buffer_enabled;
+  updateMidiBankHint(current);
+}
+
+async function refreshMidiSettings() {
+  try {
+    const settings = await api("/api/midi/settings");
+    renderMidiSettings(settings);
+    lastAppliedMidiSettingsKey = midiSettingsKey(settings);
+  } catch {
+    /* ignore */
+  }
+}
+
+function collectMidiSettingsPayload() {
+  return {
+    bank_select: document.getElementById("midi-bank-select").value,
+    jitter_buffer_enabled: document.getElementById("midi-jitter-enabled").checked,
+  };
+}
+
+document.getElementById("midi-bank-select")?.addEventListener("change", (e) => {
+  updateMidiBankHint(e.target.value);
+});
+
+document.getElementById("btn-midi-apply")?.addEventListener("click", async () => {
+  const msg = document.getElementById("midi-msg");
+  const btn = document.getElementById("btn-midi-apply");
+  btn.disabled = true;
+  msg.textContent = t("midiApplying");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const res = await api("/api/midi/settings", {
+      method: "POST",
+      body: JSON.stringify(collectMidiSettingsPayload()),
+    });
+    renderMidiSettings(res.settings);
+    lastAppliedMidiSettingsKey = midiSettingsKey(res.settings);
+    msg.textContent = res.restarted ? t("midiAppliedRestart") : t("midiApplied");
+    msg.className = "msg ok";
+    refreshStatus();
+    refreshConsole();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // --- Password ---
 document.getElementById("change-password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1294,10 +1390,20 @@ function refreshAll() {
     void refreshStatus().then(() => refreshSoundfonts());
     refreshAudioDevices();
     refreshSynthSettings();
+    refreshMidiSettings();
   }
 }
 
-document.addEventListener("tabloza:lang", () => refreshAll());
+document.addEventListener("tabloza:lang", () => {
+  const sel = document.getElementById("midi-bank-select");
+  if (sel) {
+    [...sel.options].forEach((opt) => {
+      opt.textContent = midiBankLabel(opt.value);
+    });
+    updateMidiBankHint(sel.value);
+  }
+  refreshAll();
+});
 
 // --- Init ---
 async function loadFooter() {

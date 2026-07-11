@@ -30,6 +30,7 @@ from fluidsynth_client import read_soundfont_state, request_cancel_soundfont_loa
 from midi_utils import (
     get_midi_status,
     get_midi_settings_for_api,
+    trigger_orchestrator_apply_midi_settings,
     trigger_orchestrator_apply_synth_settings,
     trigger_orchestrator_apply_volume,
     trigger_orchestrator_reload_fluidsynth,
@@ -54,6 +55,7 @@ from soundfont_config import (  # noqa: E402
     set_default_soundfont,
     startup_soundfont_name,
 )
+from midi_config import parse_midi_settings_update  # noqa: E402
 from synth_config import parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
@@ -283,6 +285,49 @@ def api_synth_settings_post():
         "ok": True,
         "restarted": needs_restart,
         "settings": synth_settings_for_api(config),
+    })
+
+
+@app.route("/api/midi/settings")
+@require_auth
+def api_midi_settings_get():
+    return jsonify(get_midi_settings_for_api(load_config()))
+
+
+@app.route("/api/midi/settings", methods=["POST"])
+@require_auth
+def api_midi_settings_post():
+    data = request.get_json(silent=True) or {}
+    config = load_config()
+    try:
+        midi_cfg, needs_restart, needs_buffer = parse_midi_settings_update(data, config)
+    except (ValueError, TypeError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    config["midi"] = midi_cfg
+    save_config({"midi": midi_cfg})
+    log_event(
+        "web",
+        f"MIDI → bank {midi_cfg.get('bank_select', 'gs')}, "
+        f"buffer RTP {'on' if midi_cfg.get('jitter_buffer_enabled') else 'off'}",
+    )
+
+    if needs_restart:
+        if not trigger_orchestrator_reload_fluidsynth():
+            return jsonify({"error": "Orchestrator non attivo"}), 503
+        if not wait_fluidsynth_midi_ready(50.0):
+            return jsonify({
+                "error": "FluidSynth non ripartito — verifica log orchestrator",
+            }), 503
+        _reload_orchestrator()
+    elif needs_buffer:
+        if not trigger_orchestrator_apply_midi_settings():
+            return jsonify({"error": "Impossibile applicare impostazioni MIDI"}), 503
+
+    return jsonify({
+        "ok": True,
+        "restarted": needs_restart,
+        "settings": get_midi_settings_for_api(config),
     })
 
 
