@@ -273,6 +273,7 @@ def api_synth_settings_post():
             return jsonify({
                 "error": "FluidSynth non ripartito — verifica log orchestrator",
             }), 503
+        _reload_orchestrator()
     elif not trigger_orchestrator_apply_synth_settings():
         return jsonify({"error": "Impossibile applicare impostazioni synth"}), 503
 

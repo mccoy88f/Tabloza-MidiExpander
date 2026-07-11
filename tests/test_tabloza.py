@@ -153,40 +153,39 @@ class TestActivityStatus(unittest.TestCase):
 
 
 class TestMidiMonitorPort(unittest.TestCase):
-    @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_prefers_routed_source(self, mock_fs, mock_routes):
+    def test_uses_fluidsynth_port(self, mock_fs):
         from midi_utils import midi_monitor_port
 
-        mock_routes.return_value = [{"from": "14:0", "to": "128:0"}]
-        mock_fs.return_value = {"address": "128:0"}
-        port, key = midi_monitor_port()
-        self.assertEqual(port, "14:0")
-        self.assertEqual(key, "src:14:0")
-
-    @patch("midi_utils.get_active_routes")
-    @patch("midi_utils.find_fluidsynth_input")
-    def test_multiple_sources_use_global_dump(self, mock_fs, mock_routes):
-        from midi_utils import midi_monitor_port
-
-        mock_routes.return_value = [
-            {"from": "14:0", "to": "128:0"},
-            {"from": "20:0", "to": "128:0"},
-        ]
-        port, key = midi_monitor_port()
-        self.assertEqual(port, "*")
-        self.assertIn("14:0", key)
-
-    @patch("midi_utils.get_active_routes")
-    @patch("midi_utils.find_fluidsynth_input")
-    def test_fallback_to_fluidsynth(self, mock_fs, mock_routes):
-        from midi_utils import midi_monitor_port
-
-        mock_routes.return_value = []
         mock_fs.return_value = {"address": "128:0"}
         port, key = midi_monitor_port()
         self.assertEqual(port, "128:0")
         self.assertEqual(key, "fs:128:0")
+
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_none_without_fluidsynth(self, mock_fs):
+        from midi_utils import midi_monitor_port
+
+        mock_fs.return_value = None
+        port, key = midi_monitor_port()
+        self.assertIsNone(port)
+        self.assertIsNone(key)
+
+
+class TestMidiRouting(unittest.TestCase):
+    @patch("midi_utils.subprocess.run")
+    def test_disconnect_source_routes(self, mock_run):
+        from midi_utils import disconnect_source_routes
+
+        mock_run.return_value = MagicMock(stdout=(
+            "client 14: 'rtpmidid' [type=user]\n"
+            "    0 'Network'\n"
+            "        Connecting To: 128:0\n"
+        ))
+        with patch("midi_utils._aconnect_list_output", return_value=mock_run.return_value.stdout):
+            removed = disconnect_source_routes("14:0")
+        self.assertEqual(removed, 1)
+        mock_run.assert_called()
 
 
 class TestTablozaCommon(unittest.TestCase):

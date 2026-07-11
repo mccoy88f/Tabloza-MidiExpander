@@ -37,6 +37,7 @@ from midi_utils import (
     find_fluidsynth_input,
     get_active_routes,
     midi_monitor_port,
+    refresh_midi_routes,
     route_rtpmidi_to_fluidsynth,
     send_test_note,
     set_fluidsynth_output_level,
@@ -72,6 +73,7 @@ reload_fluidsynth_pending = False
 fluidsynth_restart_after = 0.0
 midi_monitor_proc: subprocess.Popen | None = None
 midi_monitor_thread: threading.Thread | None = None
+midi_monitor_stop = threading.Event()
 soundfont_load_lock = threading.Lock()
 
 
@@ -222,33 +224,35 @@ def _stop_monitor_proc():
 
 def stop_midi_monitor():
     global midi_monitor_thread
+    midi_monitor_stop.set()
     _stop_monitor_proc()
     if (
         midi_monitor_thread
         and midi_monitor_thread.is_alive()
         and threading.current_thread() is not midi_monitor_thread
     ):
-        midi_monitor_thread.join(timeout=2)
+        midi_monitor_thread.join(timeout=3)
     midi_monitor_thread = None
+    midi_monitor_stop.clear()
 
 
 def _midi_monitor_loop():
     global midi_monitor_proc, shutdown
     monitored_key = None
-    while not shutdown:
+    while not shutdown and not midi_monitor_stop.is_set():
         port, monitor_key = midi_monitor_port()
         if not port:
             _stop_monitor_proc()
             monitored_key = None
-            time.sleep(2)
+            if midi_monitor_stop.wait(2):
+                break
             continue
         if monitor_key != monitored_key:
             _stop_monitor_proc()
             monitored_key = monitor_key
             try:
-                cmd = ["aseqdump", "-p", port] if port != "*" else ["aseqdump"]
                 midi_monitor_proc = subprocess.Popen(
-                    cmd,
+                    ["aseqdump", "-p", port],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     text=True,
@@ -258,30 +262,37 @@ def _midi_monitor_loop():
             except (OSError, FileNotFoundError):
                 log.warning("aseqdump non disponibile — attività MIDI non monitorata")
                 monitored_key = None
-                time.sleep(5)
+                if midi_monitor_stop.wait(5):
+                    break
                 continue
         if not midi_monitor_proc or midi_monitor_proc.poll() is not None:
             monitored_key = None
-            time.sleep(1)
+            if midi_monitor_stop.wait(1):
+                break
             continue
         line = midi_monitor_proc.stdout.readline()
         if not line:
             continue
         if is_aseqdump_midi_event(line):
             touch_midi_activity()
+    _stop_monitor_proc()
 
 
 def start_midi_monitor():
     global midi_monitor_thread
     if midi_monitor_thread and midi_monitor_thread.is_alive():
         return
+    midi_monitor_stop.clear()
     midi_monitor_thread = threading.Thread(target=_midi_monitor_loop, daemon=True)
     midi_monitor_thread.start()
 
 
-def stop_fluidsynth():
+def stop_fluidsynth(*, shutdown_monitor: bool = False):
     global fluidsynth_proc
-    stop_midi_monitor()
+    if shutdown_monitor:
+        stop_midi_monitor()
+    else:
+        _stop_monitor_proc()
     _reap_fluidsynth()
 
 
@@ -477,6 +488,7 @@ def start_fluidsynth(config: dict) -> bool:
         load_started_at=None,
     )
     route_rtpmidi_to_fluidsynth()
+    refresh_midi_routes()
     apply_volume(config)
     ok, detail = apply_runtime_synth_settings(config.get("fluidsynth", {}))
     if not ok:
@@ -565,7 +577,7 @@ def handle_sigterm(signum, frame):
     global shutdown
     log.info("Arresto orchestratore...")
     shutdown = True
-    stop_fluidsynth()
+    stop_fluidsynth(shutdown_monitor=True)
 
 
 def _check_soundfont_load_watchdog():

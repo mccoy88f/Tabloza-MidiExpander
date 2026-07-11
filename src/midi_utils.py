@@ -148,15 +148,59 @@ def _midi_sources_for_routing() -> list[dict]:
     return find_rtpmidid_outputs() + find_usb_midi_outputs()
 
 
-def get_active_routes() -> list[dict]:
-    """Return MIDI sources connected to FluidSynth from `aconnect -l`."""
+def _aconnect_list_output() -> str:
     try:
         result = subprocess.run(
             ["aconnect", "-l"],
             capture_output=True, text=True, timeout=5,
         )
-        output = result.stdout
+        return result.stdout
     except (subprocess.TimeoutExpired, FileNotFoundError):
+        return ""
+
+
+def disconnect_source_routes(src_addr: str) -> int:
+    """Remove all ALSA routes from a MIDI source (clears stale FluidSynth clients)."""
+    output = _aconnect_list_output()
+    if not output:
+        return 0
+
+    removed = 0
+    current_client_num = None
+    current_port_addr = None
+    for line in output.splitlines():
+        client_match = CLIENT_RE.match(line)
+        if client_match:
+            current_client_num = client_match.group(1)
+            current_port_addr = None
+            continue
+        num_match = CLIENT_NUM_RE.match(line)
+        if num_match and not line.startswith(" "):
+            current_client_num = num_match.group(1)
+            current_port_addr = None
+            continue
+        port_match = PORT_LINE_RE.match(line)
+        if port_match and current_client_num is not None:
+            current_port_addr = f"{current_client_num}:{port_match.group(1)}"
+            continue
+        if current_port_addr == src_addr and "Connecting To:" in line:
+            for dest in PORT_RE.findall(line.split("Connecting To:", 1)[1]):
+                try:
+                    subprocess.run(
+                        ["aconnect", "-d", src_addr, dest],
+                        capture_output=True, timeout=3, check=False,
+                    )
+                    removed += 1
+                    log.info("Disconnesso MIDI %s → %s", src_addr, dest)
+                except (subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+    return removed
+
+
+def get_active_routes() -> list[dict]:
+    """Return MIDI sources connected to FluidSynth from `aconnect -l`."""
+    output = _aconnect_list_output()
+    if not output:
         return []
 
     fs = find_fluidsynth_input()
@@ -183,13 +227,7 @@ def get_active_routes() -> list[dict]:
 
 
 def midi_monitor_port() -> tuple[str | None, str | None]:
-    """Return (alsa_port, monitor_key) for aseqdump — prefer routed MIDI sources."""
-    routes = get_active_routes()
-    if routes:
-        sources = sorted({route["from"] for route in routes})
-        if len(sources) == 1:
-            return sources[0], f"src:{sources[0]}"
-        return "*", f"src:{'+'.join(sources)}"
+    """Return FluidSynth input port for passive MIDI activity monitoring."""
     fs = find_fluidsynth_input()
     if fs:
         return fs["address"], f"fs:{fs['address']}"
@@ -246,6 +284,7 @@ def route_midi_to_fluidsynth() -> int:
         return 0
     count = 0
     for src in _midi_sources_for_routing():
+        disconnect_source_routes(src["address"])
         try:
             subprocess.run(
                 ["aconnect", src["address"], fs["address"]],
@@ -256,6 +295,18 @@ def route_midi_to_fluidsynth() -> int:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
     return count
+
+
+def refresh_midi_routes(retries: int = 4, delay: float = 0.6) -> int:
+    """Reconnect MIDI sources after FluidSynth restart (new ALSA client id)."""
+    total = 0
+    for attempt in range(retries):
+        total = route_midi_to_fluidsynth()
+        if total and get_active_routes():
+            return total
+        if attempt < retries - 1:
+            time.sleep(delay)
+    return total
 
 
 def route_rtpmidi_to_fluidsynth() -> int:
