@@ -170,6 +170,11 @@
             </label>
             <p id="midi-jitter-hint" class="muted synth-hint" data-i18n="midiJitterHint">Ritarda gli eventi di rete (~25 ms) per ridurre note irregolari su WiFi. Aggiunge una piccola latenza MIDI.</p>
             <label class="synth-toggle">
+              <input type="checkbox" id="midi-rtp-timestamps-enabled" checked>
+              <span data-i18n="labelRtpTimestamps">Timestamp RTP-MIDI (rtpmidid-ts)</span>
+            </label>
+            <p id="midi-rtp-timestamps-hint" class="muted synth-hint" data-i18n="midiRtpTimestampsHint">Usa l'orologio RTP del mittente per schedulare gli eventi ALSA. Disattiva per il comportamento legacy (debug).</p>
+            <label class="synth-toggle">
               <input type="checkbox" id="midi-sysex-auto" checked>
               <span data-i18n="labelSysexBankAuto">Modalità banchi automatica via SysEx</span>
             </label>

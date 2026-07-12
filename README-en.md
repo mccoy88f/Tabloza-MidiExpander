@@ -107,6 +107,7 @@ With RTP buffer off but SysEx auto on, the gateway stays up in **passthrough** (
 |---------|-------------|---------------|
 | **Bank mode** | `GM`, `GS` (default), `XG`, `MMA/GM2` — how FluidSynth interprets bank select | Yes |
 | **RTP anti-jitter buffer** | Delays network events ~25 ms (default **on**); useful on Wi‑Fi | No (gateway only) |
+| **RTP timestamps (rtpmidid-ts)** | Schedules ALSA from sender RTP clock (default **on**) | Restarts rtpmidid |
 | **Automatic SysEx** | Switch bank mode on GM/GS/XG/GM2 SysEx (default **on**) | No |
 
 **When to use which bank mode:**
@@ -346,6 +347,7 @@ Example `config.json` (excerpt):
     "bank_select": "gs",
     "jitter_buffer_enabled": true,
     "jitter_buffer_ms": 25,
+    "rtp_midi_timestamps_enabled": true,
     "sysex_bank_auto": true
   }
 }

@@ -56,6 +56,7 @@ from soundfont_config import (  # noqa: E402
     startup_soundfont_name,
 )
 from midi_config import parse_midi_settings_update  # noqa: E402
+from rtpmidid_config import apply_rtpmidid_config  # noqa: E402
 from synth_config import merge_fluidsynth_config, normalize_synth_gain, parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
@@ -302,7 +303,7 @@ def api_midi_settings_post():
     data = request.get_json(silent=True) or {}
     config = load_config()
     try:
-        midi_cfg, needs_restart, needs_buffer = parse_midi_settings_update(data, config)
+        midi_cfg, needs_restart, needs_buffer, needs_rtpmidid = parse_midi_settings_update(data, config)
     except (ValueError, TypeError) as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -312,8 +313,15 @@ def api_midi_settings_post():
         "web",
         f"MIDI → bank {midi_cfg.get('bank_select', 'gs')}, "
         f"buffer RTP {'on' if midi_cfg.get('jitter_buffer_enabled') else 'off'}, "
+        f"RTP ts {'on' if midi_cfg.get('rtp_midi_timestamps_enabled') else 'off'}, "
         f"SysEx auto {'on' if midi_cfg.get('sysex_bank_auto') else 'off'}",
     )
+
+    rtpmidid_restarted = False
+    if needs_rtpmidid:
+        if not apply_rtpmidid_config(config):
+            return jsonify({"error": "Impossibile riavviare rtpmidid"}), 503
+        rtpmidid_restarted = True
 
     if needs_restart:
         if not trigger_orchestrator_reload_fluidsynth():
@@ -330,6 +338,7 @@ def api_midi_settings_post():
     return jsonify({
         "ok": True,
         "restarted": needs_restart,
+        "rtpmidid_restarted": rtpmidid_restarted,
         "settings": get_midi_settings_for_api(config),
     })
 

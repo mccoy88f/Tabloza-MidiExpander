@@ -120,7 +120,6 @@ mkdir -p "${SOUNDFONTS_DIR}"
 # --- rtpmidid (da GitHub, non nei repo Pi OS) ---
 log "Installazione rtpmidid..."
 bash "${INSTALL_DIR}/scripts/install-rtpmidid.sh"
-bash "${INSTALL_DIR}/scripts/configure-rtpmidid.sh" "${INSTALL_DIR}/config/rtpmidid/default.ini"
 
 # --- Config persistente ---
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -148,6 +147,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   "midi": {
     "jitter_buffer_ms": 25,
     "jitter_buffer_enabled": true,
+    "rtp_midi_timestamps_enabled": true,
     "sysex_bank_auto": true,
     "bank_select": "gs"
   }
@@ -175,10 +175,16 @@ if p.is_file():
     if "sysex_bank_auto" not in midi:
         midi["sysex_bank_auto"] = True
         changed = True
+    if "rtp_midi_timestamps_enabled" not in midi:
+        midi["rtp_midi_timestamps_enabled"] = True
+        changed = True
     if changed:
         cfg["midi"] = midi
         p.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+
+log "Configurazione rtpmidid da config Tabloza..."
+bash "${INSTALL_DIR}/scripts/configure-rtpmidid.sh"
 
 if [[ ! -f "${AUTH_FILE}" ]]; then
     log "Impostazione password predefinita: ${DEFAULT_PASSWORD}"

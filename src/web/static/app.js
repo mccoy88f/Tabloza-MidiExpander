@@ -18,6 +18,7 @@ function midiSettingsKey(settings) {
   return JSON.stringify({
     bank_select: settings.bank_select,
     jitter_buffer_enabled: settings.jitter_buffer_enabled,
+    rtp_midi_timestamps_enabled: settings.rtp_midi_timestamps_enabled,
     sysex_bank_auto: settings.sysex_bank_auto,
     runtime_bank_select: settings.runtime_bank_select,
   });
@@ -1407,6 +1408,8 @@ function renderMidiSettings(settings) {
   });
 
   document.getElementById("midi-jitter-enabled").checked = !!settings.jitter_buffer_enabled;
+  document.getElementById("midi-rtp-timestamps-enabled").checked =
+    settings.rtp_midi_timestamps_enabled !== false;
   document.getElementById("midi-sysex-auto").checked = !!settings.sysex_bank_auto;
   updateMidiBankHint(current);
   const runtime = document.getElementById("midi-runtime-bank");
@@ -1430,6 +1433,7 @@ function collectMidiSettingsPayload() {
   return {
     bank_select: document.getElementById("midi-bank-select").value,
     jitter_buffer_enabled: document.getElementById("midi-jitter-enabled").checked,
+    rtp_midi_timestamps_enabled: document.getElementById("midi-rtp-timestamps-enabled").checked,
     sysex_bank_auto: document.getElementById("midi-sysex-auto").checked,
   };
 }

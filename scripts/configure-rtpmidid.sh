@@ -1,19 +1,9 @@
 #!/usr/bin/env bash
-# Installa configurazione rtpmidid per annuncio RTP-MIDI su rete
+# Applica configurazione rtpmidid da config.json Tabloza
 set -euo pipefail
 
-SRC="${1:-/opt/tabloza/config/rtpmidid/default.ini}"
-DEST_DIR="/etc/rtpmidid"
-DEST="${DEST_DIR}/default.ini"
+INSTALL_DIR="${INSTALL_DIR:-/opt/tabloza}"
+PYTHONPATH="${INSTALL_DIR}/src${PYTHONPATH:+:${PYTHONPATH}}"
 
-install -d "${DEST_DIR}"
-install -m 644 "${SRC}" "${DEST}"
-
-# Socket controllo
-install -d /var/run/rtpmidid
-
-echo "rtpmidid config installata: ${DEST}"
-if systemctl is-active --quiet rtpmidid 2>/dev/null; then
-    systemctl restart rtpmidid
-    echo "rtpmidid riavviato"
-fi
+export PYTHONPATH
+python3 "${INSTALL_DIR}/src/rtpmidid_config.py" apply

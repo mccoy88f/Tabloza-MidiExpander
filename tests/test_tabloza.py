@@ -155,6 +155,7 @@ class TestMidiConfig(unittest.TestCase):
         midi = merge_midi_config(None)
         self.assertEqual(midi["jitter_buffer_ms"], DEFAULT_MIDI_JITTER_BUFFER_MS)
         self.assertTrue(midi["jitter_buffer_enabled"])
+        self.assertTrue(midi["rtp_midi_timestamps_enabled"])
         self.assertTrue(midi["sysex_bank_auto"])
         self.assertEqual(midi["bank_select"], DEFAULT_MIDI_BANK_SELECT)
 
@@ -182,16 +183,43 @@ class TestMidiConfig(unittest.TestCase):
     def test_parse_midi_settings_update(self):
         from midi_config import parse_midi_settings_update
 
-        current = {"midi": {"bank_select": "gs", "jitter_buffer_enabled": True, "jitter_buffer_ms": 25}}
-        midi, restart, buffer = parse_midi_settings_update({"bank_select": "xg"}, current)
+        current = {
+            "midi": {
+                "bank_select": "gs",
+                "jitter_buffer_enabled": True,
+                "jitter_buffer_ms": 25,
+                "rtp_midi_timestamps_enabled": True,
+            },
+        }
+        midi, restart, buffer, rtpmidid = parse_midi_settings_update({"bank_select": "xg"}, current)
         self.assertEqual(midi["bank_select"], "xg")
         self.assertTrue(restart)
         self.assertFalse(buffer)
+        self.assertFalse(rtpmidid)
 
-        midi, restart, buffer = parse_midi_settings_update({"jitter_buffer_enabled": False}, current)
+        midi, restart, buffer, rtpmidid = parse_midi_settings_update({"jitter_buffer_enabled": False}, current)
         self.assertFalse(midi["jitter_buffer_enabled"])
         self.assertFalse(restart)
         self.assertTrue(buffer)
+        self.assertFalse(rtpmidid)
+
+        midi, restart, buffer, rtpmidid = parse_midi_settings_update(
+            {"rtp_midi_timestamps_enabled": False}, current,
+        )
+        self.assertFalse(midi["rtp_midi_timestamps_enabled"])
+        self.assertFalse(restart)
+        self.assertFalse(buffer)
+        self.assertTrue(rtpmidid)
+
+    def test_render_rtpmidid_ini(self):
+        from rtpmidid_config import render_rtpmidid_ini
+
+        on = render_rtpmidid_ini(use_rtp_midi_timestamps=True)
+        off = render_rtpmidid_ini(use_rtp_midi_timestamps=False)
+        self.assertIn("use_rtp_midi_timestamps=true", on)
+        self.assertIn("use_rtp_midi_timestamps=false", off)
+        self.assertIn("name=tabloza-me", on)
+        self.assertIn("playout_buffer_ms=0", on)
 
     @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
     def test_ensure_gateway_without_rtmidi(self, _usable):

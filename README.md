@@ -107,6 +107,7 @@ Sezione **Impostazioni MIDI** (collassabile). Salvate in `config.json` → sezio
 |-----------|-------------|---------------|
 | **Modalità banchi** | `GM`, `GS` (default), `XG`, `MMA/GM2` — come FluidSynth interpreta i bank select | Sì |
 | **Buffer anti-jitter RTP** | Ritarda eventi di rete ~25 ms (default **attivo**); utile su WiFi | No (solo gateway) |
+| **Timestamp RTP (rtpmidid-ts)** | Schedula ALSA dall'orologio RTP del mittente (default **attivo**) | Riavvia rtpmidid |
 | **SysEx automatico** | Cambia modalità banchi al volo su SysEx GM/GS/XG/GM2 (default **attivo**) | No |
 
 **Quando usare quale modalità banchi:**
@@ -356,6 +357,7 @@ Esempio `config.json` (estratti):
     "bank_select": "gs",
     "jitter_buffer_enabled": true,
     "jitter_buffer_ms": 25,
+    "rtp_midi_timestamps_enabled": true,
     "sysex_bank_auto": true
   }
 }
