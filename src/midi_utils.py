@@ -260,8 +260,11 @@ def find_usb_midi_outputs() -> list[dict]:
 
 
 def find_ws_midi_source() -> dict | None:
-    """ALSA output from tabloza-midi-ws (JZZ ingress from Tabloza Sing)."""
-    for port in get_output_ports():
+    """ALSA port from tabloza-midi-ws (JZZ ingress from Tabloza Sing).
+
+    MidiOut.open_virtual_port() is listed under ``aconnect -i`` on Linux; search both.
+    """
+    for port in get_input_ports() + get_output_ports():
         if port.get("name", "").strip() == "Tabloza Sing":
             return port
     return None
@@ -462,6 +465,7 @@ def get_midi_status() -> dict:
     ws_buffer = ws_gateway_status()
     ws_srv = ws_server_status()
     routes = []
+    ws_connected = False
     if rtp_sources:
         any_connected = any(
             any(r["from"] == src["address"] for r in active_routes)
@@ -491,9 +495,11 @@ def get_midi_status() -> dict:
                 "port_count": len(ports),
             })
     if ws_srv.get("active") or ws_source:
+        ws_dest = ws_buffer.get("input_port") if isinstance(ws_buffer.get("input_port"), dict) else None
         ws_connected = bool(
             ws_source
-            and any(r["from"] == ws_source["address"] for r in active_routes)
+            and ws_dest
+            and is_midi_connected(ws_source["address"], ws_dest["address"])
         )
         routes.append({
             "type": "sing_ws",
@@ -509,7 +515,7 @@ def get_midi_status() -> dict:
         "fluidsynth": fs,
         "sources": routes,
         "active_routes": active_routes,
-        "routing_ok": fs is not None and len(active_routes) > 0,
+        "routing_ok": fs is not None and (len(active_routes) > 0 or ws_connected),
         "jitter_buffer": buffer_status,
         "ws_jitter_buffer": ws_buffer,
         "ws_server": ws_srv,
