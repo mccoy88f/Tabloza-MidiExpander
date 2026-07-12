@@ -220,6 +220,8 @@ class TestMidiConfig(unittest.TestCase):
         self.assertIn("use_rtp_midi_timestamps=false", off)
         self.assertIn("name=tabloza-me", on)
         self.assertIn("playout_buffer_ms=0", on)
+        self.assertIn("[rtpmidi_discover]", on)
+        self.assertIn("enabled=false", on)
 
     def test_midi_bytes_flattens_nested_payloads(self):
         from midi_jitter_buffer import MidiGateway

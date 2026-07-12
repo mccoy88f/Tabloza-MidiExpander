@@ -27,6 +27,12 @@ playout_buffer_ms=0
 name=tabloza-me
 port=5004
 
+# Mac/DAW si connettono al Pi (tabloza-me). NON scoprire peer in rete:
+# le porte local_alsa_listener avviano un client RTP verso il Mac e l'invito
+# viene rifiutato — zero MIDI in ingresso.
+[rtpmidi_discover]
+enabled=false
+
 # NON usare [alsa_announce]: esporrebbe FluidSynth come secondo endpoint di rete.
 """
 
