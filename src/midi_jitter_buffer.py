@@ -24,6 +24,8 @@ try:
 except ImportError:
     rtmidi = None
 
+from rtmidi_compat import is_usable_python_rtmidi, make_midi_in, make_midi_out, rtmidi_diagnostic
+
 
 @dataclass(order=True)
 class _QueuedMsg:
@@ -51,18 +53,18 @@ class MidiGateway:
         return self._active
 
     def start(self) -> bool:
-        if rtmidi is None:
-            log.warning("python-rtmidi non disponibile — gateway MIDI disattivato")
+        if not is_usable_python_rtmidi():
+            log.warning("python-rtmidi non utilizzabile — %s", rtmidi_diagnostic())
             return False
 
         self.stop()
         try:
-            self._midi_in = rtmidi.MidiIn(rtmidi.API_UNIX_ALSA)
+            self._midi_in = make_midi_in()
             self._midi_in.ignore_types(sysex=False, timing=False, active_sensing=False)
             self._midi_in.set_callback(self._on_message)
             self._midi_in.open_virtual_port(VIRTUAL_PORT_NAME)
 
-            self._midi_out = rtmidi.MidiOut(rtmidi.API_UNIX_ALSA)
+            self._midi_out = make_midi_out()
             if not self._connect_output_to_fluidsynth():
                 log.warning("Gateway MIDI: FluidSynth non trovato")
                 self.stop()
@@ -81,7 +83,7 @@ class MidiGateway:
                 log.info("Gateway MIDI: SysEx auto (passthrough)")
             return True
         except Exception as exc:
-            log.error("Gateway MIDI non avviato: %s", exc)
+            log.error("Gateway MIDI non avviato: %s (%s)", exc, rtmidi_diagnostic())
             self.stop()
             return False
 
@@ -117,9 +119,9 @@ class MidiGateway:
                     self._midi_out.close_port()
             except Exception:
                 pass
-            if rtmidi is None:
+            if not is_usable_python_rtmidi():
                 return False
-            self._midi_out = rtmidi.MidiOut(rtmidi.API_UNIX_ALSA)
+            self._midi_out = make_midi_out()
             ok = self._connect_output_to_fluidsynth()
             if not ok:
                 log.warning("Gateway MIDI: riconnessione FluidSynth fallita")
@@ -284,5 +286,5 @@ def jitter_buffer_status() -> dict:
         "sysex_auto": sysex_auto,
         "runtime_bank_select": get_runtime_bank_select(),
         "input_port": port,
-        "rtmidi_available": rtmidi is not None,
+        "rtmidi_available": is_usable_python_rtmidi(),
     }

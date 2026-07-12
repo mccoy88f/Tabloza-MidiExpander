@@ -193,8 +193,8 @@ class TestMidiConfig(unittest.TestCase):
         self.assertFalse(restart)
         self.assertTrue(buffer)
 
-    @patch("midi_jitter_buffer.rtmidi", None)
-    def test_ensure_gateway_without_rtmidi(self):
+    @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
+    def test_ensure_gateway_without_rtmidi(self, _usable):
         from midi_jitter_buffer import ensure_midi_gateway, jitter_buffer_status
 
         self.assertFalse(ensure_midi_gateway(0, sysex_auto=True))
@@ -272,6 +272,50 @@ class TestSf2LoadProgress(unittest.TestCase):
         from fluidsynth_client import estimate_sf2_load_progress
 
         self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 0)
+
+
+class TestRtmidiCompat(unittest.TestCase):
+    def test_alsa_api_prefers_linux_constant(self):
+        import rtmidi_compat as rc
+
+        class FakeRtmidi:
+            API_LINUX_ALSA = 7
+
+        with patch.object(rc, "rtmidi", FakeRtmidi()):
+            self.assertEqual(rc.alsa_rtmidi_api(), 7)
+
+    def test_is_usable_with_open_virtual_port(self):
+        import rtmidi_compat as rc
+
+        class FakeIn:
+            def open_virtual_port(self, _name):
+                return None
+
+        class FakeRtmidi:
+            def MidiIn(self):
+                return FakeIn()
+
+            def MidiOut(self):
+                return object()
+
+        with patch.object(rc, "rtmidi", FakeRtmidi()):
+            self.assertTrue(rc.is_usable_python_rtmidi())
+
+    def test_diagnostic_for_wrong_package(self):
+        import rtmidi_compat as rc
+
+        class FakeRtmidi:
+            __file__ = "/usr/lib/python3/dist-packages/rtmidi/__init__.py"
+
+            class MidiIn:
+                pass
+
+            class MidiOut:
+                pass
+
+        with patch.object(rc, "rtmidi", FakeRtmidi()):
+            self.assertFalse(rc.is_usable_python_rtmidi())
+            self.assertIn("non compatibile", rc.rtmidi_diagnostic())
 
 
 class TestActivityStatus(unittest.TestCase):

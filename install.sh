@@ -80,8 +80,19 @@ apt-get install -y -qq \
 
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
-python3 -m pip install --break-system-packages python-rtmidi 2>/dev/null \
-    || python3 -m pip install python-rtmidi
+log "Installazione python-rtmidi (gateway Tabloza Buffer)..."
+python3 -m pip uninstall -y rtmidi rtmidi-python 2>/dev/null || true
+python3 -m pip install --break-system-packages 'python-rtmidi>=1.4.9' 2>/dev/null \
+    || python3 -m pip install 'python-rtmidi>=1.4.9'
+python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}/src')
+from rtmidi_compat import is_usable_python_rtmidi, rtmidi_diagnostic
+if not is_usable_python_rtmidi():
+    print('ERRORE python-rtmidi:', rtmidi_diagnostic(), file=sys.stderr)
+    sys.exit(1)
+print('python-rtmidi OK')
+" || warn "python-rtmidi non verificato — gateway MIDI potrebbe non avviarsi"
 
 # FluidSynth di sistema (pacchetto fluid-soundfont-gm) confligge con Tabloza.
 log "Disabilito FluidSynth di sistema..."
