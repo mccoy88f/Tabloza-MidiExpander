@@ -102,6 +102,12 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+@app.route("/setup/sing")
+def setup_sing():
+    """Pagina pubblica per verificare il WebSocket MIDI (Tabloza Sing)."""
+    return send_from_directory(app.static_folder, "setup-sing.html")
+
+
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory(app.static_folder, filename)

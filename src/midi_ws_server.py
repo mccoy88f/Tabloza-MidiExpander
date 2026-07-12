@@ -129,62 +129,6 @@ async def _client_handler(websocket) -> None:
         _clients.discard(websocket)
 
 
-_SETUP_HTML = """<!DOCTYPE html>
-<html lang="it">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tabloza MidiExpander — WebSocket MIDI</title>
-  <style>
-    body {{ font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #e8fff9; background: #0f172a; }}
-    h1 {{ font-size: 1.25rem; }}
-    p {{ color: #94a3b8; }}
-    .ok {{ color: #5eead4; font-weight: 600; }}
-    code {{ color: #cbd5e1; }}
-  </style>
-</head>
-<body>
-  <h1>WebSocket MIDI pronto</h1>
-  <p class="ok">Porta {port} attiva per Tabloza Sing (<code>ws://{host}:{port}</code>).</p>
-  <p>Chiudi questa scheda e torna al Display. Se Chrome lo chiede, consenti <strong>Rete locale</strong> per tabloza.live.</p>
-  <p>Per SoundFont e impostazioni del Pi usa il <a href="http://{host}/" style="color:#5eead4">pannello web</a> sulla porta 80.</p>
-</body>
-</html>"""
-
-
-def _is_websocket_upgrade(request) -> bool:
-    headers = getattr(request, "headers", None)
-    if headers is None:
-        return False
-    upgrade = (headers.get("Upgrade") or "").lower()
-    return upgrade == "websocket"
-
-
-async def _process_request(connection, request):
-    """Pagina HTTP su :8765 per setup WebSocket (non è il pannello admin su :80)."""
-    path = (getattr(request, "path", None) or "/").split("?", 1)[0]
-    if path not in ("/", "/setup"):
-        return None
-    if _is_websocket_upgrade(request):
-        return None
-    port = _ws_port()
-    try:
-        from tabloza_common import MDNS_NAME
-
-        host = MDNS_NAME
-    except Exception:
-        host = "tabloza-me.local"
-    body = _SETUP_HTML.format(port=port, host=host).encode("utf-8")
-    response_headers = [
-        ("Content-Type", "text/html; charset=utf-8"),
-        ("Content-Length", str(len(body))),
-        ("Cache-Control", "no-store"),
-    ]
-    if hasattr(connection, "respond"):
-        return connection.respond(200, "OK", body, headers=response_headers)
-    return None
-
-
 async def _run_server(port: int) -> None:
     import websockets
 
@@ -192,7 +136,6 @@ async def _run_server(port: int) -> None:
         _client_handler,
         "0.0.0.0",
         port,
-        process_request=_process_request,
         ping_interval=20,
         ping_timeout=20,
         max_size=2**20,
