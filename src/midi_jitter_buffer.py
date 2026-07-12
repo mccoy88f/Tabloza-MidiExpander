@@ -194,20 +194,24 @@ class MidiGateway:
         from midi_sysex_mode import maybe_apply_sysex_bank_mode
         return maybe_apply_sysex_bank_mode(message)
 
+    def _midi_bytes(self, message: tuple) -> list[int]:
+        return [int(b) & 0xFF for b in message]
+
     def _forward_message(self, message: tuple):
         from activity_status import touch_midi_activity
 
+        payload = self._midi_bytes(message)
         with self._output_lock:
             if not self._midi_out:
                 return
             try:
-                self._midi_out.send_message(list(message))
+                self._midi_out.send_message(payload)
                 touch_midi_activity()
             except Exception as exc:
                 log.warning("Invio gateway MIDI fallito: %s", exc)
                 if self.reconnect_output():
                     try:
-                        self._midi_out.send_message(list(message))
+                        self._midi_out.send_message(payload)
                         touch_midi_activity()
                     except Exception:
                         pass
