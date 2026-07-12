@@ -201,11 +201,15 @@ def disconnect_source_routes(src_addr: str) -> int:
 
 def _route_destination() -> dict | None:
     """ALSA port where MIDI sources should connect (buffer input or FluidSynth)."""
-    from midi_jitter_buffer import get_buffer_input_port
+    from midi_jitter_buffer import get_buffer_input_port, jitter_buffer_active
 
     buf = get_buffer_input_port()
     if buf:
         return buf
+    if jitter_buffer_active():
+        log.warning(
+            "Gateway MIDI attivo ma porta input non trovata — routing diretto a FluidSynth"
+        )
     return find_fluidsynth_input()
 
 
@@ -369,7 +373,13 @@ def route_midi_to_fluidsynth() -> int:
                 ["aconnect", src["address"], dest["address"]],
                 capture_output=True, timeout=3, check=False,
             )
-            log.info("Routed %s (%s) → %s", src["client"], src["address"], dest["address"])
+            log.info(
+                "Routed %s (%s) → %s (%s)",
+                src["client"],
+                src["address"],
+                dest.get("name", dest.get("client", "?")),
+                dest["address"],
+            )
             count += 1
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass

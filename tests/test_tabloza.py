@@ -209,6 +209,16 @@ class TestMidiConfig(unittest.TestCase):
             with patch("midi_utils.find_fluidsynth_input", return_value=fs_port):
                 self.assertEqual(_route_destination(), buf_port)
 
+    def test_is_buffer_input_port_rtmidi_client(self):
+        from midi_jitter_buffer import _is_buffer_input_port
+
+        port = {
+            "client": "RtMidiIn Client",
+            "name": "Tabloza Buffer  ",
+            "address": "130:0",
+        }
+        self.assertTrue(_is_buffer_input_port(port))
+
 
 class TestMidiSysexMode(unittest.TestCase):
     def test_detect_gm_system_on(self):

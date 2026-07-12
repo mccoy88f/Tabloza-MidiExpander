@@ -19,6 +19,16 @@ log = logging.getLogger("tabloza.midi.buffer")
 VIRTUAL_PORT_NAME = "Tabloza Buffer"
 BUFFER_CLIENT_MARKERS = ("tabloza buffer",)
 
+
+def _is_buffer_input_port(port: dict) -> bool:
+    name = port.get("name", "").lower().strip()
+    client = port.get("client", "").lower()
+    if name == VIRTUAL_PORT_NAME.lower() or VIRTUAL_PORT_NAME.lower() in name:
+        return True
+    if any(marker in client for marker in BUFFER_CLIENT_MARKERS):
+        return True
+    return VIRTUAL_PORT_NAME.lower() in client
+
 try:
     import rtmidi
 except ImportError:
@@ -52,11 +62,32 @@ class MidiGateway:
         self._queue_lock = threading.Lock()
         self._seq = 0
         self._active = False
+        self._input_port_address: str | None = None
         self._output_lock = threading.RLock()
 
     @property
     def active(self) -> bool:
         return self._active
+
+    @property
+    def input_port_address(self) -> str | None:
+        return self._input_port_address
+
+    def _wait_for_input_port_address(self, timeout: float = 2.0) -> str | None:
+        from midi_utils import get_input_ports
+
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for port in get_input_ports():
+                if _is_buffer_input_port(port):
+                    log.info(
+                        "Gateway MIDI input ALSA %s (%s)",
+                        port["address"],
+                        port.get("name", "").strip(),
+                    )
+                    return port["address"]
+            time.sleep(0.1)
+        return None
 
     def start(self) -> bool:
         if not is_usable_python_rtmidi():
@@ -69,6 +100,11 @@ class MidiGateway:
             configure_midi_in(self._midi_in)
             self._midi_in.set_callback(self._on_message)
             self._midi_in.open_virtual_port(VIRTUAL_PORT_NAME)
+            self._input_port_address = self._wait_for_input_port_address()
+            if not self._input_port_address:
+                log.warning("Gateway MIDI: porta ALSA Tabloza Buffer non trovata")
+                self.stop()
+                return False
 
             self._midi_out = make_midi_out()
             if not self._connect_output_to_fluidsynth():
@@ -113,6 +149,7 @@ class MidiGateway:
         self._writer_thread = None
         with self._queue_lock:
             self._queue.clear()
+        self._input_port_address = None
         self._active = False
         self._stop.clear()
 
@@ -269,12 +306,18 @@ def get_buffer_input_port() -> dict | None:
     """Return ALSA input port dict for routing sources into the gateway."""
     if not jitter_buffer_active():
         return None
+    with _gateway_lock:
+        cached = _gateway.input_port_address if _gateway else None
+    if cached:
+        return {
+            "client": VIRTUAL_PORT_NAME,
+            "name": VIRTUAL_PORT_NAME,
+            "address": cached,
+        }
     from midi_utils import get_input_ports
 
     for port in get_input_ports():
-        if any(marker in port["client"].lower() for marker in BUFFER_CLIENT_MARKERS):
-            return port
-        if VIRTUAL_PORT_NAME.lower() in f"{port['client']} {port['name']}".lower():
+        if _is_buffer_input_port(port):
             return port
     return None
 

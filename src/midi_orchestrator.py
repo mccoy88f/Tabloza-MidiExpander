@@ -554,7 +554,6 @@ def start_fluidsynth(config: dict) -> bool:
         error=None,
         load_started_at=None,
     )
-    route_rtpmidi_to_fluidsynth()
     _apply_midi_jitter_buffer(config)
     reconnect_jitter_buffer_output()
     refresh_midi_routes()
