@@ -229,6 +229,11 @@ class TestMidiConfig(unittest.TestCase):
         self.assertEqual(gw._midi_bytes([[144, 60, 100]]), [144, 60, 100])
         self.assertEqual(gw._midi_bytes(([144, 60, 100],)), [144, 60, 100])
         self.assertEqual(gw._midi_bytes(bytes([144, 60, 100])), [144, 60, 100])
+        self.assertEqual(gw._split_midi_messages([0, 0, 144, 60, 100]), [[144, 60, 100]])
+        self.assertEqual(
+            gw._split_midi_messages([144, 60, 100, 128, 60, 64]),
+            [[144, 60, 100], [128, 60, 64]],
+        )
 
     @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
     def test_ensure_gateway_without_rtmidi(self, _usable):

@@ -210,24 +210,82 @@ class MidiGateway:
         walk(message)
         return out
 
+    def _split_midi_messages(self, data: list[int]) -> list[list[int]]:
+        """Split a flat byte stream into individual MIDI messages for rtmidi."""
+        if not data:
+            return []
+        data = [int(b) & 0xFF for b in data]
+        while data and data[0] == 0:
+            data = data[1:]
+        if not data:
+            return []
+
+        messages: list[list[int]] = []
+        i = 0
+        running_status: int | None = None
+        while i < len(data):
+            b = data[i]
+            if b >= 0x80:
+                running_status = b
+                if b == 0xF0:
+                    j = i + 1
+                    while j < len(data) and data[j] != 0xF7:
+                        j += 1
+                    if j < len(data):
+                        j += 1
+                    messages.append(data[i:j])
+                    i = j
+                    running_status = None
+                    continue
+                if b in (0xF1, 0xF3):
+                    msg_len = 2
+                elif b == 0xF2:
+                    msg_len = 3
+                elif b >= 0xF4:
+                    msg_len = 1
+                else:
+                    hi = b & 0xF0
+                    msg_len = 2 if hi in (0xC0, 0xD0) else 3
+                chunk = data[i : i + msg_len]
+                if len(chunk) == msg_len:
+                    messages.append(chunk)
+                i += msg_len
+            elif running_status is not None:
+                hi = running_status & 0xF0
+                if hi in (0xC0, 0xD0):
+                    messages.append([running_status, b])
+                    i += 1
+                elif i + 1 < len(data):
+                    messages.append([running_status, b, data[i + 1]])
+                    i += 2
+                else:
+                    break
+            else:
+                i += 1
+        return messages
+
     def _forward_message(self, message: tuple):
         from activity_status import touch_midi_activity
 
-        payload = self._midi_bytes(message)
+        parts = self._split_midi_messages(self._midi_bytes(message))
+        if not parts:
+            return
         with self._output_lock:
             if not self._midi_out:
                 return
-            try:
-                self._midi_out.send_message(payload)
-                touch_midi_activity()
-            except Exception as exc:
-                log.warning("Invio gateway MIDI fallito: %s", exc)
-                if self.reconnect_output():
-                    try:
-                        self._midi_out.send_message(payload)
-                        touch_midi_activity()
-                    except Exception:
-                        pass
+            for payload in parts:
+                try:
+                    self._midi_out.send_message(payload)
+                    touch_midi_activity()
+                except Exception as exc:
+                    log.warning("Invio gateway MIDI fallito: %s", exc)
+                    if self.reconnect_output():
+                        try:
+                            self._midi_out.send_message(payload)
+                            touch_midi_activity()
+                        except Exception:
+                            pass
+                    break
 
     def _on_message(self, message, _data=None):
         from activity_status import touch_midi_activity
