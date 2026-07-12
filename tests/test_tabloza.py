@@ -317,6 +317,21 @@ class TestRtmidiCompat(unittest.TestCase):
             self.assertFalse(rc.is_usable_python_rtmidi())
             self.assertIn("non compatibile", rc.rtmidi_diagnostic())
 
+    def test_configure_midi_in_without_active_sensing_kw(self):
+        from rtmidi_compat import configure_midi_in
+
+        calls = []
+
+        class FakeIn:
+            def ignore_types(self, *args, **kwargs):
+                calls.append((args, kwargs))
+                if "active_sensing" in kwargs:
+                    raise TypeError("unexpected keyword argument 'active_sensing'")
+
+        configure_midi_in(FakeIn())
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1][1], {"sysex": False, "timing": False})
+
 
 class TestActivityStatus(unittest.TestCase):
     def test_aseqdump_event_lines(self):

@@ -24,7 +24,13 @@ try:
 except ImportError:
     rtmidi = None
 
-from rtmidi_compat import is_usable_python_rtmidi, make_midi_in, make_midi_out, rtmidi_diagnostic
+from rtmidi_compat import (
+    configure_midi_in,
+    is_usable_python_rtmidi,
+    make_midi_in,
+    make_midi_out,
+    rtmidi_diagnostic,
+)
 
 
 @dataclass(order=True)
@@ -60,7 +66,7 @@ class MidiGateway:
         self.stop()
         try:
             self._midi_in = make_midi_in()
-            self._midi_in.ignore_types(sysex=False, timing=False, active_sensing=False)
+            configure_midi_in(self._midi_in)
             self._midi_in.set_callback(self._on_message)
             self._midi_in.open_virtual_port(VIRTUAL_PORT_NAME)
 

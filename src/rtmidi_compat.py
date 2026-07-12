@@ -34,6 +34,20 @@ def is_usable_python_rtmidi() -> bool:
     return callable(getattr(probe, "open_virtual_port", None))
 
 
+def configure_midi_in(midi_in) -> None:
+    """Keep SysEx; ignore timing/active sensing when the binding supports it."""
+    try:
+        midi_in.ignore_types(sysex=False, timing=False, active_sensing=False)
+    except TypeError:
+        try:
+            midi_in.ignore_types(sysex=False, timing=False)
+        except TypeError:
+            try:
+                midi_in.ignore_types(False, False, False)
+            except TypeError:
+                pass
+
+
 def make_midi_in():
     if rtmidi is None:
         raise RuntimeError("python-rtmidi non installato")
