@@ -234,6 +234,8 @@ class TestMidiConfig(unittest.TestCase):
             gw._split_midi_messages([144, 60, 100, 128, 60, 64]),
             [[144, 60, 100], [128, 60, 64]],
         )
+        self.assertFalse(gw._is_forwardable([0xFF, 0x51, 0x03, 0x07]))
+        self.assertTrue(gw._is_forwardable([0x90, 0x3C, 0x64]))
 
     @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
     def test_ensure_gateway_without_rtmidi(self, _usable):

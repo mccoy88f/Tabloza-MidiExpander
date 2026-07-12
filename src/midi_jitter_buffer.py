@@ -264,10 +264,30 @@ class MidiGateway:
                 i += 1
         return messages
 
+    def _is_forwardable(self, part: list[int]) -> bool:
+        if not part:
+            return False
+        status = part[0]
+        # Meta events from SMF players (FF xx …) are not wire MIDI — skip.
+        if status == 0xFF and len(part) > 1:
+            return False
+        if status == 0xF0:
+            return True
+        if 0x80 <= status <= 0xEF:
+            hi = status & 0xF0
+            need = 2 if hi in (0xC0, 0xD0) else 3
+            return len(part) == need
+        if 0xF8 <= status <= 0xFF:
+            return len(part) == 1
+        return False
+
     def _forward_message(self, message: tuple):
         from activity_status import touch_midi_activity
 
-        parts = self._split_midi_messages(self._midi_bytes(message))
+        parts = [
+            p for p in self._split_midi_messages(self._midi_bytes(message))
+            if self._is_forwardable(p)
+        ]
         if not parts:
             return
         with self._output_lock:
