@@ -1,0 +1,18 @@
+[Unit]
+Description=Tabloza MidiExpander — WebSocket MIDI (Tabloza Sing / JZZ)
+After=network.target tabloza-orchestrator.service
+Wants=tabloza-orchestrator.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/tabloza/src/midi_ws_server.py
+WorkingDirectory=/opt/tabloza/src
+Restart=always
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/tabloza/src
+Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
+Environment=TABLOZA_MIDI_WS_PORT=8765
+
+[Install]
+WantedBy=multi-user.target

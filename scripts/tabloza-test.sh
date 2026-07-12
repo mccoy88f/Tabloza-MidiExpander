@@ -27,7 +27,7 @@ echo "Modello:  $(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo n/d)"
 
 # --- Servizi ---
 hdr "Servizi systemd"
-for svc in tabloza-web tabloza-orchestrator tabloza-wifi rtpmidid avahi-daemon; do
+for svc in tabloza-web tabloza-orchestrator tabloza-wifi tabloza-midi-ws rtpmidid avahi-daemon; do
     if systemctl is-active --quiet "$svc" 2>/dev/null; then
         green "$svc attivo"
     else

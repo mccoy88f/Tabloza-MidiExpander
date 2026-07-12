@@ -4,6 +4,10 @@ DEFAULT_MIDI_JITTER_BUFFER_MS = 25
 MIN_MIDI_JITTER_BUFFER_MS = 0
 MAX_MIDI_JITTER_BUFFER_MS = 150
 
+DEFAULT_WS_JITTER_BUFFER_MS = 25
+MIN_WS_JITTER_BUFFER_MS = 0
+MAX_WS_JITTER_BUFFER_MS = 150
+
 DEFAULT_MIDI_BANK_SELECT = "gs"
 MIDI_BANK_SELECT_MODES = ("gm", "gs", "xg", "mma")
 
@@ -11,6 +15,8 @@ DEFAULT_MIDI_CONFIG: dict = {
     "jitter_buffer_ms": DEFAULT_MIDI_JITTER_BUFFER_MS,
     "jitter_buffer_enabled": True,
     "rtp_midi_timestamps_enabled": True,
+    "ws_jitter_buffer_ms": DEFAULT_WS_JITTER_BUFFER_MS,
+    "ws_jitter_buffer_enabled": True,
     "sysex_bank_auto": True,
     "bank_select": DEFAULT_MIDI_BANK_SELECT,
 }
@@ -30,6 +36,8 @@ def merge_midi_config(stored: dict | None) -> dict:
     merged["jitter_buffer_ms"] = normalize_jitter_buffer_ms(merged.get("jitter_buffer_ms"))
     merged["jitter_buffer_enabled"] = bool(merged.get("jitter_buffer_enabled", True))
     merged["rtp_midi_timestamps_enabled"] = bool(merged.get("rtp_midi_timestamps_enabled", True))
+    merged["ws_jitter_buffer_ms"] = normalize_ws_jitter_buffer_ms(merged.get("ws_jitter_buffer_ms"))
+    merged["ws_jitter_buffer_enabled"] = bool(merged.get("ws_jitter_buffer_enabled", True))
     merged["sysex_bank_auto"] = bool(merged.get("sysex_bank_auto", True))
     merged["bank_select"] = normalize_bank_select(merged.get("bank_select"))
     return merged
@@ -43,11 +51,35 @@ def normalize_jitter_buffer_ms(value) -> int:
     return max(MIN_MIDI_JITTER_BUFFER_MS, min(MAX_MIDI_JITTER_BUFFER_MS, ms))
 
 
+def normalize_ws_jitter_buffer_ms(value) -> int:
+    try:
+        ms = int(value)
+    except (TypeError, ValueError):
+        ms = DEFAULT_WS_JITTER_BUFFER_MS
+    return max(MIN_WS_JITTER_BUFFER_MS, min(MAX_WS_JITTER_BUFFER_MS, ms))
+
+
 def is_jitter_buffer_enabled(config: dict) -> bool:
     midi = config.get("midi")
     if isinstance(midi, dict) and "jitter_buffer_enabled" in midi:
         return bool(midi["jitter_buffer_enabled"])
     return True
+
+
+def is_ws_jitter_buffer_enabled(config: dict) -> bool:
+    midi = config.get("midi")
+    if isinstance(midi, dict) and "ws_jitter_buffer_enabled" in midi:
+        return bool(midi["ws_jitter_buffer_enabled"])
+    return True
+
+
+def get_ws_jitter_buffer_ms(config: dict) -> int:
+    if not is_ws_jitter_buffer_enabled(config):
+        return 0
+    midi = config.get("midi")
+    if isinstance(midi, dict):
+        return normalize_ws_jitter_buffer_ms(midi.get("ws_jitter_buffer_ms"))
+    return DEFAULT_WS_JITTER_BUFFER_MS
 
 
 def is_rtp_midi_timestamps_enabled(config: dict) -> bool:
@@ -97,6 +129,7 @@ def get_midi_bank_select(config: dict) -> str:
 
 def midi_settings_for_api(config: dict) -> dict:
     from midi_jitter_buffer import jitter_buffer_status
+    from midi_ws_buffer import ws_gateway_status
 
     from midi_sysex_mode import get_runtime_bank_select
 
@@ -111,9 +144,13 @@ def midi_settings_for_api(config: dict) -> dict:
         "jitter_buffer_enabled": midi["jitter_buffer_enabled"],
         "jitter_buffer_ms": midi["jitter_buffer_ms"],
         "rtp_midi_timestamps_enabled": rtp_ts,
+        "ws_jitter_buffer_enabled": midi["ws_jitter_buffer_enabled"],
+        "ws_jitter_buffer_ms": midi["ws_jitter_buffer_ms"],
         "sysex_bank_auto": midi["sysex_bank_auto"],
         "jitter_buffer_active": status["active"],
         "jitter_buffer_effective_ms": effective_buffer_ms,
+        "ws_jitter_buffer_active": ws_gateway_status()["active"],
+        "ws_jitter_buffer_effective_ms": get_ws_jitter_buffer_ms(config),
         "rtpmidid_playout_buffer_ms": get_rtpmidid_playout_buffer_ms(config),
         "rtmidi_available": status["rtmidi_available"],
     }

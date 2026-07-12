@@ -1,0 +1,13 @@
+<svg width="72" height="72" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Tabloza MidiExpander">
+  <defs>
+    <linearGradient id="me-mark-g" x1="6" y1="4" x2="62" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="1" stop-color="#0D9488"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="156" height="156" rx="46" fill="url(#me-mark-g)"/>
+  <path d="M78 28 C 84 60, 100 76, 132 82 C 100 88, 84 104, 78 136 C 72 104, 56 88, 24 82 C 56 76, 72 60, 78 28 Z" fill="#fff"/>
+  <path d="M122 36 C 124 47, 130 53, 141 55 C 130 57, 124 63, 122 74 C 120 63, 114 57, 103 55 C 114 53, 120 47, 122 36 Z" fill="#fff" opacity="0.92"/>
+  <rect x="48" y="108" width="64" height="10" rx="5" fill="#fff" opacity="0.95"/>
+  <rect x="56" y="122" width="48" height="8" rx="4" fill="#fff" opacity="0.75"/>
+</svg>

@@ -80,6 +80,8 @@ apt-get install -y -qq \
 
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
+python3 -m pip install --break-system-packages 'websockets>=12.0' 2>/dev/null \
+    || python3 -m pip install 'websockets>=12.0'
 log "Installazione python-rtmidi (gateway Tabloza Buffer)..."
 python3 -m pip uninstall -y rtmidi rtmidi-python 2>/dev/null || true
 if apt-get install -y python3-rtmidi 2>/dev/null; then
@@ -160,6 +162,8 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "jitter_buffer_ms": 25,
     "jitter_buffer_enabled": true,
     "rtp_midi_timestamps_enabled": true,
+    "ws_jitter_buffer_ms": 25,
+    "ws_jitter_buffer_enabled": true,
     "sysex_bank_auto": true,
     "bank_select": "gs"
   }
@@ -189,6 +193,12 @@ if p.is_file():
         changed = True
     if "rtp_midi_timestamps_enabled" not in midi:
         midi["rtp_midi_timestamps_enabled"] = True
+        changed = True
+    if "ws_jitter_buffer_ms" not in midi:
+        midi["ws_jitter_buffer_ms"] = 25
+        changed = True
+    if "ws_jitter_buffer_enabled" not in midi:
+        midi["ws_jitter_buffer_enabled"] = True
         changed = True
     if changed:
         cfg["midi"] = midi
@@ -261,10 +271,11 @@ install -m 644 "${INSTALL_DIR}/systemd/tabloza-orchestrator.service" /etc/system
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-web.service"     /etc/systemd/system/tabloza-web.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-wifi.service"    /etc/systemd/system/tabloza-wifi.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-lan.service"     /etc/systemd/system/tabloza-lan.service
+install -m 644 "${INSTALL_DIR}/systemd/tabloza-midi-ws.service" /etc/systemd/system/tabloza-midi-ws.service
 
 systemctl daemon-reload
-systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan
-systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan
+systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
+systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
 
 # --- Permessi ---
 chown -R root:root "${INSTALL_DIR}"

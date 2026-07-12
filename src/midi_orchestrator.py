@@ -50,7 +50,9 @@ from event_log import log_event
 from midi_config import (
     get_jitter_buffer_ms,
     get_midi_bank_select,
+    get_ws_jitter_buffer_ms,
     is_sysex_bank_auto_enabled,
+    is_ws_jitter_buffer_enabled,
     merge_midi_config,
 )
 from midi_jitter_buffer import (
@@ -58,6 +60,7 @@ from midi_jitter_buffer import (
     reconnect_jitter_buffer_output,
     stop_jitter_buffer,
 )
+from midi_ws_buffer import ensure_ws_midi_gateway, stop_ws_midi_gateway
 from midi_sysex_mode import reset_runtime_bank_select
 from soundfont_config import startup_soundfont_name
 from synth_config import merge_fluidsynth_config, fluidsynth_startup_options
@@ -113,6 +116,20 @@ def _apply_midi_jitter_buffer(config: dict | None = None) -> bool:
         from rtmidi_compat import rtmidi_diagnostic
 
         log.error("Gateway MIDI non attivo — %s", rtmidi_diagnostic())
+    return ok
+
+
+def _apply_ws_midi_gateway(config: dict | None = None) -> bool:
+    cfg = config or load_config()
+    if not is_ws_jitter_buffer_enabled(cfg):
+        stop_ws_midi_gateway()
+        return False
+    ok = ensure_ws_midi_gateway(
+        get_ws_jitter_buffer_ms(cfg),
+        sysex_auto=is_sysex_bank_auto_enabled(cfg),
+    )
+    if not ok:
+        log.warning("Gateway WS Sing non attivo")
     return ok
 
 
@@ -555,6 +572,7 @@ def start_fluidsynth(config: dict) -> bool:
         load_started_at=None,
     )
     _apply_midi_jitter_buffer(config)
+    _apply_ws_midi_gateway(config)
     reconnect_jitter_buffer_output()
     refresh_midi_routes()
     apply_volume(config)
@@ -600,6 +618,7 @@ def handle_sigusr1(signum, frame):
 def _apply_midi_settings():
     config = load_config()
     _apply_midi_jitter_buffer(config)
+    _apply_ws_midi_gateway(config)
     reconnect_jitter_buffer_output()
     refresh_midi_routes()
     log.info("Impostazioni MIDI applicate (buffer=%s, bank=%s)",

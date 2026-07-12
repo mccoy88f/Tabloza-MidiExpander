@@ -44,6 +44,18 @@ body {
 }
 
 .login-card h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+
+.brand-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-bottom: 0.5rem;
+}
+
+.brand-logo-login {
+  margin: 0 auto 0.75rem;
+}
+
 .subtitle { color: var(--muted); margin-bottom: 1.5rem; }
 
 .header {

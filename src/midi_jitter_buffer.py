@@ -51,7 +51,14 @@ class _QueuedMsg:
 
 
 class MidiGateway:
-    def __init__(self, buffer_ms: int, *, sysex_auto: bool = True):
+    def __init__(
+        self,
+        buffer_ms: int,
+        *,
+        sysex_auto: bool = True,
+        port_name: str | None = None,
+    ):
+        self.port_name = port_name or VIRTUAL_PORT_NAME
         self.buffer_ms = max(0, buffer_ms)
         self.sysex_auto = sysex_auto
         self._stop = threading.Event()
@@ -74,16 +81,18 @@ class MidiGateway:
         return self._input_port_address
 
     def _wait_for_input_port_address(self, timeout: float = 2.0) -> str | None:
-        from midi_utils import get_buffer_ports
+        from midi_utils import get_input_ports, get_output_ports
 
+        target = self.port_name.lower()
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            for port in get_buffer_ports():
-                if _is_buffer_input_port(port):
+            for port in get_input_ports() + get_output_ports():
+                name = port.get("name", "").strip()
+                if name == self.port_name or name.lower() == target:
                     log.info(
                         "Gateway MIDI input ALSA %s (%s)",
                         port["address"],
-                        port.get("name", "").strip(),
+                        name,
                     )
                     return port["address"]
             time.sleep(0.1)
@@ -99,7 +108,7 @@ class MidiGateway:
             self._midi_in = make_midi_in()
             configure_midi_in(self._midi_in)
             self._midi_in.set_callback(self._on_message)
-            self._midi_in.open_virtual_port(VIRTUAL_PORT_NAME)
+            self._midi_in.open_virtual_port(self.port_name)
             self._input_port_address = self._wait_for_input_port_address()
             if not self._input_port_address:
                 log.warning("Gateway MIDI: porta ALSA Tabloza Buffer non trovata")

@@ -9,6 +9,15 @@
 - Visibile in pannello → Stato → **Ingressi MIDI** con badge **Attivo** / **Collegato**
 - Hot‑plug: inserire il dongle e attendere ~5 s, oppure **MIDI Reset**
 
+## Tabloza Sing (WebSocket / JZZ-midi-WS)
+
+**Stato:** attivo — ingresso dedicato con buffer anti-jitter separato
+
+- Server `tabloza-midi-ws` su porta **8765** (protocollo JZZ-midi-WS)
+- Porta ALSA sorgente `Tabloza Sing` → gateway `Tabloza Sing WS` (buffer ~25 ms) → FluidSynth
+- Configurazione: `config.json` → `midi.ws_jitter_buffer_ms` / `ws_jitter_buffer_enabled`
+- In Tabloza Sing: banco sonoro **Tabloza MidiExpander** (`midi_expander`)
+
 ## MIDI GPIO fisico (UART)
 
 **Stato:** pianificato — non ancora implementato

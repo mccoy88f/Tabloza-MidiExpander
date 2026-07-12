@@ -30,7 +30,7 @@ read -rp "Eliminare anche i dati (${DATA_DIR})? [s/N] " DELDATA
 echo ""
 
 log "Arresto servizi..."
-for svc in tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid; do
+for svc in tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan tabloza-midi-ws rtpmidid; do
     systemctl stop "$svc" 2>/dev/null || true
     systemctl disable "$svc" 2>/dev/null || true
 done
@@ -40,6 +40,7 @@ rm -f /etc/systemd/system/tabloza-web.service
 rm -f /etc/systemd/system/tabloza-orchestrator.service
 rm -f /etc/systemd/system/tabloza-wifi.service
 rm -f /etc/systemd/system/tabloza-lan.service
+rm -f /etc/systemd/system/tabloza-midi-ws.service
 rm -f /etc/systemd/system/rtpmidid.service
 systemctl daemon-reload
 

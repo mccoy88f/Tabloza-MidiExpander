@@ -204,9 +204,16 @@ class TestMidiConfig(unittest.TestCase):
     def test_get_jitter_buffer_ms_from_config(self):
         from midi_config import get_jitter_buffer_ms
 
-        self.assertEqual(get_jitter_buffer_ms({}), 25)
-        self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_ms": 50}}), 50)
+        self.assertEqual(get_jitter_buffer_ms({"midi": {"rtp_midi_timestamps_enabled": False}}), 25)
+        self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_ms": 50, "rtp_midi_timestamps_enabled": False}}), 50)
         self.assertEqual(get_jitter_buffer_ms({"midi": {"jitter_buffer_enabled": False}}), 0)
+
+    def test_get_ws_jitter_buffer_ms_from_config(self):
+        from midi_config import get_ws_jitter_buffer_ms
+
+        self.assertEqual(get_ws_jitter_buffer_ms({}), 25)
+        self.assertEqual(get_ws_jitter_buffer_ms({"midi": {"ws_jitter_buffer_ms": 40}}), 40)
+        self.assertEqual(get_ws_jitter_buffer_ms({"midi": {"ws_jitter_buffer_enabled": False}}), 0)
 
     def test_bank_select_normalization(self):
         from midi_config import get_midi_bank_select, normalize_bank_select

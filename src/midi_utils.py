@@ -233,8 +233,12 @@ def _is_reserved_midi_client(client_name: str) -> bool:
 
 def _is_internal_midi_source(port: dict) -> bool:
     from midi_jitter_buffer import _is_buffer_input_port
+    from midi_ws_buffer import _is_ws_buffer_input_port
 
-    if _is_buffer_input_port(port):
+    if _is_buffer_input_port(port) or _is_ws_buffer_input_port(port):
+        return True
+    name = port.get("name", "").strip()
+    if name == "Tabloza Sing":
         return True
     label = f"{port['client']} {port['name']}".lower()
     return (
@@ -253,6 +257,34 @@ def find_usb_midi_outputs() -> list[dict]:
             continue
         sources.append(port)
     return sources
+
+
+def find_ws_midi_source() -> dict | None:
+    """ALSA output from tabloza-midi-ws (JZZ ingress from Tabloza Sing)."""
+    for port in get_output_ports():
+        if port.get("name", "").strip() == "Tabloza Sing":
+            return port
+    return None
+
+
+def ws_server_status() -> dict:
+    """Detect tabloza-midi-ws from ALSA (separate OS process)."""
+    import os
+
+    from midi_ws_server import DEFAULT_WS_PORT, JZZ_OUTPUT_NAME, WS_ALSA_SOURCE_NAME
+
+    try:
+        port = int(os.environ.get("TABLOZA_MIDI_WS_PORT", str(DEFAULT_WS_PORT)))
+    except ValueError:
+        port = DEFAULT_WS_PORT
+    source = find_ws_midi_source()
+    return {
+        "active": source is not None,
+        "port": port,
+        "output_name": JZZ_OUTPUT_NAME,
+        "alsa_source": WS_ALSA_SOURCE_NAME,
+        "clients": None,
+    }
 
 
 def _midi_sources_for_routing() -> list[dict]:
@@ -419,12 +451,16 @@ def midi_monitor_port() -> tuple[str | None, str | None]:
 def get_midi_status() -> dict:
     """Return structured MIDI routing status for API/frontend."""
     from midi_jitter_buffer import jitter_buffer_status
+    from midi_ws_buffer import ws_gateway_status
 
     fs = find_fluidsynth_input()
     rtp_sources = find_rtpmidid_outputs()
     usb_sources = find_usb_midi_outputs()
+    ws_source = find_ws_midi_source()
     active_routes = get_active_routes()
     buffer_status = jitter_buffer_status()
+    ws_buffer = ws_gateway_status()
+    ws_srv = ws_server_status()
     routes = []
     if rtp_sources:
         any_connected = any(
@@ -454,12 +490,29 @@ def get_midi_status() -> dict:
                 "status": "connected" if any_connected else "available",
                 "port_count": len(ports),
             })
+    if ws_srv.get("active") or ws_source:
+        ws_connected = bool(
+            ws_source
+            and any(r["from"] == ws_source["address"] for r in active_routes)
+        )
+        routes.append({
+            "type": "sing_ws",
+            "name": "Tabloza Sing",
+            "address": (ws_source or {}).get("address", ""),
+            "status": "connected" if ws_connected else ("available" if ws_srv.get("active") else "offline"),
+            "port_count": 1,
+            "ws_port": ws_srv.get("port"),
+            "ws_clients": ws_srv.get("clients", 0),
+            "ws_buffer_ms": ws_buffer.get("buffer_ms", 0),
+        })
     return {
         "fluidsynth": fs,
         "sources": routes,
         "active_routes": active_routes,
         "routing_ok": fs is not None and len(active_routes) > 0,
         "jitter_buffer": buffer_status,
+        "ws_jitter_buffer": ws_buffer,
+        "ws_server": ws_srv,
     }
 
 
@@ -469,35 +522,64 @@ def get_midi_settings_for_api(config: dict) -> dict:
     return midi_settings_for_api(config)
 
 
+def route_ws_midi_to_gateway() -> int:
+    """Connect Tabloza Sing WS ALSA source to the dedicated WS jitter gateway."""
+    from midi_ws_buffer import get_ws_buffer_input_port
+
+    src = find_ws_midi_source()
+    dest = get_ws_buffer_input_port()
+    if not src or not dest:
+        return 0
+    dest_addr = dest["address"]
+    if is_midi_connected(src["address"], dest_addr):
+        return 1
+    disconnect_source_routes(src["address"])
+    try:
+        subprocess.run(
+            ["aconnect", src["address"], dest_addr],
+            capture_output=True, timeout=3, check=False,
+        )
+        log.info(
+            "Routed WS %s (%s) → %s (%s)",
+            src.get("client"),
+            src["address"],
+            dest.get("name", dest.get("client", "?")),
+            dest_addr,
+        )
+        return 1
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return 0
+
+
 def route_midi_to_fluidsynth() -> int:
     """Connect network (rtpmidid) and USB MIDI sources to buffer or FluidSynth."""
     dest = _route_destination()
-    if not dest:
-        return 0
     count = 0
-    dest_addr = dest["address"]
-    rtp_sources = find_rtpmidid_outputs()
-    _disconnect_extra_rtpmidid_outputs({p["address"] for p in rtp_sources})
-    for src in _midi_sources_for_routing():
-        if is_midi_connected(src["address"], dest_addr):
-            count += 1
-            continue
-        disconnect_source_routes(src["address"])
-        try:
-            subprocess.run(
-                ["aconnect", src["address"], dest["address"]],
-                capture_output=True, timeout=3, check=False,
-            )
-            log.info(
-                "Routed %s (%s) → %s (%s)",
-                src["client"],
-                src["address"],
-                dest.get("name", dest.get("client", "?")),
-                dest["address"],
-            )
-            count += 1
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+    if dest:
+        dest_addr = dest["address"]
+        rtp_sources = find_rtpmidid_outputs()
+        _disconnect_extra_rtpmidid_outputs({p["address"] for p in rtp_sources})
+        for src in _midi_sources_for_routing():
+            if is_midi_connected(src["address"], dest_addr):
+                count += 1
+                continue
+            disconnect_source_routes(src["address"])
+            try:
+                subprocess.run(
+                    ["aconnect", src["address"], dest["address"]],
+                    capture_output=True, timeout=3, check=False,
+                )
+                log.info(
+                    "Routed %s (%s) → %s (%s)",
+                    src["client"],
+                    src["address"],
+                    dest.get("name", dest.get("client", "?")),
+                    dest["address"],
+                )
+                count += 1
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+    count += route_ws_midi_to_gateway()
     refresh_midi_monitor_tap()
     return count
 

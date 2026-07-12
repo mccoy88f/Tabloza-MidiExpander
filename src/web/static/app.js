@@ -129,6 +129,10 @@ function renderMidiInputs(midi) {
       ? (src.port_count > 1
         ? t("midiUsbNamedPorts", { name: src.name, count: src.port_count })
         : t("midiUsbNamed", { name: src.name }))
+      : src.type === "sing_ws"
+        ? (src.ws_clients != null && src.ws_clients > 0
+          ? t("midiSingWsClients", { port: src.ws_port || 8765, count: src.ws_clients })
+          : t("midiSingWs", { port: src.ws_port || 8765 }))
       : (src.port_count > 1 ? `${src.name} (${src.port_count})` : src.name);
     const badge = src.status === "connected"
       ? `<span class="badge badge-connected">${t("badgeConnected")}</span>`
