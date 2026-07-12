@@ -9,8 +9,18 @@ from pathlib import Path
 RTPMIDID_INI_PATH = Path("/etc/rtpmidid/default.ini")
 
 
-def render_rtpmidid_ini(*, use_rtp_midi_timestamps: bool = True) -> str:
+def render_rtpmidid_ini(
+    *,
+    use_rtp_midi_timestamps: bool = True,
+    playout_buffer_ms: int = 0,
+) -> str:
     ts = "true" if use_rtp_midi_timestamps else "false"
+    if use_rtp_midi_timestamps:
+        playout_note = (
+            "# Jitter WiFi: playout in rtpmidid (Tabloza Buffer passthrough SysEx-only)."
+        )
+    else:
+        playout_note = "# Jitter WiFi gestito da Tabloza Buffer downstream."
     return f"""# Tabloza MidiExpander — rtpmidid-ts config (generato da Tabloza)
 # Mac/Windows: una sola sessione RTP-MIDI "tabloza-me" (porta 5004).
 # Il routing verso FluidSynth è interno (aconnect), non va annunciato in rete.
@@ -20,8 +30,8 @@ alsa_name=rtpmidid
 control=/var/run/rtpmidid/control.sock
 # Fork Tabloza: scheduling ALSA dai timestamp RTP (RFC 6295).
 use_rtp_midi_timestamps={ts}
-# Jitter WiFi gestito da Tabloza Buffer downstream — niente buffer extra qui.
-playout_buffer_ms=0
+{playout_note}
+playout_buffer_ms={playout_buffer_ms}
 
 [rtpmidi_announce]
 name=tabloza-me
@@ -37,17 +47,25 @@ enabled=false
 """
 
 
-def use_rtp_midi_timestamps_from_config(config: dict) -> bool:
-    from midi_config import is_rtp_midi_timestamps_enabled
+def rtpmidid_ini_params_from_config(config: dict) -> tuple[bool, int]:
+    from midi_config import (
+        get_rtpmidid_playout_buffer_ms,
+        is_rtp_midi_timestamps_enabled,
+    )
 
-    return is_rtp_midi_timestamps_enabled(config)
+    return (
+        is_rtp_midi_timestamps_enabled(config),
+        get_rtpmidid_playout_buffer_ms(config),
+    )
 
 
 def write_rtpmidid_ini(config: dict, dest: Path | None = None) -> Path:
     dest = dest or RTPMIDID_INI_PATH
     dest.parent.mkdir(parents=True, exist_ok=True)
+    use_ts, playout_ms = rtpmidid_ini_params_from_config(config)
     content = render_rtpmidid_ini(
-        use_rtp_midi_timestamps=use_rtp_midi_timestamps_from_config(config),
+        use_rtp_midi_timestamps=use_ts,
+        playout_buffer_ms=playout_ms,
     )
     dest.write_text(content, encoding="utf-8")
     dest.chmod(0o644)
@@ -87,8 +105,11 @@ def main(argv: list[str] | None = None) -> int:
     if not apply_rtpmidid_config(config):
         print("rtpmidid: apply config ok, restart failed", file=sys.stderr)
         return 1
-    enabled = use_rtp_midi_timestamps_from_config(config)
-    print(f"rtpmidid config applicata: use_rtp_midi_timestamps={enabled}")
+    use_ts, playout_ms = rtpmidid_ini_params_from_config(config)
+    print(
+        f"rtpmidid config applicata: use_rtp_midi_timestamps={use_ts}, "
+        f"playout_buffer_ms={playout_ms}"
+    )
     return 0
 
 

@@ -10,7 +10,7 @@ MIDI_BANK_SELECT_MODES = ("gm", "gs", "xg", "mma")
 DEFAULT_MIDI_CONFIG: dict = {
     "jitter_buffer_ms": DEFAULT_MIDI_JITTER_BUFFER_MS,
     "jitter_buffer_enabled": True,
-    "rtp_midi_timestamps_enabled": False,
+    "rtp_midi_timestamps_enabled": True,
     "sysex_bank_auto": True,
     "bank_select": DEFAULT_MIDI_BANK_SELECT,
 }
@@ -65,6 +65,21 @@ def is_sysex_bank_auto_enabled(config: dict) -> bool:
 
 
 def get_jitter_buffer_ms(config: dict) -> int:
+    """Effective Tabloza buffer ms. Zero when RTP timestamps handle timing in rtpmidid-ts."""
+    if is_rtp_midi_timestamps_enabled(config):
+        return 0
+    if not is_jitter_buffer_enabled(config):
+        return 0
+    midi = config.get("midi")
+    if isinstance(midi, dict):
+        return normalize_jitter_buffer_ms(midi.get("jitter_buffer_ms"))
+    return DEFAULT_MIDI_JITTER_BUFFER_MS
+
+
+def get_rtpmidid_playout_buffer_ms(config: dict) -> int:
+    """WiFi jitter absorbed in rtpmidid clock origin when RTP timestamps are on."""
+    if not is_rtp_midi_timestamps_enabled(config):
+        return 0
     if not is_jitter_buffer_enabled(config):
         return 0
     midi = config.get("midi")
@@ -87,16 +102,19 @@ def midi_settings_for_api(config: dict) -> dict:
 
     midi = merge_midi_config(config.get("midi") if isinstance(config.get("midi"), dict) else None)
     status = jitter_buffer_status()
+    rtp_ts = midi["rtp_midi_timestamps_enabled"]
+    effective_buffer_ms = 0 if rtp_ts else (midi["jitter_buffer_ms"] if midi["jitter_buffer_enabled"] else 0)
     return {
         "bank_select": midi["bank_select"],
         "bank_select_modes": list(MIDI_BANK_SELECT_MODES),
         "runtime_bank_select": get_runtime_bank_select(midi["bank_select"]),
         "jitter_buffer_enabled": midi["jitter_buffer_enabled"],
         "jitter_buffer_ms": midi["jitter_buffer_ms"],
-        "rtp_midi_timestamps_enabled": midi["rtp_midi_timestamps_enabled"],
+        "rtp_midi_timestamps_enabled": rtp_ts,
         "sysex_bank_auto": midi["sysex_bank_auto"],
         "jitter_buffer_active": status["active"],
-        "jitter_buffer_effective_ms": status["buffer_ms"] if status["active"] else 0,
+        "jitter_buffer_effective_ms": effective_buffer_ms,
+        "rtpmidid_playout_buffer_ms": get_rtpmidid_playout_buffer_ms(config),
         "rtmidi_available": status["rtmidi_available"],
     }
 

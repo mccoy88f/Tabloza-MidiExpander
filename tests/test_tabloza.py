@@ -214,14 +214,32 @@ class TestMidiConfig(unittest.TestCase):
     def test_render_rtpmidid_ini(self):
         from rtpmidid_config import render_rtpmidid_ini
 
-        on = render_rtpmidid_ini(use_rtp_midi_timestamps=True)
-        off = render_rtpmidid_ini(use_rtp_midi_timestamps=False)
+        on = render_rtpmidid_ini(use_rtp_midi_timestamps=True, playout_buffer_ms=25)
+        off = render_rtpmidid_ini(use_rtp_midi_timestamps=False, playout_buffer_ms=0)
         self.assertIn("use_rtp_midi_timestamps=true", on)
         self.assertIn("use_rtp_midi_timestamps=false", off)
         self.assertIn("name=tabloza-me", on)
-        self.assertIn("playout_buffer_ms=0", on)
+        self.assertIn("playout_buffer_ms=25", on)
+        self.assertIn("playout_buffer_ms=0", off)
         self.assertIn("[rtpmidi_discover]", on)
         self.assertIn("enabled=false", on)
+
+    def test_jitter_buffer_zero_when_rtp_timestamps(self):
+        from midi_config import get_jitter_buffer_ms, get_rtpmidid_playout_buffer_ms
+
+        config = {
+            "midi": {
+                "jitter_buffer_enabled": True,
+                "jitter_buffer_ms": 25,
+                "rtp_midi_timestamps_enabled": True,
+            },
+        }
+        self.assertEqual(get_jitter_buffer_ms(config), 0)
+        self.assertEqual(get_rtpmidid_playout_buffer_ms(config), 25)
+
+        config["midi"]["rtp_midi_timestamps_enabled"] = False
+        self.assertEqual(get_jitter_buffer_ms(config), 25)
+        self.assertEqual(get_rtpmidid_playout_buffer_ms(config), 0)
 
     def test_midi_bytes_flattens_nested_payloads(self):
         from midi_jitter_buffer import MidiGateway
