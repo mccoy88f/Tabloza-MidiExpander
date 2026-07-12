@@ -221,6 +221,15 @@ class TestMidiConfig(unittest.TestCase):
         self.assertIn("name=tabloza-me", on)
         self.assertIn("playout_buffer_ms=0", on)
 
+    def test_midi_bytes_flattens_nested_payloads(self):
+        from midi_jitter_buffer import MidiGateway
+
+        gw = MidiGateway(25)
+        self.assertEqual(gw._midi_bytes((144, 60, 100)), [144, 60, 100])
+        self.assertEqual(gw._midi_bytes([[144, 60, 100]]), [144, 60, 100])
+        self.assertEqual(gw._midi_bytes(([144, 60, 100],)), [144, 60, 100])
+        self.assertEqual(gw._midi_bytes(bytes([144, 60, 100])), [144, 60, 100])
+
     @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
     def test_ensure_gateway_without_rtmidi(self, _usable):
         from midi_jitter_buffer import ensure_midi_gateway, jitter_buffer_status

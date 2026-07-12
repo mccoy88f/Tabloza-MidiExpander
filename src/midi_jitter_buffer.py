@@ -194,8 +194,21 @@ class MidiGateway:
         from midi_sysex_mode import maybe_apply_sysex_bank_mode
         return maybe_apply_sysex_bank_mode(message)
 
-    def _midi_bytes(self, message: tuple) -> list[int]:
-        return [int(b) & 0xFF for b in message]
+    def _midi_bytes(self, message) -> list[int]:
+        """Flatten ALSA/rtmidi payloads (int, bytes, list, tuple) to 0-255 ints."""
+        out: list[int] = []
+
+        def walk(part) -> None:
+            if isinstance(part, (list, tuple)):
+                for item in part:
+                    walk(item)
+            elif isinstance(part, (bytes, bytearray)):
+                out.extend(int(b) & 0xFF for b in part)
+            else:
+                out.append(int(part) & 0xFF)
+
+        walk(message)
+        return out
 
     def _forward_message(self, message: tuple):
         from activity_status import touch_midi_activity
