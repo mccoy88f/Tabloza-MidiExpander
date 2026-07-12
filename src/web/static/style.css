@@ -422,8 +422,10 @@ input[type="text"] {
 .synth-hint { font-size: 0.8rem; margin: 0; }
 .synth-toggles { display: flex; flex-direction: column; gap: 0.45rem; }
 .synth-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
+.synth-effect-row { display: flex; flex-direction: column; gap: 0.25rem; }
+.synth-effect-row > .synth-toggle { margin-bottom: 0; }
+.synth-effect-panel { margin: 0 0 0 1.5rem; }
 .synth-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.synth-effect-panel { margin: 0; }
 .synth-effect-panel summary {
   cursor: pointer;
   font-size: 0.88rem;
