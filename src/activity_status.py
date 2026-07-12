@@ -27,7 +27,12 @@ def is_aseqdump_midi_event(line: str) -> bool:
         return False
     if _ASEQ_EVENT_RE.search(stripped):
         return True
-    return bool(re.search(r"\d+:\d+\.\d+\s+\d+:\d+\s+", stripped))
+    # Timestamp ALSA + indirizzo porta (formati vari tra versioni alsa-utils)
+    if re.search(r"\d+:\d+\.\d+\s+\d+:\d+\s+", stripped):
+        return True
+    if re.match(r"^\d+:\d+\s+\S", stripped):
+        return True
+    return False
 
 
 def touch_midi_activity():
