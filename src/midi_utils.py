@@ -75,6 +75,22 @@ def get_input_ports() -> list[dict]:
     return _parse_ports(_run_aconnect("-i"))
 
 
+def get_buffer_ports() -> list[dict]:
+    """ALSA endpoints for Tabloza Buffer (virtual port shows up on aconnect -o)."""
+    from midi_jitter_buffer import _is_buffer_input_port
+
+    seen: set[str] = set()
+    ports: list[dict] = []
+    for port in get_output_ports() + get_input_ports():
+        addr = port.get("address")
+        if not addr or addr in seen:
+            continue
+        if _is_buffer_input_port(port):
+            seen.add(addr)
+            ports.append(port)
+    return ports
+
+
 def find_fluidsynth_input() -> dict | None:
     """Return FluidSynth ALSA port for routing MIDI into the synth.
 
@@ -120,6 +136,8 @@ _RESERVED_MIDI_CLIENTS = (
     "fluid synth",
     "rtpmidid",
     "tabloza buffer",
+    "rtmidiin client",
+    "aseqdump",
     "midi through",
     "system",
     "sampler",
@@ -133,14 +151,25 @@ def _is_reserved_midi_client(client_name: str) -> bool:
     return any(token in label for token in _RESERVED_MIDI_CLIENTS)
 
 
+def _is_internal_midi_source(port: dict) -> bool:
+    from midi_jitter_buffer import _is_buffer_input_port
+
+    if _is_buffer_input_port(port):
+        return True
+    label = f"{port['client']} {port['name']}".lower()
+    return (
+        _is_reserved_midi_client(port["client"])
+        or "rtpmidid" in label
+        or "fluid" in label
+        or "synth input" in label
+    )
+
+
 def find_usb_midi_outputs() -> list[dict]:
     """Hardware/USB ALSA MIDI sources (parallel to rtpmidid network MIDI)."""
     sources = []
     for port in get_output_ports():
-        if _is_reserved_midi_client(port["client"]):
-            continue
-        label = f"{port['client']} {port['name']}".lower()
-        if "rtpmidid" in label or "fluid" in label or "synth input" in label:
+        if _is_internal_midi_source(port):
             continue
         sources.append(port)
     return sources

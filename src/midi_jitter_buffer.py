@@ -74,11 +74,11 @@ class MidiGateway:
         return self._input_port_address
 
     def _wait_for_input_port_address(self, timeout: float = 2.0) -> str | None:
-        from midi_utils import get_input_ports
+        from midi_utils import get_buffer_ports
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            for port in get_input_ports():
+            for port in get_buffer_ports():
                 if _is_buffer_input_port(port):
                     log.info(
                         "Gateway MIDI input ALSA %s (%s)",
@@ -314,9 +314,9 @@ def get_buffer_input_port() -> dict | None:
             "name": VIRTUAL_PORT_NAME,
             "address": cached,
         }
-    from midi_utils import get_input_ports
+    from midi_utils import get_buffer_ports
 
-    for port in get_input_ports():
+    for port in get_buffer_ports():
         if _is_buffer_input_port(port):
             return port
     return None

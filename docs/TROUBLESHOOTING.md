@@ -4,7 +4,7 @@
 
 ### rtpmidid non si installa / `Unable to locate package rtpmidid`
 
-Normale su Raspberry Pi OS: `rtpmidid` **non è nei repository apt**. L'installer recente lo scarica automaticamente da [GitHub (davidmoreno/rtpmidid)](https://github.com/davidmoreno/rtpmidid/releases).
+Normale su Raspberry Pi OS: `rtpmidid` **non è nei repository apt**. L'installer scarica [rtpmidid-ts](https://github.com/mccoy88f/rtpmidid-ts) (fork Tabloza con timestamp RTP) o lo compila da sorgente.
 
 Riesegui l'installazione aggiornata:
 

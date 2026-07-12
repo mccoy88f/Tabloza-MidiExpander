@@ -1097,10 +1097,25 @@ class TestUsbMidi(unittest.TestCase):
             {"client": "FLUID Synth", "name": "Synth input port", "address": "128:0"},
             {"client": "rtpmidid", "name": "Network", "address": "16:0"},
             {"client": "Midi Through", "name": "Midi Through Port-0", "address": "14:0"},
+            {"client": "RtMidiIn Client", "name": "Tabloza Buffer  ", "address": "130:0"},
+            {"client": "aseqdump", "name": "aseqdump        ", "address": "131:0"},
         ]
         ports = mu.find_usb_midi_outputs()
         self.assertEqual(len(ports), 1)
         self.assertEqual(ports[0]["address"], "24:0")
+
+    @patch("midi_utils.get_output_ports")
+    @patch("midi_utils.get_input_ports")
+    def test_get_buffer_ports_finds_virtual_port_on_output_side(self, mock_in, mock_out):
+        import midi_utils as mu
+
+        mock_out.return_value = [
+            {"client": "RtMidiIn Client", "name": "Tabloza Buffer  ", "address": "130:0"},
+        ]
+        mock_in.return_value = []
+        ports = mu.get_buffer_ports()
+        self.assertEqual(len(ports), 1)
+        self.assertEqual(ports[0]["address"], "130:0")
 
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_usb_midi_outputs")
