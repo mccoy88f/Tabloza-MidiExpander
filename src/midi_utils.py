@@ -241,18 +241,51 @@ def get_active_routes() -> list[dict]:
     return routes
 
 
+def find_aseqdump_input() -> dict | None:
+    """Return the ALSA input port created by the running aseqdump monitor."""
+    for port in get_input_ports():
+        if port["client"].lower().startswith("aseqdump"):
+            return port
+    return None
+
+
+_midi_monitor_input: str | None = None
+
+
+def set_midi_monitor_input(address: str | None) -> None:
+    global _midi_monitor_input
+    _midi_monitor_input = address
+
+
+def refresh_midi_monitor_tap() -> int:
+    """Connect rtpmidid/USB outputs to aseqdump in parallel with the synth route."""
+    if not _midi_monitor_input:
+        return 0
+    count = 0
+    for src in _midi_sources_for_routing():
+        try:
+            subprocess.run(
+                ["aconnect", src["address"], _midi_monitor_input],
+                capture_output=True, timeout=3, check=False,
+            )
+            count += 1
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+    return count
+
+
 def midi_monitor_command() -> tuple[list[str], str | None]:
     """Return argv + key for the MIDI activity aseqdump process.
 
-    ``aseqdump -p PORT`` often exits immediately on rtpmidid per-session ports and
-    only sees one leg when Mac opens 128:1 and 128:2. Without ``-p``, aseqdump
-    receives all sequencer events and stays running.
+    aseqdump must be *tapped* into the MIDI graph via ``aconnect`` (see
+    :func:`refresh_midi_monitor_tap`); running it alone does not see traffic
+    copied between other ALSA clients.
     """
     if get_active_routes() or find_rtpmidid_outputs() or find_usb_midi_outputs():
-        return ["aseqdump"], "all"
+        return ["aseqdump"], "tap"
     fs = find_fluidsynth_input()
     if fs:
-        return ["aseqdump", "-p", fs["address"]], f"fs:{fs['address']}"
+        return ["aseqdump"], "tap"
     return [], None
 
 
@@ -263,6 +296,8 @@ def midi_monitor_port() -> tuple[str | None, str | None]:
         return None, None
     if key == "all":
         return "all", key
+    if key == "tap":
+        return "tap", key
     if len(cmd) == 3 and cmd[0] == "aseqdump" and cmd[1] == "-p":
         return cmd[2], key
     return None, key
@@ -338,6 +373,7 @@ def route_midi_to_fluidsynth() -> int:
             count += 1
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
+    refresh_midi_monitor_tap()
     return count
 
 

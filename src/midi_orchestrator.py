@@ -36,12 +36,14 @@ from fluidsynth_client import (
 from midi_utils import (
     find_fluidsynth_input,
     get_active_routes,
+    find_aseqdump_input,
     midi_monitor_command,
-    midi_monitor_port,
+    refresh_midi_monitor_tap,
     refresh_midi_routes,
     route_rtpmidi_to_fluidsynth,
     send_test_note,
     set_fluidsynth_output_level,
+    set_midi_monitor_input,
 )
 
 from event_log import log_event
@@ -239,6 +241,7 @@ def _is_tabloza_fluidsynth_cmdline(cmdline: str) -> bool:
 
 def _stop_monitor_proc():
     global midi_monitor_proc
+    set_midi_monitor_input(None)
     if midi_monitor_proc and midi_monitor_proc.poll() is None:
         midi_monitor_proc.terminate()
         try:
@@ -285,6 +288,18 @@ def _midi_monitor_loop():
                     bufsize=1,
                 )
                 log.info("Monitor MIDI (%s)", monitor_key)
+                time.sleep(0.35)
+                mon = find_aseqdump_input()
+                if mon:
+                    set_midi_monitor_input(mon["address"])
+                    tapped = refresh_midi_monitor_tap()
+                    log.info(
+                        "Monitor MIDI tap → %s (%d sorgenti)",
+                        mon["address"],
+                        tapped,
+                    )
+                else:
+                    log.warning("Porta input aseqdump non trovata")
             except (OSError, FileNotFoundError):
                 log.warning("aseqdump non disponibile — attività MIDI non monitorata")
                 monitored_key = None

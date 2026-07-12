@@ -302,10 +302,10 @@ class TestMidiMonitorPort(unittest.TestCase):
         mock_routes.return_value = [{"from": "128:1", "to": "129:0"}]
         cmd, key = midi_monitor_command()
         self.assertEqual(cmd, ["aseqdump"])
-        self.assertEqual(key, "all")
+        self.assertEqual(key, "tap")
         port, port_key = midi_monitor_port()
-        self.assertEqual(port, "all")
-        self.assertEqual(port_key, "all")
+        self.assertEqual(port, "tap")
+        self.assertEqual(port_key, "tap")
         mock_fs.assert_not_called()
 
     @patch("midi_utils.find_usb_midi_outputs")
@@ -320,13 +320,13 @@ class TestMidiMonitorPort(unittest.TestCase):
         mock_usb.return_value = []
         cmd, key = midi_monitor_command()
         self.assertEqual(cmd, ["aseqdump"])
-        self.assertEqual(key, "all")
+        self.assertEqual(key, "tap")
 
     @patch("midi_utils.find_usb_midi_outputs")
     @patch("midi_utils.find_rtpmidid_outputs")
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_uses_fluidsynth_port(self, mock_fs, mock_routes, mock_rtp, mock_usb):
+    def test_monitor_command_tap_when_only_fluidsynth(self, mock_fs, mock_routes, mock_rtp, mock_usb):
         from midi_utils import midi_monitor_command
 
         mock_routes.return_value = []
@@ -334,8 +334,8 @@ class TestMidiMonitorPort(unittest.TestCase):
         mock_usb.return_value = []
         mock_fs.return_value = {"address": "128:0"}
         cmd, key = midi_monitor_command()
-        self.assertEqual(cmd, ["aseqdump", "-p", "128:0"])
-        self.assertEqual(key, "fs:128:0")
+        self.assertEqual(cmd, ["aseqdump"])
+        self.assertEqual(key, "tap")
 
     @patch("midi_utils.find_usb_midi_outputs")
     @patch("midi_utils.find_rtpmidid_outputs")
@@ -351,6 +351,36 @@ class TestMidiMonitorPort(unittest.TestCase):
         cmd, key = midi_monitor_command()
         self.assertEqual(cmd, [])
         self.assertIsNone(key)
+
+
+class TestMidiMonitorTap(unittest.TestCase):
+    @patch("midi_utils.get_input_ports")
+    def test_find_aseqdump_input(self, mock_ports):
+        from midi_utils import find_aseqdump_input
+
+        mock_ports.return_value = [
+            {"client": "aseqdump", "name": "Input", "address": "130:0"},
+        ]
+        port = find_aseqdump_input()
+        self.assertEqual(port["address"], "130:0")
+
+    @patch("midi_utils.subprocess.run")
+    @patch("midi_utils._midi_sources_for_routing")
+    def test_refresh_midi_monitor_tap(self, mock_sources, mock_run):
+        from midi_utils import refresh_midi_monitor_tap, set_midi_monitor_input
+
+        set_midi_monitor_input(None)
+        self.assertEqual(refresh_midi_monitor_tap(), 0)
+        set_midi_monitor_input("130:0")
+        mock_sources.return_value = [
+            {"address": "128:1", "client": "rtpmidid"},
+            {"address": "128:2", "client": "rtpmidid"},
+        ]
+        self.assertEqual(refresh_midi_monitor_tap(), 2)
+        calls = [c.args[0] for c in mock_run.call_args_list]
+        self.assertEqual(calls[0], ["aconnect", "128:1", "130:0"])
+        self.assertEqual(calls[1], ["aconnect", "128:2", "130:0"])
+        set_midi_monitor_input(None)
 
 
 class TestMidiRouting(unittest.TestCase):
