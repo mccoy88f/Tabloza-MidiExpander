@@ -399,30 +399,41 @@ def jitter_buffer_active() -> bool:
 
 def get_buffer_input_port() -> dict | None:
     """Return ALSA input port dict for routing sources into the gateway."""
-    if not jitter_buffer_active():
-        return None
     with _gateway_lock:
-        cached = _gateway.input_port_address if _gateway else None
+        cached = _gateway.input_port_address if _gateway and _gateway.active else None
+        local_active = bool(_gateway and _gateway.active)
     if cached:
         return {
             "client": VIRTUAL_PORT_NAME,
             "name": VIRTUAL_PORT_NAME,
             "address": cached,
         }
-    from midi_utils import get_buffer_ports
+    from midi_utils import get_buffer_ports, orchestrator_running
 
-    for port in get_buffer_ports():
-        if _is_buffer_input_port(port):
-            return port
+    if local_active or orchestrator_running():
+        for port in get_buffer_ports():
+            if _is_buffer_input_port(port):
+                return port
     return None
 
 
 def jitter_buffer_status() -> dict:
+    from midi_config import merge_midi_config
+    from midi_utils import orchestrator_running
+    from tabloza_common import load_config
+
     with _gateway_lock:
-        active = bool(_gateway and _gateway.active)
+        local_active = bool(_gateway and _gateway.active)
         ms = _gateway.buffer_ms if _gateway else 0
         sysex_auto = _gateway.sysex_auto if _gateway else False
-    port = get_buffer_input_port() if active else None
+    port = get_buffer_input_port()
+    alsa_active = port is not None and orchestrator_running()
+    active = local_active or alsa_active
+    if not local_active and alsa_active:
+        cfg = load_config()
+        midi = merge_midi_config(cfg.get("midi") if isinstance(cfg.get("midi"), dict) else None)
+        ms = midi["jitter_buffer_ms"] if midi["jitter_buffer_enabled"] else 0
+        sysex_auto = midi["sysex_bank_auto"]
     from midi_sysex_mode import get_runtime_bank_select
 
     return {

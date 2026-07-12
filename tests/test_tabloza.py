@@ -511,8 +511,17 @@ class TestMidiRouting(unittest.TestCase):
         self.assertEqual(removed, 1)
         mock_run.assert_called()
 
+    def test_is_midi_connected(self):
+        from midi_utils import is_midi_connected
 
-class TestTablozaCommon(unittest.TestCase):
+        listing = (
+            "client 128: 'rtpmidid' [type=user]\n"
+            "    1 'Mac'\n"
+            "        Connecting To: 130:0\n"
+        )
+        with patch("midi_utils._aconnect_list_output", return_value=listing):
+            self.assertTrue(is_midi_connected("128:1", "130:0"))
+            self.assertFalse(is_midi_connected("128:1", "129:0"))
     def test_save_config_merges_fluidsynth_fields(self):
         import json
         import sys

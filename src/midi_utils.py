@@ -34,6 +34,42 @@ def _run_aconnect(flag: str) -> str:
         return ""
 
 
+def orchestrator_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "midi_orchestrator.py"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def is_midi_connected(src_addr: str, dest_addr: str) -> bool:
+    """True if ALSA seq shows src_addr connecting to dest_addr."""
+    current_client_num = None
+    current_port_addr = None
+    for line in _aconnect_list_output().splitlines():
+        client_match = CLIENT_RE.match(line)
+        if client_match:
+            current_client_num = client_match.group(1)
+            current_port_addr = None
+            continue
+        num_match = CLIENT_NUM_RE.match(line)
+        if num_match and not line.startswith(" "):
+            current_client_num = num_match.group(1)
+            current_port_addr = None
+            continue
+        port_match = PORT_LINE_RE.match(line)
+        if port_match and current_client_num is not None:
+            current_port_addr = f"{current_client_num}:{port_match.group(1)}"
+            continue
+        if current_port_addr == src_addr and "Connecting To:" in line:
+            if dest_addr in line.split("Connecting To:", 1)[1]:
+                return True
+    return False
+
+
 def _parse_ports(output: str) -> list[dict]:
     """Parse aconnect output into {name, address} dicts.
 
@@ -275,8 +311,8 @@ def get_active_routes() -> list[dict]:
 
 
 def find_aseqdump_input() -> dict | None:
-    """Return the ALSA input port created by the running aseqdump monitor."""
-    for port in get_input_ports():
+    """Return the ALSA port created by the running aseqdump monitor."""
+    for port in get_input_ports() + get_output_ports():
         if port["client"].lower().startswith("aseqdump"):
             return port
     return None
@@ -395,7 +431,11 @@ def route_midi_to_fluidsynth() -> int:
     if not dest:
         return 0
     count = 0
+    dest_addr = dest["address"]
     for src in _midi_sources_for_routing():
+        if is_midi_connected(src["address"], dest_addr):
+            count += 1
+            continue
         disconnect_source_routes(src["address"])
         try:
             subprocess.run(
