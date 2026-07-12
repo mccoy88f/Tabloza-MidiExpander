@@ -1,6 +1,7 @@
 """Tabloza MidiExpander — ALSA MIDI utilities."""
 
 import logging
+import json
 import os
 import re
 import signal
@@ -14,6 +15,8 @@ log = logging.getLogger("tabloza.midi")
 
 RELOAD_FLUIDSYNTH_FLAG = Path("/run/tabloza/reload_fluidsynth")
 APPLY_SYNTH_SETTINGS_FLAG = Path("/run/tabloza/apply_synth_settings")
+QUERY_SYNTH_EFFECTS_FLAG = Path("/run/tabloza/query_synth_effects")
+SYNTH_EFFECTS_RUNTIME_FILE = Path("/run/tabloza/synth_effects_runtime.json")
 APPLY_MIDI_SETTINGS_FLAG = Path("/run/tabloza/apply_midi_settings")
 STOP_SYNTH_NOTES_FLAG = Path("/run/tabloza/synth_stop_notes")
 
@@ -613,6 +616,37 @@ def trigger_orchestrator_apply_midi_settings() -> bool:
         return True
     except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
         return False
+
+
+def trigger_orchestrator_query_synth_effects() -> bool:
+    """Ask orchestrator to query live FluidSynth reverb/chorus settings."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "show", "tabloza-orchestrator", "-p", "MainPID", "--value"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+        pid = int(result.stdout.strip())
+        if pid <= 0:
+            return False
+        QUERY_SYNTH_EFFECTS_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        QUERY_SYNTH_EFFECTS_FLAG.write_text("1")
+        os.kill(pid, signal.SIGUSR2)
+        return True
+    except (OSError, ValueError, subprocess.TimeoutExpired, FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def read_synth_effects_runtime(max_age_sec: float = 30.0) -> dict | None:
+    if not SYNTH_EFFECTS_RUNTIME_FILE.is_file():
+        return None
+    try:
+        data = json.loads(SYNTH_EFFECTS_RUNTIME_FILE.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+    queried_at = float(data.get("queried_at", 0))
+    if time.time() - queried_at > max_age_sec:
+        return None
+    return data
 
 
 def trigger_orchestrator_apply_synth_settings() -> bool:

@@ -439,6 +439,52 @@ def reset_synth(process_alive) -> tuple[bool, str]:
     return True, "reset"
 
 
+EFFECT_SETTING_KEYS = (
+    "synth.reverb.active",
+    "synth.reverb.room-size",
+    "synth.reverb.damp",
+    "synth.reverb.width",
+    "synth.reverb.level",
+    "synth.chorus.active",
+    "synth.chorus.nr",
+    "synth.chorus.level",
+    "synth.chorus.speed",
+    "synth.chorus.depth",
+)
+
+
+def _parse_get_settings_from_log(text: str) -> dict[str, str]:
+    """Parse FluidSynth shell `get synth.*` responses from log text."""
+    out: dict[str, str] = {}
+    lines = text.splitlines()
+    idx = 0
+    while idx < len(lines):
+        line = lines[idx].strip()
+        match = re.match(r"^> get (synth\.\S+)$", line)
+        if match and idx + 1 < len(lines):
+            value = lines[idx + 1].strip()
+            if value and not value.startswith(">"):
+                key = match.group(1).removeprefix("synth.").replace("-", "_")
+                out[key] = value
+                idx += 2
+                continue
+        idx += 1
+    return out
+
+
+def query_effect_settings() -> dict[str, str]:
+    """Read current FluidSynth reverb/chorus parameters from the live shell."""
+    if _shell_stdin is None:
+        return {}
+    offset = _log_file_size()
+    for key in EFFECT_SETTING_KEYS:
+        ok, _ = send_command(f"get {key}")
+        if not ok:
+            return {}
+        time.sleep(0.08)
+    return _parse_get_settings_from_log(_read_fluidsynth_log_since(offset))
+
+
 def apply_runtime_synth_settings(fs_cfg: dict) -> tuple[bool, str]:
     """Apply synth settings that can change without full restart (best-effort)."""
     from synth_config import merge_fluidsynth_config

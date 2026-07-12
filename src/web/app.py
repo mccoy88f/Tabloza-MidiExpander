@@ -30,9 +30,11 @@ from fluidsynth_client import read_soundfont_state, request_cancel_soundfont_loa
 from midi_utils import (
     get_midi_status,
     get_midi_settings_for_api,
+    read_synth_effects_runtime,
     trigger_orchestrator_apply_midi_settings,
     trigger_orchestrator_apply_synth_settings,
     trigger_orchestrator_apply_volume,
+    trigger_orchestrator_query_synth_effects,
     trigger_orchestrator_reload_fluidsynth,
     trigger_orchestrator_stop_notes,
     trigger_orchestrator_test_note,
@@ -257,6 +259,60 @@ def api_update_status():
 @require_auth
 def api_synth_settings_get():
     return jsonify(synth_settings_for_api(load_config()))
+
+
+def _fluidsynth_package_info() -> dict:
+    info = {"binary": "/usr/bin/fluidsynth"}
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-W", "-f=${Version}", "fluidsynth"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            info["package_version"] = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    try:
+        result = subprocess.run(
+            ["/usr/bin/fluidsynth", "-V"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        for line in (result.stdout or result.stderr or "").splitlines():
+            if "FluidSynth runtime version" in line:
+                info["runtime_version"] = line.split("version", 1)[-1].strip()
+                break
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+    return info
+
+
+@app.route("/api/synth/effects")
+@require_auth
+def api_synth_effects():
+    runtime = read_synth_effects_runtime(max_age_sec=0)
+    if runtime is None:
+        if not trigger_orchestrator_query_synth_effects():
+            return jsonify({"error": "Orchestrator non attivo"}), 503
+        runtime = None
+        for _ in range(20):
+            time.sleep(0.15)
+            runtime = read_synth_effects_runtime(max_age_sec=5.0)
+            if runtime:
+                break
+        if runtime is None:
+            return jsonify({"error": "Timeout lettura effetti FluidSynth"}), 504
+
+    config = synth_settings_for_api(load_config())
+    return jsonify({
+        "ok": True,
+        "tabloza": {
+            "reverb": config.get("reverb"),
+            "chorus": config.get("chorus"),
+        },
+        "fluidsynth": _fluidsynth_package_info(),
+        "runtime_effects": runtime.get("effects", {}),
+        "queried_at": runtime.get("queried_at"),
+    })
 
 
 @app.route("/api/synth/settings", methods=["POST"])

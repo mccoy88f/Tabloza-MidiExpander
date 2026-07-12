@@ -626,6 +626,11 @@ def handle_sigusr2(signum, frame):
         log.info("SIGUSR2 — applica impostazioni synth")
         _apply_runtime_synth_settings()
         return
+    from midi_utils import QUERY_SYNTH_EFFECTS_FLAG, SYNTH_EFFECTS_RUNTIME_FILE
+    if QUERY_SYNTH_EFFECTS_FLAG.is_file():
+        QUERY_SYNTH_EFFECTS_FLAG.unlink(missing_ok=True)
+        _query_runtime_synth_effects()
+        return
     log.info("SIGUSR2 ricevuto — applica volume")
     apply_volume(load_config())
 
@@ -641,6 +646,28 @@ def _apply_runtime_synth_settings():
         log_event("orchestrator", "Impostazioni motore synth aggiornate")
     else:
         log.warning("Impostazioni synth fallite: %s", detail)
+
+
+def _query_runtime_synth_effects():
+    from fluidsynth_client import query_effect_settings
+    from midi_utils import SYNTH_EFFECTS_RUNTIME_FILE
+
+    if not fluidsynth_engine_running() or not shell_bound():
+        log.warning("Query effetti synth non eseguita — FluidSynth non pronto")
+        return
+    effects = query_effect_settings()
+    if not effects:
+        log.warning("Query effetti synth fallita")
+        return
+    payload = {
+        "queried_at": time.time(),
+        "effects": effects,
+    }
+    try:
+        SYNTH_EFFECTS_RUNTIME_FILE.write_text(json.dumps(payload, indent=2))
+        log.info("Effetti synth runtime salvati (%d parametri)", len(effects))
+    except OSError as exc:
+        log.warning("Impossibile salvare effetti synth runtime: %s", exc)
 
 
 def _process_pending_fluidsynth_reload():
