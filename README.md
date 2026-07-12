@@ -4,6 +4,8 @@
 
 Trasforma un Raspberry Pi in un expander MIDI headless con sintesi SoundFont, RTP-MIDI e pannello web da smartphone.
 
+Il progetto nasce come supporto al sito [www.tabloza.live](https://www.tabloza.live) per la sua app karaoke **Tabloza Sing**.
+
 ---
 
 ### Cos'è Tabloza MidiExpander
