@@ -14,6 +14,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 
 log = logging.getLogger("tabloza.midi.ws")
@@ -110,6 +111,8 @@ def _handle_message(raw: str) -> None:
 
 
 async def _client_handler(websocket) -> None:
+    peer = getattr(websocket, "remote_address", None)
+    log.info("Client WSS connesso da %s", peer)
     _clients.add(websocket)
     try:
         await websocket.send(_info_payload())
@@ -173,6 +176,14 @@ def ws_server_status() -> dict:
     }
 
 
+def _midi_init_loop() -> None:
+    """Apre la porta ALSA virtuale in background (non blocca l'avvio WSS)."""
+    while not _stop.is_set():
+        if _init_midi_out():
+            return
+        time.sleep(2)
+
+
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -181,8 +192,15 @@ def main() -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
     port = _ws_port()
-    if not _init_midi_out():
+    try:
+        from tls_utils import ensure_tls_certificate
+
+        ensure_tls_certificate()
+    except Exception as exc:
+        log.error("Certificato TLS non disponibile: %s", exc)
         return 1
+
+    threading.Thread(target=_midi_init_loop, daemon=True, name="tabloza-midi-ws-init").start()
 
     def _shutdown(*_args):
         log.info("Arresto server WebSocket MIDI…")
@@ -196,6 +214,9 @@ def main() -> int:
         _run_loop(port)
     except KeyboardInterrupt:
         pass
+    except Exception as exc:
+        log.error("Server WSS terminato: %s", exc)
+        return 1
     finally:
         _shutdown()
     return 0

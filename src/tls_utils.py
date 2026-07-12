@@ -92,3 +92,8 @@ def tls_cert_paths() -> dict:
         "key": str(key),
         "hostname": MDNS_NAME,
     }
+
+
+def read_certificate_pem() -> str:
+    cert, _key = ensure_tls_certificate()
+    return cert.read_text(encoding="utf-8")

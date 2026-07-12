@@ -123,7 +123,26 @@ def api_version():
         "github": GITHUB_URL,
         "author": AUTHOR,
         "tls": tls,
+        "midi_ws": {"scheme": "wss", "port": int(os.environ.get("TABLOZA_MIDI_WS_PORT", "8765"))},
     })
+
+
+@app.route("/api/tls/certificate")
+def api_tls_certificate():
+    """Certificato pubblico (auto-firmato) da installare sul PC del display."""
+    try:
+        from tls_utils import read_certificate_pem
+        pem = read_certificate_pem()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+    return (
+        pem,
+        200,
+        {
+            "Content-Type": "application/x-pem-file",
+            "Content-Disposition": f'attachment; filename="tabloza-me.pem"',
+        },
+    )
 
 
 @app.route("/api/auth/login", methods=["POST"])
