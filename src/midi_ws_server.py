@@ -172,34 +172,47 @@ def _is_websocket_upgrade(headers) -> bool:
     return upgrade == "websocket"
 
 
-async def _process_request(path_or_conn, headers_or_req):
-    """Pagina HTTPS /setup sulla porta WSS (compat websockets 12 e 13+)."""
-    if isinstance(path_or_conn, str):
-        path = path_or_conn.split("?", 1)[0]
-        req_headers = headers_or_req
-        conn = None
-    else:
-        req = headers_or_req
-        path = (getattr(req, "path", None) or "/").split("?", 1)[0]
-        req_headers = getattr(req, "headers", None)
-        conn = path_or_conn
+def _make_process_request():
+    """Compat websockets 12 (path, headers) e 13+ (connection, request → Response)."""
+    import websockets
 
-    if path not in ("/", "/setup"):
-        return None
-    if _is_websocket_upgrade(req_headers):
-        return None
+    ver = tuple(int(x) for x in websockets.__version__.split(".")[:2])
 
-    body = _setup_page_body()
-    html_headers = [
-        ("Content-Type", "text/html; charset=utf-8"),
-        ("Content-Length", str(len(body))),
-        ("Cache-Control", "no-store"),
-    ]
+    if ver >= (13, 0):
+        from websockets.datastructures import Headers
+        from websockets.http11 import Response
 
-    if conn is not None and hasattr(conn, "respond"):
-        return conn.respond(200, "OK", body, headers=html_headers)
+        async def process_request(connection, request):
+            path = (getattr(request, "path", None) or "/").split("?", 1)[0]
+            if path not in ("/", "/setup"):
+                return None
+            if _is_websocket_upgrade(getattr(request, "headers", None)):
+                return None
+            body = _setup_page_body()
+            headers = Headers()
+            headers["Content-Type"] = "text/html; charset=utf-8"
+            headers["Cache-Control"] = "no-store"
+            return Response(200, "OK", headers, body)
 
-    return (http.HTTPStatus.OK, html_headers, body)
+        return process_request
+
+    async def process_request(path, request_headers):
+        path = (path or "/").split("?", 1)[0]
+        if path not in ("/", "/setup"):
+            return None
+        if _is_websocket_upgrade(request_headers):
+            return None
+        body = _setup_page_body()
+        return (
+            http.HTTPStatus.OK,
+            [
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Cache-Control", "no-store"),
+            ],
+            body,
+        )
+
+    return process_request
 
 
 async def _run_server(port: int) -> None:
@@ -208,12 +221,13 @@ async def _run_server(port: int) -> None:
     from tls_utils import load_ssl_context
 
     ssl_context = load_ssl_context()
+    process_request = _make_process_request()
     async with websockets.serve(
         _client_handler,
         "0.0.0.0",
         port,
         ssl=ssl_context,
-        process_request=_process_request,
+        process_request=process_request,
         ping_interval=20,
         ping_timeout=20,
         max_size=2**20,
