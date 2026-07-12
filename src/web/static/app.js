@@ -118,11 +118,25 @@ function renderMidiInputs(midi) {
 
   list.innerHTML = "";
   const sources = (midi?.sources || []).filter((src) => src.type !== "gpio");
-  if (!sources.length) {
+  const wsSrv = midi?.ws_server;
+  const items = [...sources];
+  if (!items.length && wsSrv?.active) {
+    const wsRoute = midi?.ws_jitter_buffer?.active ? "connected" : "available";
+    items.push({
+      type: "sing_ws",
+      name: "Tabloza Sing",
+      status: wsRoute,
+      ws_port: wsSrv.port || 8765,
+      ws_clients: wsSrv.clients,
+    });
+  }
+
+  if (!items.length && !midi?.fluidsynth) {
     list.innerHTML = `<li class="midi-item muted">${t("noMidiInputs")}</li>`;
     return;
   }
-  sources.forEach((src) => {
+
+  items.forEach((src) => {
     const li = document.createElement("li");
     li.className = "midi-item";
     const name = src.type === "usb"

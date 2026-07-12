@@ -270,8 +270,33 @@ def find_ws_midi_source() -> dict | None:
     return None
 
 
+WS_MIDI_CLIENTS_FILE = Path("/run/tabloza/ws_midi_clients.json")
+
+
+def _midi_ws_service_running() -> bool:
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "midi_ws_server.py"],
+            capture_output=True, text=True, timeout=3,
+        )
+        return bool(result.stdout.strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def _read_ws_midi_clients() -> int | None:
+    if not WS_MIDI_CLIENTS_FILE.is_file():
+        return None
+    try:
+        data = json.loads(WS_MIDI_CLIENTS_FILE.read_text())
+        count = data.get("clients")
+        return int(count) if isinstance(count, int) else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def ws_server_status() -> dict:
-    """Detect tabloza-midi-ws from ALSA (separate OS process)."""
+    """Detect tabloza-midi-ws from ALSA and/or process."""
     import os
 
     from midi_ws_server import DEFAULT_WS_PORT, JZZ_OUTPUT_NAME, WS_ALSA_SOURCE_NAME
@@ -281,12 +306,14 @@ def ws_server_status() -> dict:
     except ValueError:
         port = DEFAULT_WS_PORT
     source = find_ws_midi_source()
+    service_running = _midi_ws_service_running()
+    clients = _read_ws_midi_clients()
     return {
-        "active": source is not None,
+        "active": source is not None or service_running,
         "port": port,
         "output_name": JZZ_OUTPUT_NAME,
         "alsa_source": WS_ALSA_SOURCE_NAME,
-        "clients": None,
+        "clients": clients,
     }
 
 

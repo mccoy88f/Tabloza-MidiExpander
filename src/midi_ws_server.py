@@ -25,11 +25,22 @@ JZZ_OUTPUT_NAME = "Tabloza Sing"
 # Porta ALSA virtuale (sorgente verso il gateway WS).
 WS_ALSA_SOURCE_NAME = "Tabloza Sing"
 DEFAULT_WS_PORT = 8765
+WS_MIDI_CLIENTS_FILE = Path("/run/tabloza/ws_midi_clients.json")
 
 _midi_out = None
 _midi_lock = threading.Lock()
 _clients: set[object] = set()
 _stop = threading.Event()
+
+
+def _persist_ws_clients() -> None:
+    try:
+        WS_MIDI_CLIENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        WS_MIDI_CLIENTS_FILE.write_text(
+            json.dumps({"clients": len(_clients), "ts": time.time()}),
+        )
+    except OSError:
+        pass
 
 
 def _ws_port() -> int:
@@ -115,6 +126,7 @@ async def _client_handler(websocket) -> None:
     peer = getattr(websocket, "remote_address", None)
     log.info("Client WSS connesso da %s", peer)
     _clients.add(websocket)
+    _persist_ws_clients()
     try:
         await websocket.send(_info_payload())
         async for message in websocket:
@@ -128,6 +140,7 @@ async def _client_handler(websocket) -> None:
         log.debug("Client WSS disconnesso: %s", exc)
     finally:
         _clients.discard(websocket)
+        _persist_ws_clients()
 
 
 _SETUP_HTML = """<!DOCTYPE html>
