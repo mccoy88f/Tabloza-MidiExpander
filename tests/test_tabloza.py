@@ -497,6 +497,17 @@ class TestMidiMonitorTap(unittest.TestCase):
 
 
 class TestMidiRouting(unittest.TestCase):
+    def test_dedupe_rtpmidid_outputs(self):
+        from midi_utils import _dedupe_rtpmidid_outputs
+
+        sources = [
+            {"address": "128:1", "client": "rtpmidid", "name": "MacBook Air"},
+            {"address": "128:2", "client": "rtpmidid", "name": "MacBook Air"},
+            {"address": "128:3", "client": "rtpmidid", "name": "Other Host"},
+        ]
+        deduped = _dedupe_rtpmidid_outputs(sources)
+        self.assertEqual([p["address"] for p in deduped], ["128:1", "128:3"])
+
     @patch("midi_utils.subprocess.run")
     def test_disconnect_source_routes(self, mock_run):
         from midi_utils import disconnect_source_routes

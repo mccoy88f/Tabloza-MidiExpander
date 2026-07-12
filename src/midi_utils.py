@@ -158,14 +158,55 @@ def find_fluidsynth_input() -> dict | None:
     return None
 
 
-def find_rtpmidid_outputs() -> list[dict]:
-    """All ALSA output ports from rtpmidid (incl. per-connection ports from Mac)."""
+def _rtpmidid_port_number(port: dict) -> int:
+    try:
+        return int(port["address"].split(":")[1])
+    except (IndexError, ValueError, TypeError):
+        return 999
+
+
+def _dedupe_rtpmidid_outputs(sources: list[dict]) -> list[dict]:
+    """Keep one ALSA port per remote session (Apple RTP-MIDI opens two per Mac)."""
+    by_name: dict[str, dict] = {}
+    for port in sources:
+        key = (port.get("name") or port.get("client") or port["address"]).strip().lower()
+        existing = by_name.get(key)
+        if existing is None or _rtpmidid_port_number(port) < _rtpmidid_port_number(existing):
+            by_name[key] = port
+    deduped = list(by_name.values())
+    if len(deduped) < len(sources):
+        skipped = sorted(
+            p["address"] for p in sources if p["address"] not in {d["address"] for d in deduped}
+        )
+        log.info("rtpmidid: ignoro porte duplicate per sessione: %s", ", ".join(skipped))
+    return deduped
+
+
+def _all_rtpmidid_output_ports() -> list[dict]:
     sources = []
     for port in get_output_ports():
         label = f"{port['client']} {port['name']}".lower()
         if "rtpmidid" in label:
             sources.append(port)
     return sources
+
+
+def find_rtpmidid_outputs() -> list[dict]:
+    """ALSA output ports from rtpmidid — one per remote RTP-MIDI session."""
+    return _dedupe_rtpmidid_outputs(_all_rtpmidid_output_ports())
+
+
+def _disconnect_extra_rtpmidid_outputs(keep_addrs: set[str]) -> None:
+    """Remove stale routes from duplicate rtpmidid ports (e.g. Mac :1 and :2)."""
+    for port in _all_rtpmidid_output_ports():
+        if port["address"] not in keep_addrs:
+            removed = disconnect_source_routes(port["address"])
+            if removed:
+                log.info(
+                    "Disconnessa porta rtpmidid duplicata %s (%s)",
+                    port["address"],
+                    port.get("name", "?"),
+                )
 
 
 _RESERVED_MIDI_CLIENTS = (
@@ -432,6 +473,8 @@ def route_midi_to_fluidsynth() -> int:
         return 0
     count = 0
     dest_addr = dest["address"]
+    rtp_sources = find_rtpmidid_outputs()
+    _disconnect_extra_rtpmidid_outputs({p["address"] for p in rtp_sources})
     for src in _midi_sources_for_routing():
         if is_midi_connected(src["address"], dest_addr):
             count += 1
