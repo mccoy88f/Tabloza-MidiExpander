@@ -13,7 +13,7 @@ MIDI_ACTIVE_WINDOW_SEC = 5.0
 
 _ASEQ_HEADER_PREFIXES = ("Waiting", "Source ", "Destination ", "Subscriber", "Queue ")
 _ASEQ_EVENT_RE = re.compile(
-    r"(?:Note|Control|Pgm|Pitch|Sustain|Clock|Sys(?:tem)?|Active sensing|Song )",
+    r"(?:Note|Control|Pgm|Program|Pitch|Sustain|Clock|Sys(?:tem|ex)?|Active sensing|Song |Aftertouch|Poly)",
     re.IGNORECASE,
 )
 

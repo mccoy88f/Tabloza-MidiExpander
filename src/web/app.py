@@ -196,6 +196,7 @@ def api_status():
             "loaded": sf_state.get("loaded", ""),
             "loading": sf_state.get("loading", False),
             "error": sf_state.get("error"),
+            "load_progress": sf_state.get("load_progress"),
         },
         "active_soundfont": config.get("active_soundfont", ""),
         "volume": config.get("volume", 100),
@@ -371,6 +372,7 @@ def api_soundfonts():
         "default": default,
         "loaded": loaded,
         "loading": loading,
+        "load_progress": sf_state.get("load_progress"),
         "error": sf_state.get("error"),
     })
 

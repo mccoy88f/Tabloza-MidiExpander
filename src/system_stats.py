@@ -136,6 +136,11 @@ def _read_temperature_c() -> float | None:
     return None
 
 
+def fluidsynth_rss_mb() -> int | None:
+    """Resident memory (RSS) of the FluidSynth process, in MB."""
+    return _process_rss_mb("fluidsynth")
+
+
 def get_memory_stats(soundfonts_dir: Path | None = None) -> dict:
     """Return RAM usage summary."""
     mem = _read_meminfo_kb()
@@ -155,7 +160,7 @@ def get_memory_stats(soundfonts_dir: Path | None = None) -> dict:
         "used_percent": round(used_kb / total_kb * 100) if total_kb else 0,
         "swap_total_mb": round(swap_total_kb / 1024),
         "swap_free_mb": round(swap_free_kb / 1024),
-        "fluidsynth_mb": _process_rss_mb("fluidsynth"),
+        "fluidsynth_mb": fluidsynth_rss_mb(),
         "orchestrator_mb": _process_rss_mb("python3", "midi_orchestrator.py"),
         "disk_free_mb": disk["disk_free_mb"],
         "sf2_max_upload_mb": round(SF2_MAX_UPLOAD_BYTES / (1024 * 1024)),

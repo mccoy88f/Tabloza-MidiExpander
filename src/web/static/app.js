@@ -1,6 +1,8 @@
 const API = "";
 const STATUS_REFRESH_MS = 2000;
+const STATUS_REFRESH_LOADING_MS = 800;
 let lastSf2StateKey = "";
+let statusFastPoll = false;
 let lastAppliedSynthSettingsKey = "";
 let lastAppliedMidiSettingsKey = "";
 
@@ -65,7 +67,8 @@ let statusTimer = null;
 
 function startStatusRefresh() {
   stopStatusRefresh();
-  statusTimer = setInterval(refreshStatus, STATUS_REFRESH_MS);
+  statusFastPoll = false;
+  setStatusRefreshInterval(STATUS_REFRESH_MS);
 }
 
 function stopStatusRefresh() {
@@ -158,6 +161,27 @@ function activityDotClass(state) {
   }
 }
 
+function sf2LoadingLabel(soundfont) {
+  const name = soundfont?.selected || soundfont?.name || "…";
+  const pct = soundfont?.load_progress;
+  if (pct != null && pct !== "") {
+    return t("sf2LoadingPct", { name, pct });
+  }
+  return t("sf2Loading", { name });
+}
+
+function sf2LoadingBadge(pct) {
+  if (pct != null && pct !== "") {
+    return t("sf2LoadingBadgePct", { pct });
+  }
+  return t("sf2LoadingBadge");
+}
+
+function setStatusRefreshInterval(ms) {
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = setInterval(refreshStatus, ms);
+}
+
 function renderSoundfontUi(soundfont, synth = null) {
   if (!soundfont) return;
   const sf2Loaded = soundfont.loaded || "";
@@ -182,11 +206,11 @@ function renderSoundfontUi(soundfont, synth = null) {
     if (sf2Error) {
       valSf2.textContent = sf2Error;
     } else if (sf2Loading) {
-      valSf2.textContent = t("sf2Loading", { name: soundfont.selected || "…" });
+      valSf2.textContent = sf2LoadingLabel(soundfont);
     } else if (sf2Loaded) {
       valSf2.textContent = sf2Loaded;
     } else if (starting && soundfont.selected) {
-      valSf2.textContent = t("sf2Loading", { name: soundfont.selected });
+      valSf2.textContent = sf2LoadingLabel(soundfont);
     } else if (soundfont.selected) {
       valSf2.textContent = t("sf2SelectedNotLoaded", { name: soundfont.selected });
     } else {
@@ -410,7 +434,14 @@ async function refreshStatus() {
   }
   if (s.version) document.getElementById("status-version").textContent = `v${s.version}`;
   const sf = s.soundfont || {};
-  const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error].join("|");
+  const sfKey = [sf.loading, sf.loaded, sf.selected, sf.error, sf.load_progress].join("|");
+  if (sf.loading && !statusFastPoll) {
+    statusFastPoll = true;
+    setStatusRefreshInterval(STATUS_REFRESH_LOADING_MS);
+  } else if (!sf.loading && statusFastPoll) {
+    statusFastPoll = false;
+    setStatusRefreshInterval(STATUS_REFRESH_MS);
+  }
   if (sfKey !== lastSf2StateKey) {
     lastSf2StateKey = sfKey;
     refreshSoundfonts();
@@ -625,14 +656,23 @@ document.getElementById("btn-midi-stop-notes")?.addEventListener("click", async 
 // --- SoundFonts ---
 async function refreshSoundfonts() {
   const data = await api("/api/soundfonts");
-  const { soundfonts, loading, loaded, active, error, default: defaultSf = "" } = data;
+  const {
+    soundfonts,
+    loading,
+    loaded,
+    active,
+    error,
+    load_progress: loadProgress,
+    default: defaultSf = "",
+  } = data;
   renderSoundfontUi({
     selected: active,
     loaded,
     loading,
     error,
+    load_progress: loadProgress,
   });
-  lastSf2StateKey = [loading, loaded, active, error].join("|");
+  lastSf2StateKey = [loading, loaded, active, error, loadProgress].join("|");
   lastSf2Loading = !!loading;
 
   const ejectBtn = document.getElementById("btn-sf2-eject");
@@ -653,7 +693,7 @@ async function refreshSoundfonts() {
     const statusBadge = sf.loaded
       ? `<span class="sf2-active"> ${t("sf2LoadedBadge")}</span>`
       : sf.loading
-        ? `<span class="sf2-loading"> ${t("sf2LoadingBadge")}</span>`
+        ? `<span class="sf2-loading"> ${sf2LoadingBadge(loadProgress)}</span>`
         : sf.selected
           ? `<span class="sf2-selected"> ${t("sf2SelectedBadge")}</span>`
           : "";
@@ -668,7 +708,7 @@ async function refreshSoundfonts() {
         ${statusBadge}${defaultBadge}
       </div>
       <div class="sf2-actions">
-        ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? t("loading") : t("load")}</button>` : ""}
+        ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? (loadProgress != null ? `${loadProgress}%` : t("loading")) : t("load")}</button>` : ""}
         <button type="button" class="btn btn-secondary sf2-default-btn${isDefault ? " is-default" : ""}" data-toggle-default="${escapeHtml(sf.name)}" title="${isDefault ? t("clearDefaultSf2") : t("setDefaultSf2")}" aria-pressed="${isDefault}">${isDefault ? "★" : "☆"}</button>
         <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
       </div>`;

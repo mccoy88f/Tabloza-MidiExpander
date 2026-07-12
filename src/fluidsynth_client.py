@@ -33,6 +33,9 @@ def _default_state() -> dict:
         "loading": False,
         "error": None,
         "load_started_at": None,
+        "load_progress": None,
+        "load_ram_baseline_mb": None,
+        "load_expected_mb": None,
     }
 
 
@@ -256,11 +259,49 @@ def load_timeout_for(path: Path) -> float:
     return min(600.0, max(25.0, 20.0 + size_mb * 1.5))
 
 
+def _file_size_mb(path: Path) -> float:
+    try:
+        return path.stat().st_size / (1024 * 1024)
+    except OSError:
+        return 0.0
+
+
+def estimate_sf2_load_progress(baseline_mb: float, expected_mb: float) -> int:
+    """Estimate SF2 load % from FluidSynth RSS growth vs file size (capped at 99)."""
+    if expected_mb <= 0:
+        return 0
+    from system_stats import fluidsynth_rss_mb
+
+    current = fluidsynth_rss_mb()
+    if current is None:
+        return 0
+    delta = max(0.0, float(current) - baseline_mb)
+    pct = int(100.0 * delta / expected_mb)
+    return min(99, max(0, pct))
+
+
+def _update_load_progress_from_ram(baseline_mb: float, expected_mb: float) -> int:
+    progress = estimate_sf2_load_progress(baseline_mb, expected_mb)
+    write_soundfont_state(load_progress=progress)
+    return progress
+
+
+def _clear_load_progress_fields() -> dict:
+    return {
+        "load_progress": None,
+        "load_ram_baseline_mb": None,
+        "load_expected_mb": None,
+    }
+
+
 def _wait_for_load_completion(
     log_offset: int,
     deadline: float,
     process_alive,
     should_cancel=None,
+    *,
+    ram_baseline_mb: float = 0.0,
+    ram_expected_mb: float = 0.0,
 ) -> tuple[bool, str | None]:
     """Wait until FluidSynth finishes processing `load` or deadline expires."""
     saw_log_activity = False
@@ -271,6 +312,9 @@ def _wait_for_load_completion(
             return False, "cancelled"
         if not process_alive():
             return False, "FluidSynth terminato durante il caricamento SF2"
+
+        if ram_expected_mb > 0:
+            _update_load_progress_from_ram(ram_baseline_mb, ram_expected_mb)
 
         chunk = _read_fluidsynth_log_since(log_offset)
         err = parse_load_error_from_log(chunk)
@@ -307,21 +351,42 @@ def load_soundfont(
     if detail == "cancelled":
         return False, "cancelled"
 
+    from system_stats import fluidsynth_rss_mb
+
+    baseline_mb = float(fluidsynth_rss_mb() or 0)
+    expected_mb = _file_size_mb(path)
+    write_soundfont_state(
+        load_progress=0,
+        load_ram_baseline_mb=round(baseline_mb, 1),
+        load_expected_mb=round(expected_mb, 1),
+    )
+
     wait_sec = load_timeout_for(path)
     log_offset = _log_file_size()
-    log.info("Caricamento SF2 %s (verifica fino a %.0fs)", path.name, wait_sec)
+    log.info(
+        "Caricamento SF2 %s (verifica fino a %.0fs, baseline RAM %.0f MB, file %.0f MB)",
+        path.name, wait_sec, baseline_mb, expected_mb,
+    )
     ok, detail = send_command(f"load {shlex.quote(str(path))} reset")
     if not ok:
+        write_soundfont_state(**_clear_load_progress_fields())
         return ok, detail
     if should_cancel and should_cancel():
         unload_all_soundfonts(process_alive, should_cancel=should_cancel)
+        write_soundfont_state(**_clear_load_progress_fields())
         return False, "cancelled"
 
     deadline = time.time() + wait_sec
     completed, wait_detail = _wait_for_load_completion(
-        log_offset, deadline, process_alive, should_cancel=should_cancel,
+        log_offset,
+        deadline,
+        process_alive,
+        should_cancel=should_cancel,
+        ram_baseline_mb=baseline_mb,
+        ram_expected_mb=expected_mb,
     )
     if not completed:
+        write_soundfont_state(**_clear_load_progress_fields())
         if wait_detail == "cancelled":
             unload_all_soundfonts(process_alive, should_cancel=should_cancel)
             return False, "cancelled"
@@ -331,25 +396,33 @@ def load_soundfont(
     for attempt in range(5):
         if should_cancel and should_cancel():
             unload_all_soundfonts(process_alive, should_cancel=should_cancel)
+            write_soundfont_state(**_clear_load_progress_fields())
             return False, "cancelled"
         if not process_alive():
+            write_soundfont_state(**_clear_load_progress_fields())
             return False, "FluidSynth terminato dopo il caricamento SF2"
+
+        if expected_mb > 0:
+            _update_load_progress_from_ram(baseline_mb, expected_mb)
 
         chunk = _read_fluidsynth_log_since(log_offset)
         err = parse_load_error_from_log(chunk)
         if err:
             unload_all_soundfonts(process_alive, should_cancel=should_cancel)
+            write_soundfont_state(**_clear_load_progress_fields())
             return False, f"Caricamento fallito: {err}"
 
         fonts = query_loaded_fonts()
         if is_path_in_loaded_fonts(path, fonts):
             log.info("SF2 verificato nello stack FluidSynth: %s", path.name)
+            write_soundfont_state(**_clear_load_progress_fields())
             return True, "loaded"
 
         if attempt < 4:
             time.sleep(0.5)
 
     unload_all_soundfonts(process_alive, should_cancel=should_cancel)
+    write_soundfont_state(**_clear_load_progress_fields())
     return False, (
         f"SoundFont {path.name} non presente in FluidSynth dopo {int(wait_sec)}s — "
         "controlla /run/tabloza/fluidsynth.log"

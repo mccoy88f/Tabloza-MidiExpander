@@ -253,12 +253,34 @@ class TestMidiSysexMode(unittest.TestCase):
         self.assertFalse(maybe_apply_sysex_bank_mode(msg))
 
 
+class TestSf2LoadProgress(unittest.TestCase):
+    @patch("system_stats.fluidsynth_rss_mb", return_value=150)
+    def test_estimate_progress_from_ram(self, _rss):
+        from fluidsynth_client import estimate_sf2_load_progress
+
+        self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 25)
+        self.assertEqual(estimate_sf2_load_progress(100.0, 100.0), 50)
+
+    @patch("system_stats.fluidsynth_rss_mb", return_value=500)
+    def test_estimate_progress_caps_at_99(self, _rss):
+        from fluidsynth_client import estimate_sf2_load_progress
+
+        self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 99)
+
+    @patch("system_stats.fluidsynth_rss_mb", return_value=None)
+    def test_estimate_progress_without_rss(self, _rss):
+        from fluidsynth_client import estimate_sf2_load_progress
+
+        self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 0)
+
+
 class TestActivityStatus(unittest.TestCase):
     def test_aseqdump_event_lines(self):
         from activity_status import is_aseqdump_midi_event
 
         self.assertTrue(is_aseqdump_midi_event(" 23:01:23.045  24:0   Note on               0, note 60, velocity 100"))
         self.assertTrue(is_aseqdump_midi_event("128:0   Control change          0, controller 7, value 100"))
+        self.assertTrue(is_aseqdump_midi_event("128:0   Program change          0, program 1"))
         self.assertFalse(is_aseqdump_midi_event("Waiting for events at port 128:0"))
         self.assertFalse(is_aseqdump_midi_event("Source  Event                   Ch Ch"))
         self.assertFalse(is_aseqdump_midi_event(""))
@@ -270,19 +292,53 @@ class TestActivityStatus(unittest.TestCase):
 
 
 class TestMidiMonitorPort(unittest.TestCase):
+    @patch("midi_jitter_buffer.get_buffer_input_port")
+    @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_uses_fluidsynth_port(self, mock_fs):
+    def test_prefers_gateway_buffer_port(self, mock_fs, mock_routes, mock_buf):
         from midi_utils import midi_monitor_port
 
+        mock_buf.return_value = {"address": "129:0"}
+        port, key = midi_monitor_port()
+        self.assertEqual(port, "129:0")
+        self.assertEqual(key, "buf:129:0")
+        mock_routes.assert_not_called()
+        mock_fs.assert_not_called()
+
+    @patch("midi_jitter_buffer.get_buffer_input_port")
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_uses_active_route_source(self, mock_fs, mock_routes, mock_buf):
+        from midi_utils import midi_monitor_port
+
+        mock_buf.return_value = None
+        mock_routes.return_value = [{"from": "14:0", "to": "128:0"}]
+        port, key = midi_monitor_port()
+        self.assertEqual(port, "14:0")
+        self.assertEqual(key, "src:14:0")
+        mock_fs.assert_not_called()
+
+    @patch("midi_jitter_buffer.get_buffer_input_port")
+    @patch("midi_utils.get_active_routes")
+    @patch("midi_utils.find_fluidsynth_input")
+    def test_uses_fluidsynth_port(self, mock_fs, mock_routes, mock_buf):
+        from midi_utils import midi_monitor_port
+
+        mock_buf.return_value = None
+        mock_routes.return_value = []
         mock_fs.return_value = {"address": "128:0"}
         port, key = midi_monitor_port()
         self.assertEqual(port, "128:0")
         self.assertEqual(key, "fs:128:0")
 
+    @patch("midi_jitter_buffer.get_buffer_input_port")
+    @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_none_without_fluidsynth(self, mock_fs):
+    def test_none_without_ports(self, mock_fs, mock_routes, mock_buf):
         from midi_utils import midi_monitor_port
 
+        mock_buf.return_value = None
+        mock_routes.return_value = []
         mock_fs.return_value = None
         port, key = midi_monitor_port()
         self.assertIsNone(port)
@@ -474,13 +530,15 @@ class TestFluidSynthClient(unittest.TestCase):
         self.assertIn("unload 1", sent)
         self.assertIn("reset", sent)
 
+    @patch("system_stats.fluidsynth_rss_mb", return_value=10)
+    @patch("fluidsynth_client.write_soundfont_state")
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
     @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_verified(self, _sleep, _send, _wait, _fonts, _match, _unload):
+    def test_load_soundfont_verified(self, _sleep, _send, _wait, _fonts, _match, _unload, _write, _rss):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-load.sf2")
@@ -492,13 +550,15 @@ class TestFluidSynthClient(unittest.TestCase):
         finally:
             sf.unlink(missing_ok=True)
 
+    @patch("system_stats.fluidsynth_rss_mb", return_value=10)
+    @patch("fluidsynth_client.write_soundfont_state")
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
     @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_quotes_path_with_spaces(self, _sleep, mock_send, _wait, _fonts, _match, _unload):
+    def test_load_soundfont_quotes_path_with_spaces(self, _sleep, mock_send, _wait, _fonts, _match, _unload, _write, _rss):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/SD1000 Sound Family Map.sf2")
@@ -512,13 +572,15 @@ class TestFluidSynthClient(unittest.TestCase):
         finally:
             sf.unlink(missing_ok=True)
 
+    @patch("system_stats.fluidsynth_rss_mb", return_value=10)
+    @patch("fluidsynth_client.write_soundfont_state")
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=False)
     @patch("fluidsynth_client.query_loaded_fonts", return_value=[])
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_not_in_stack_fails(self, _sleep, _send, _wait, _fonts, _match, _unload):
+    def test_load_soundfont_not_in_stack_fails(self, _sleep, _send, _wait, _fonts, _match, _unload, _write, _rss):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-missing.sf2")
@@ -530,11 +592,13 @@ class TestFluidSynthClient(unittest.TestCase):
         finally:
             sf.unlink(missing_ok=True)
 
+    @patch("system_stats.fluidsynth_rss_mb", return_value=10)
+    @patch("fluidsynth_client.write_soundfont_state")
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(False, "failed to load"))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_log_error_fails(self, _sleep, _send, _wait, _unload):
+    def test_load_soundfont_log_error_fails(self, _sleep, _send, _wait, _unload, _write, _rss):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-error.sf2")
@@ -546,13 +610,15 @@ class TestFluidSynthClient(unittest.TestCase):
         finally:
             sf.unlink(missing_ok=True)
 
+    @patch("system_stats.fluidsynth_rss_mb", return_value=10)
+    @patch("fluidsynth_client.write_soundfont_state")
     @patch("fluidsynth_client.unload_all_soundfonts", return_value=(True, "unloaded"))
     @patch("fluidsynth_client.is_path_in_loaded_fonts", return_value=True)
     @patch("fluidsynth_client.query_loaded_fonts", return_value=[{"id": 1, "path": "x.sf2"}])
     @patch("fluidsynth_client._wait_for_load_completion", return_value=(True, None))
     @patch("fluidsynth_client.send_command", return_value=(True, "ok"))
     @patch("fluidsynth_client.time.sleep")
-    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send, _wait, _fonts, _match, _unload):
+    def test_load_soundfont_cancelled_during_wait(self, _sleep, _send, _wait, _fonts, _match, _unload, _write, _rss):
         from fluidsynth_client import load_soundfont
 
         sf = Path("/tmp/tabloza-test-cancel.sf2")

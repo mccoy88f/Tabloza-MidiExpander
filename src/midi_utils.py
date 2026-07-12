@@ -242,7 +242,22 @@ def get_active_routes() -> list[dict]:
 
 
 def midi_monitor_port() -> tuple[str | None, str | None]:
-    """Return FluidSynth input port for passive MIDI activity monitoring."""
+    """Return an ALSA port where incoming MIDI is visible to aseqdump.
+
+    FluidSynth consumes events on its input port, so aseqdump there often stays
+    silent even while notes play. Prefer the gateway input or upstream sources.
+    """
+    from midi_jitter_buffer import get_buffer_input_port
+
+    buf = get_buffer_input_port()
+    if buf:
+        return buf["address"], f"buf:{buf['address']}"
+
+    routes = get_active_routes()
+    if routes:
+        addr = routes[0]["from"]
+        return addr, f"src:{addr}"
+
     fs = find_fluidsynth_input()
     if fs:
         return fs["address"], f"fs:{fs['address']}"

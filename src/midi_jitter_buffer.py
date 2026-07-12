@@ -168,7 +168,12 @@ class MidiGateway:
                         pass
 
     def _on_message(self, message, _data=None):
+        from activity_status import touch_midi_activity
+
         msg = tuple(message)
+        if not msg:
+            return
+        touch_midi_activity()
         if self._inspect_sysex(msg):
             return
         if self.buffer_ms <= 0:
