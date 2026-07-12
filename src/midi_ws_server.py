@@ -129,15 +129,23 @@ async def _client_handler(websocket) -> None:
 async def _run_server(port: int) -> None:
     import websockets
 
+    from tls_utils import load_ssl_context
+
+    ssl_context = load_ssl_context()
     async with websockets.serve(
         _client_handler,
         "0.0.0.0",
         port,
+        ssl=ssl_context,
         ping_interval=20,
         ping_timeout=20,
         max_size=2**20,
     ):
-        log.info("WebSocket MIDI in ascolto su 0.0.0.0:%d (JZZ output «%s»)", port, JZZ_OUTPUT_NAME)
+        log.info(
+            "WebSocket MIDI (WSS) in ascolto su 0.0.0.0:%d (JZZ output «%s»)",
+            port,
+            JZZ_OUTPUT_NAME,
+        )
         await asyncio.Future()
 
 
@@ -157,6 +165,8 @@ def ws_server_status() -> dict:
     return {
         "active": _midi_out is not None and not _stop.is_set(),
         "port": port,
+        "tls": True,
+        "scheme": "wss",
         "output_name": JZZ_OUTPUT_NAME,
         "alsa_source": WS_ALSA_SOURCE_NAME,
         "clients": len(_clients),

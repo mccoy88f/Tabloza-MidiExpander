@@ -38,29 +38,46 @@ done
 # --- Web UI ---
 hdr "Pannello web"
 WEB_PORT=""
-if ss -tlnp 2>/dev/null | grep -q ':80 '; then
+if ss -tlnp 2>/dev/null | grep -q ':443 '; then
+    WEB_PORT=443
+    green "Web UI HTTPS in ascolto sulla porta 443"
+elif ss -tlnp 2>/dev/null | grep -q ':80 '; then
     WEB_PORT=80
-    green "Web UI in ascolto sulla porta 80"
+    yellow "Solo HTTP sulla porta 80 — esegui tabloza-update per HTTPS"
 elif ss -tlnp 2>/dev/null | grep -q ':8080 '; then
     WEB_PORT=8080
-    yellow "Web UI sulla porta 8080 (aggiorna: sudo git -C /opt/tabloza pull && sudo systemctl restart tabloza-web)"
+    yellow "Web UI sulla porta 8080 (versione obsoleta)"
 else
-    red "Nessun server web su porta 80 o 8080"
+    red "Nessun server web su porta 443, 80 o 8080"
     echo "       Log tabloza-web:"
     journalctl -u tabloza-web -n 8 --no-pager 2>/dev/null | sed 's/^/       /' || true
     echo "       → sudo systemctl restart tabloza-web"
 fi
 
 if [[ -n "$WEB_PORT" ]]; then
-    CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/" 2>/dev/null || echo "000")
-  if [[ "$CODE" == "200" ]]; then
-        green "HTTP test locale: 200 OK"
-        IP=$(hostname -I | awk '{print $1}')
-        echo "       → http://${IP}"
-        echo "       → http://tabloza-me.local"
-        [[ "$WEB_PORT" == "8080" ]] && echo "       → http://${IP}:8080"
+    if [[ "$WEB_PORT" == "443" ]]; then
+        CODE=$(curl -sk -o /dev/null -w "%{http_code}" "https://127.0.0.1:${WEB_PORT}/" 2>/dev/null || echo "000")
+        if [[ "$CODE" == "200" ]]; then
+            green "HTTPS test locale: 200 OK"
+            IP=$(hostname -I | awk '{print $1}')
+            echo "       → https://${IP}"
+            echo "       → https://tabloza-me.local"
+        else
+            red "HTTPS test locale fallito (codice ${CODE})"
+        fi
+        if ss -tlnp 2>/dev/null | grep -q ':80 '; then
+            green "Redirect HTTP :80 → HTTPS attivo"
+        fi
     else
-        red "HTTP test locale fallito (codice ${CODE})"
+        CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/" 2>/dev/null || echo "000")
+        if [[ "$CODE" == "200" || "$CODE" == "301" ]]; then
+            green "HTTP test locale: ${CODE}"
+            IP=$(hostname -I | awk '{print $1}')
+            echo "       → http://${IP}"
+            echo "       → http://tabloza-me.local"
+        else
+            red "HTTP test locale fallito (codice ${CODE})"
+        fi
     fi
 fi
 

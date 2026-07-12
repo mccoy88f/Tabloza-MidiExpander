@@ -76,7 +76,8 @@ apt-get install -y -qq \
     network-manager \
     python3 python3-flask python3-bcrypt python3-venv python3-pip \
     alsa-utils \
-    libasound2-dev
+    libasound2-dev \
+    openssl
 
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
@@ -265,6 +266,15 @@ install -m 755 "${INSTALL_DIR}/scripts/tabloza-uninstall.sh"  /usr/local/bin/tab
 install -m 755 "${INSTALL_DIR}/scripts/tabloza-update.sh"    /usr/local/bin/tabloza-update
 
 # --- Servizi systemd ---
+log "Certificato TLS locale (HTTPS + WSS)..."
+python3 -c "
+import sys
+sys.path.insert(0, '${INSTALL_DIR}/src')
+from tls_utils import ensure_tls_certificate
+ensure_tls_certificate()
+print('TLS OK')
+" || die "Generazione certificato TLS fallita"
+
 log "Installazione servizi systemd..."
 install -m 644 "${INSTALL_DIR}/systemd/rtpmidid.service"        /etc/systemd/system/rtpmidid.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-orchestrator.service" /etc/systemd/system/tabloza-orchestrator.service
@@ -289,9 +299,10 @@ log "============================================"
 log "  Installazione completata!"
 log "============================================"
 log ""
-log "  Web UI:    http://${HOSTNAME}.local  (o http://<IP-del-Pi>)"
+log "  Web UI:    https://${HOSTNAME}.local  (redirect da http://)"
+log "  WSS MIDI:  wss://${HOSTNAME}.local:8765"
 log "  mDNS:      ${HOSTNAME}.local"
-log "  Hotspot:   ${HOTSPOT_SSID} → http://${HOTSPOT_IP}"
+log "  Hotspot:   ${HOTSPOT_SSID} → https://${HOTSPOT_IP}"
 log "  Password:  ${DEFAULT_PASSWORD}"
 log ""
 log "  Riavvia con: sudo reboot"
