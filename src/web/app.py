@@ -78,7 +78,6 @@ app.secret_key = load_secret_key()
 app.config["MAX_CONTENT_LENGTH"] = SF2_MAX_UPLOAD_BYTES
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = True
 
 SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\- ]+\.sf2$", re.IGNORECASE)
 
@@ -112,37 +111,12 @@ def static_files(filename):
 
 @app.route("/api/version")
 def api_version():
-    tls = {}
-    try:
-        from tls_utils import tls_cert_paths
-        tls = tls_cert_paths()
-    except Exception:
-        tls = {"hostname": MDNS_NAME}
     return jsonify({
         "version": get_version(),
         "github": GITHUB_URL,
         "author": AUTHOR,
-        "tls": tls,
-        "midi_ws": {"scheme": "wss", "port": int(os.environ.get("TABLOZA_MIDI_WS_PORT", "8765"))},
+        "midi_ws": {"scheme": "ws", "port": int(os.environ.get("TABLOZA_MIDI_WS_PORT", "8765"))},
     })
-
-
-@app.route("/api/tls/certificate")
-def api_tls_certificate():
-    """Certificato pubblico (auto-firmato) da installare sul PC del display."""
-    try:
-        from tls_utils import read_certificate_pem
-        pem = read_certificate_pem()
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 503
-    return (
-        pem,
-        200,
-        {
-            "Content-Type": "application/x-pem-file",
-            "Content-Disposition": f'attachment; filename="tabloza-me.pem"',
-        },
-    )
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -947,45 +921,5 @@ def _get_ip() -> str:
 if __name__ == "__main__":
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
     log_event("web", "Pannello web avviato")
-    from tls_utils import ensure_tls_certificate
-
-    cert_path, key_path = ensure_tls_certificate()
-    https_port = int(os.environ.get("TABLOZA_WEB_PORT", "443"))
-    http_port = int(os.environ.get("TABLOZA_WEB_HTTP_PORT", "80"))
-
-    def _start_http_redirect() -> None:
-        import threading
-        from http.server import BaseHTTPRequestHandler, HTTPServer
-
-        class _RedirectHandler(BaseHTTPRequestHandler):
-            def log_message(self, _format, *_args):
-                return
-
-            def _redirect(self) -> None:
-                host = (self.headers.get("Host") or MDNS_NAME).split(":")[0]
-                port_suffix = "" if https_port == 443 else f":{https_port}"
-                location = f"https://{host}{port_suffix}{self.path}"
-                self.send_response(301)
-                self.send_header("Location", location)
-                self.end_headers()
-
-            def do_GET(self):
-                self._redirect()
-
-            def do_HEAD(self):
-                self._redirect()
-
-            def do_POST(self):
-                self._redirect()
-
-        def _serve() -> None:
-            try:
-                HTTPServer(("0.0.0.0", http_port), _RedirectHandler).serve_forever()
-            except OSError as exc:
-                log_event("web", f"Redirect HTTP:{http_port} non avviato ({exc})")
-
-        threading.Thread(target=_serve, daemon=True, name="tabloza-http-redirect").start()
-
-    _start_http_redirect()
-    log_event("web", f"Pannello HTTPS su :{https_port} (redirect HTTP :{http_port})")
-    app.run(host="0.0.0.0", port=https_port, ssl_context=(str(cert_path), str(key_path)), debug=False)
+    port = int(os.environ.get("TABLOZA_WEB_PORT", "80"))
+    app.run(host="0.0.0.0", port=port, debug=False)

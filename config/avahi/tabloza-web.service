@@ -3,14 +3,8 @@
 <service-group>
   <name replace-wildcards="yes">Tabloza MidiExpander on %h</name>
   <service>
-    <type>_https._tcp</type>
-    <port>443</port>
-    <txt-record>path=/</txt-record>
-  </service>
-  <service>
     <type>_http._tcp</type>
     <port>80</port>
     <txt-record>path=/</txt-record>
-    <txt-record>redirect=https</txt-record>
   </service>
 </service-group>

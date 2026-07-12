@@ -38,17 +38,17 @@ done
 # --- Web UI ---
 hdr "Pannello web"
 WEB_PORT=""
-if ss -tlnp 2>/dev/null | grep -q ':443 '; then
-    WEB_PORT=443
-    green "Web UI HTTPS in ascolto sulla porta 443"
-elif ss -tlnp 2>/dev/null | grep -q ':80 '; then
+if ss -tlnp 2>/dev/null | grep -q ':80 '; then
     WEB_PORT=80
-    yellow "Solo HTTP sulla porta 80 — esegui tabloza-update per HTTPS"
+    green "Web UI HTTP in ascolto sulla porta 80"
+elif ss -tlnp 2>/dev/null | grep -q ':443 '; then
+    WEB_PORT=443
+    yellow "Web UI HTTPS sulla porta 443 — esegui tabloza-update per HTTP :80"
 elif ss -tlnp 2>/dev/null | grep -q ':8080 '; then
     WEB_PORT=8080
     yellow "Web UI sulla porta 8080 (versione obsoleta)"
 else
-    red "Nessun server web su porta 443, 80 o 8080"
+    red "Nessun server web su porta 80, 443 o 8080"
     echo "       Log tabloza-web:"
     journalctl -u tabloza-web -n 8 --no-pager 2>/dev/null | sed 's/^/       /' || true
     echo "       → sudo systemctl restart tabloza-web"
@@ -65,9 +65,6 @@ if [[ -n "$WEB_PORT" ]]; then
         else
             red "HTTPS test locale fallito (codice ${CODE})"
         fi
-        if ss -tlnp 2>/dev/null | grep -q ':80 '; then
-            green "Redirect HTTP :80 → HTTPS attivo"
-        fi
     else
         CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${WEB_PORT}/" 2>/dev/null || echo "000")
         if [[ "$CODE" == "200" || "$CODE" == "301" ]]; then
@@ -81,17 +78,10 @@ if [[ -n "$WEB_PORT" ]]; then
     fi
 fi
 
-# --- WSS MIDI (Tabloza Sing) ---
-hdr "WebSocket MIDI (WSS :8765)"
+# --- WebSocket MIDI (Tabloza Sing) ---
+hdr "WebSocket MIDI (WS :8765)"
 if ss -tlnp 2>/dev/null | grep -q ':8765 '; then
-    green "Porta 8765 in ascolto"
-    if command -v openssl >/dev/null; then
-        if timeout 3 openssl s_client -connect 127.0.0.1:8765 -servername tabloza-me.local </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
-            green "TLS/WSS attivo su 8765"
-        else
-            yellow "Porta 8765 aperta ma TLS assente — esegui sudo tabloza-update (v2.3+)"
-        fi
-    fi
+    green "Porta 8765 in ascolto (ws://)"
 else
     red "Nessun servizio su porta 8765 — sudo systemctl status tabloza-midi-ws"
     journalctl -u tabloza-midi-ws -n 6 --no-pager 2>/dev/null | sed 's/^/       /' || true
