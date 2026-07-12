@@ -8,6 +8,7 @@ arrivano su una porta ALSA virtuale instradata dal orchestrator verso Tabloza Si
 from __future__ import annotations
 
 import asyncio
+import http
 import json
 import logging
 import os
@@ -112,7 +113,7 @@ def _handle_message(raw: str) -> None:
 
 async def _client_handler(websocket) -> None:
     peer = getattr(websocket, "remote_address", None)
-    log.info("Client WebSocket connesso da %s", peer)
+    log.info("Client WSS connesso da %s", peer)
     _clients.add(websocket)
     try:
         await websocket.send(_info_payload())
@@ -124,24 +125,101 @@ async def _client_handler(websocket) -> None:
                     continue
             _handle_message(message)
     except Exception as exc:
-        log.debug("Client WS disconnesso: %s", exc)
+        log.debug("Client WSS disconnesso: %s", exc)
     finally:
         _clients.discard(websocket)
+
+
+_SETUP_HTML = """<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tabloza MidiExpander — Setup WSS</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #e8fff9; background: #0f172a; max-width: 40rem; }}
+    h1 {{ font-size: 1.25rem; }}
+    p {{ color: #94a3b8; }}
+    .ok {{ color: #5eead4; font-weight: 600; }}
+    code {{ color: #cbd5e1; }}
+    a {{ color: #5eead4; }}
+  </style>
+</head>
+<body>
+  <h1>Certificato WSS accettato</h1>
+  <p class="ok">Porta {port} pronta per Tabloza Sing (<code>wss://{host}:{port}</code>).</p>
+  <p>Chiudi questa scheda e torna al Display su tabloza.live. Se Chrome lo chiede, consenti anche <strong>Rete locale</strong> per tabloza.live.</p>
+  <p>SoundFont e impostazioni: <a href="http://{host}/">pannello web</a> (porta 80).</p>
+</body>
+</html>"""
+
+
+def _setup_page_body() -> bytes:
+    port = _ws_port()
+    try:
+        from tabloza_common import MDNS_NAME
+
+        host = MDNS_NAME
+    except Exception:
+        host = "tabloza-me.local"
+    return _SETUP_HTML.format(port=port, host=host).encode("utf-8")
+
+
+def _is_websocket_upgrade(headers) -> bool:
+    if headers is None:
+        return False
+    upgrade = (headers.get("Upgrade") or "").lower()
+    return upgrade == "websocket"
+
+
+async def _process_request(path_or_conn, headers_or_req):
+    """Pagina HTTPS /setup sulla porta WSS (compat websockets 12 e 13+)."""
+    if isinstance(path_or_conn, str):
+        path = path_or_conn.split("?", 1)[0]
+        req_headers = headers_or_req
+        conn = None
+    else:
+        req = headers_or_req
+        path = (getattr(req, "path", None) or "/").split("?", 1)[0]
+        req_headers = getattr(req, "headers", None)
+        conn = path_or_conn
+
+    if path not in ("/", "/setup"):
+        return None
+    if _is_websocket_upgrade(req_headers):
+        return None
+
+    body = _setup_page_body()
+    html_headers = [
+        ("Content-Type", "text/html; charset=utf-8"),
+        ("Content-Length", str(len(body))),
+        ("Cache-Control", "no-store"),
+    ]
+
+    if conn is not None and hasattr(conn, "respond"):
+        return conn.respond(200, "OK", body, headers=html_headers)
+
+    return (http.HTTPStatus.OK, html_headers, body)
 
 
 async def _run_server(port: int) -> None:
     import websockets
 
+    from tls_utils import load_ssl_context
+
+    ssl_context = load_ssl_context()
     async with websockets.serve(
         _client_handler,
         "0.0.0.0",
         port,
+        ssl=ssl_context,
+        process_request=_process_request,
         ping_interval=20,
         ping_timeout=20,
         max_size=2**20,
     ):
         log.info(
-            "WebSocket MIDI in ascolto su 0.0.0.0:%d (JZZ output «%s»)",
+            "WebSocket MIDI (WSS) in ascolto su 0.0.0.0:%d (JZZ output «%s»)",
             port,
             JZZ_OUTPUT_NAME,
         )
@@ -164,8 +242,9 @@ def ws_server_status() -> dict:
     return {
         "active": _midi_out is not None and not _stop.is_set(),
         "port": port,
-        "tls": False,
-        "scheme": "ws",
+        "tls": True,
+        "scheme": "wss",
+        "setup_path": "/setup",
         "output_name": JZZ_OUTPUT_NAME,
         "alsa_source": WS_ALSA_SOURCE_NAME,
         "clients": len(_clients),
@@ -173,7 +252,7 @@ def ws_server_status() -> dict:
 
 
 def _midi_init_loop() -> None:
-    """Apre la porta ALSA virtuale in background (non blocca l'avvio WebSocket)."""
+    """Apre la porta ALSA virtuale in background (non blocca l'avvio WSS)."""
     while not _stop.is_set():
         if _init_midi_out():
             return
@@ -188,6 +267,14 @@ def main() -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
     port = _ws_port()
+    try:
+        from tls_utils import ensure_tls_certificate
+
+        ensure_tls_certificate()
+    except Exception as exc:
+        log.error("Certificato TLS non disponibile: %s", exc)
+        return 1
+
     threading.Thread(target=_midi_init_loop, daemon=True, name="tabloza-midi-ws-init").start()
 
     def _shutdown(*_args):
@@ -203,7 +290,7 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     except Exception as exc:
-        log.error("Server WebSocket terminato: %s", exc)
+        log.error("Server WSS terminato: %s", exc)
         return 1
     finally:
         _shutdown()

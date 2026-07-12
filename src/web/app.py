@@ -117,12 +117,35 @@ def static_files(filename):
 
 @app.route("/api/version")
 def api_version():
+    ws_port = int(os.environ.get("TABLOZA_MIDI_WS_PORT", "8765"))
     return jsonify({
         "version": get_version(),
         "github": GITHUB_URL,
         "author": AUTHOR,
-        "midi_ws": {"scheme": "ws", "port": int(os.environ.get("TABLOZA_MIDI_WS_PORT", "8765"))},
+        "midi_ws": {
+            "scheme": "wss",
+            "port": ws_port,
+            "setup_url": f"https://{MDNS_NAME}:{ws_port}/setup",
+        },
     })
+
+
+@app.route("/api/tls/certificate")
+def api_tls_certificate():
+    """Certificato pubblico (auto-firmato) da installare sul PC del display."""
+    try:
+        from tls_utils import read_certificate_pem
+        pem = read_certificate_pem()
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 503
+    return (
+        pem,
+        200,
+        {
+            "Content-Type": "application/x-pem-file",
+            "Content-Disposition": 'attachment; filename="tabloza-me.pem"',
+        },
+    )
 
 
 @app.route("/api/auth/login", methods=["POST"])

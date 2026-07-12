@@ -79,9 +79,17 @@ if [[ -n "$WEB_PORT" ]]; then
 fi
 
 # --- WebSocket MIDI (Tabloza Sing) ---
-hdr "WebSocket MIDI (WS :8765)"
+hdr "WebSocket MIDI (WSS :8765)"
 if ss -tlnp 2>/dev/null | grep -q ':8765 '; then
-    green "Porta 8765 in ascolto (ws://)"
+    green "Porta 8765 in ascolto"
+    if command -v openssl >/dev/null; then
+        if timeout 3 openssl s_client -connect 127.0.0.1:8765 -servername tabloza-me.local </dev/null 2>/dev/null | grep -q "BEGIN CERTIFICATE"; then
+            green "TLS/WSS attivo su 8765"
+            echo "       → https://tabloza-me.local:8765/setup"
+        else
+            yellow "Porta 8765 aperta ma TLS assente — esegui sudo tabloza-update"
+        fi
+    fi
 else
     red "Nessun servizio su porta 8765 — sudo systemctl status tabloza-midi-ws"
     journalctl -u tabloza-midi-ws -n 6 --no-pager 2>/dev/null | sed 's/^/       /' || true

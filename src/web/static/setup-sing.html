@@ -6,75 +6,29 @@
   <title>Tabloza MidiExpander — Setup Tabloza Sing</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #e8fff9; background: #0f172a; max-width: 40rem; }
-    h1 { font-size: 1.25rem; }
     p { color: #94a3b8; }
-    .ok { color: #5eead4; font-weight: 600; }
-    .warn { color: #fbbf24; font-weight: 600; }
-    .err { color: #f87171; font-weight: 600; }
-    .note { border: 1px solid #f59e0b55; background: #f59e0b14; border-radius: 0.5rem; padding: 0.75rem 1rem; color: #fde68a; }
+    a { color: #5eead4; font-weight: 600; }
     code { color: #cbd5e1; }
-    a { color: #5eead4; }
   </style>
 </head>
 <body>
   <h1>Setup Tabloza Sing</h1>
-  <p>Questa pagina verifica il WebSocket MIDI (<code>ws://</code>) verso Tabloza Sing.</p>
-  <p id="ws-line">Endpoint: <code id="ws-url">…</code></p>
-  <p id="status" class="warn">Verifica in corso…</p>
-  <div class="note">
-    <strong>Display da tabloza.live</strong><br>
-    Da <code>https://www.tabloza.live</code> il browser accetta solo <strong>wss://</strong> (WebSocket sicuro) verso il Pi.
-    Questo dispositivo espone <strong>ws://</strong>: per mandare MIDI dal Display apri <code>/display</code> sul PC in LAN
-    sullo stesso Wi‑Fi del Raspberry, oppure abilita WSS sul Pi.
-    Se Chrome lo chiede, consenti anche <strong>Rete locale</strong> per tabloza.live.
-  </div>
-  <p style="margin-top:1rem"><a href="/">← Pannello web MidiExpander</a></p>
+  <p>Per usare il Display da <strong>tabloza.live</strong> devi accettare il certificato sulla porta WSS del MidiExpander.</p>
+  <p id="link-line">Caricamento…</p>
+  <p>Dopo l'accettazione torna al Display. In Chrome consenti anche <strong>Rete locale</strong> per tabloza.live se richiesto.</p>
+  <p><a href="/">← Pannello web (porta 80)</a></p>
   <script>
-    (function () {
-      var statusEl = document.getElementById("status");
-      var urlEl = document.getElementById("ws-url");
-      function setStatus(cls, text) {
-        statusEl.className = cls;
-        statusEl.textContent = text;
-      }
-      fetch("/api/version")
-        .then(function (r) { return r.json(); })
-        .then(function (v) {
-          var port = (v.midi_ws && v.midi_ws.port) || 8765;
-          var scheme = (v.midi_ws && v.midi_ws.scheme) || "ws";
-          var wsUrl = scheme + "://" + location.hostname + ":" + port;
-          urlEl.textContent = wsUrl;
-          if (scheme !== "wss") {
-            var note = document.querySelector(".note");
-            if (note) {
-              note.innerHTML += "<br><br>Stato attuale: <code>ws://</code> — per tabloza.live serve <code>wss://</code> sul MidiExpander.";
-            }
-          }
-          var ws;
-          try {
-            ws = new WebSocket(wsUrl);
-          } catch (e) {
-            setStatus("err", "WebSocket non avviabile da questo browser.");
-            return;
-          }
-          var timer = setTimeout(function () {
-            try { ws.close(); } catch (_) {}
-            setStatus("err", "WebSocket non risponde — controlla il servizio tabloza-midi-ws.");
-          }, 5000);
-          ws.onopen = function () {
-            clearTimeout(timer);
-            setStatus("ok", "WebSocket MIDI attivo e raggiungibile (ws://).");
-            ws.close();
-          };
-          ws.onerror = function () {
-            clearTimeout(timer);
-            setStatus("err", "Connessione WebSocket fallita — verifica rete e servizio sulla porta " + port + ".");
-          };
-        })
-        .catch(function () {
-          setStatus("err", "Impossibile leggere la configurazione del dispositivo.");
-        });
-    })();
+    fetch("/api/version")
+      .then(function (r) { return r.json(); })
+      .then(function (v) {
+        var port = (v.midi_ws && v.midi_ws.port) || 8765;
+        var setup = (v.midi_ws && v.midi_ws.setup_url) || ("https://" + location.hostname + ":" + port + "/setup");
+        document.getElementById("link-line").innerHTML =
+          'Apri <a href="' + setup + '">' + setup + '</a> e accetta il certificato.';
+      })
+      .catch(function () {
+        document.getElementById("link-line").textContent = "Apri https://tabloza-me.local:8765/setup";
+      });
   </script>
 </body>
 </html>
