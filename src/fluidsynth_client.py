@@ -487,14 +487,11 @@ def query_effect_settings() -> dict[str, str]:
 
 def apply_runtime_synth_settings(fs_cfg: dict) -> tuple[bool, str]:
     """Apply synth settings that can change without full restart (best-effort)."""
-    from synth_config import merge_fluidsynth_config
+    from synth_config import fluidsynth_effect_set_commands, merge_fluidsynth_config
 
     cfg = merge_fluidsynth_config(fs_cfg)
-    commands = [
-        f"set synth.polyphony {cfg['polyphony']}",
-        f"set synth.reverb.active {1 if cfg['reverb'] else 0}",
-        f"set synth.chorus.active {1 if cfg['chorus'] else 0}",
-    ]
+    commands = [f"set synth.polyphony {cfg['polyphony']}"]
+    commands.extend(fluidsynth_effect_set_commands(cfg))
     if _shell_stdin is None:
         return False, "Shell FluidSynth non disponibile"
     for cmd in commands:

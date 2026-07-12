@@ -110,6 +110,41 @@ class TestSynthConfig(unittest.TestCase):
         self.assertEqual(fs["polyphony"], 256)
         self.assertTrue(fs["reverb"])
         self.assertTrue(fs["chorus"])
+        self.assertEqual(fs["reverb_effect"]["room_size"], 0.75)
+        self.assertEqual(fs["reverb_effect"]["level"], 0.825)
+        self.assertEqual(fs["chorus_effect"]["nr"], 3)
+
+    def test_parse_update_effect_runtime_only(self):
+        from synth_config import merge_fluidsynth_config, parse_synth_settings_update
+
+        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        fs, restart = parse_synth_settings_update(
+            {"reverb_effect": {"room_size": 0.5, "level": 0.9}},
+            cfg,
+        )
+        self.assertFalse(restart)
+        self.assertEqual(fs["reverb_effect"]["room_size"], 0.5)
+        self.assertEqual(fs["reverb_effect"]["level"], 0.9)
+        self.assertEqual(fs["reverb_effect"]["damp"], 0.15)
+
+    def test_parse_update_clamps_effect_values(self):
+        from synth_config import merge_fluidsynth_config, parse_synth_settings_update
+
+        cfg = {"fluidsynth": merge_fluidsynth_config({})}
+        fs, _ = parse_synth_settings_update(
+            {"chorus_effect": {"nr": 500, "level": 99, "speed": 0.01}},
+            cfg,
+        )
+        self.assertEqual(fs["chorus_effect"]["nr"], 99)
+        self.assertEqual(fs["chorus_effect"]["level"], 10.0)
+        self.assertEqual(fs["chorus_effect"]["speed"], 0.1)
+
+    def test_fluidsynth_effect_set_commands(self):
+        from synth_config import fluidsynth_effect_set_commands, merge_fluidsynth_config
+
+        cmds = fluidsynth_effect_set_commands(merge_fluidsynth_config({}))
+        self.assertIn("set synth.reverb.room-size 0.75", cmds)
+        self.assertIn("set synth.chorus.depth 4.25", cmds)
 
     def test_parse_update_needs_restart_on_preset(self):
         from synth_config import merge_fluidsynth_config, parse_synth_settings_update

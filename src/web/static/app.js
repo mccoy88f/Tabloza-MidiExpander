@@ -32,6 +32,8 @@ function synthSettingsKey(settings) {
     reverb: settings.reverb,
     chorus: settings.chorus,
     dynamic_sample_loading: settings.dynamic_sample_loading,
+    reverb_effect: settings.reverb_effect,
+    chorus_effect: settings.chorus_effect,
   });
 }
 let lastSf2Loading = false;
@@ -1273,6 +1275,78 @@ const PRESET_I18N = {
   stable: "presetStable",
 };
 
+const SYNTH_EFFECT_CONTROLS = {
+  reverb: [
+    { id: "room_size", input: "synth-reverb-room-size", value: "synth-reverb-room-size-value", decimals: 3 },
+    { id: "damp", input: "synth-reverb-damp", value: "synth-reverb-damp-value", decimals: 3 },
+    { id: "width", input: "synth-reverb-width", value: "synth-reverb-width-value", decimals: 3 },
+    { id: "level", input: "synth-reverb-level", value: "synth-reverb-level-value", decimals: 3 },
+  ],
+  chorus: [
+    { id: "nr", input: "synth-chorus-nr", value: "synth-chorus-nr-value", decimals: 0 },
+    { id: "level", input: "synth-chorus-level", value: "synth-chorus-level-value", decimals: 3 },
+    { id: "speed", input: "synth-chorus-speed", value: "synth-chorus-speed-value", decimals: 3 },
+    { id: "depth", input: "synth-chorus-depth", value: "synth-chorus-depth-value", decimals: 3 },
+  ],
+};
+
+function formatEffectValue(num, decimals) {
+  if (decimals === 0) return String(Math.round(num));
+  return Number(num).toFixed(decimals);
+}
+
+function setEffectControl(control, rawValue) {
+  const input = document.getElementById(control.input);
+  const label = document.getElementById(control.value);
+  if (!input || !label) return;
+  const num = Number(rawValue);
+  input.value = String(num);
+  label.textContent = formatEffectValue(num, control.decimals);
+}
+
+function readEffectControls(kind) {
+  const out = {};
+  for (const control of SYNTH_EFFECT_CONTROLS[kind]) {
+    const input = document.getElementById(control.input);
+    if (!input) continue;
+    out[control.id] = control.decimals === 0
+      ? parseInt(input.value, 10)
+      : parseFloat(input.value);
+  }
+  return out;
+}
+
+function renderEffectSettings(reverbEffect, chorusEffect) {
+  if (reverbEffect) {
+    for (const control of SYNTH_EFFECT_CONTROLS.reverb) {
+      if (reverbEffect[control.id] != null) {
+        setEffectControl(control, reverbEffect[control.id]);
+      }
+    }
+  }
+  if (chorusEffect) {
+    for (const control of SYNTH_EFFECT_CONTROLS.chorus) {
+      if (chorusEffect[control.id] != null) {
+        setEffectControl(control, chorusEffect[control.id]);
+      }
+    }
+  }
+}
+
+function applyStableSynthDefaults(stableDefaults) {
+  const defaults = stableDefaults || {};
+  document.getElementById("synth-preset").value = defaults.audio_preset || "stable";
+  document.getElementById("synth-polyphony").value = defaults.polyphony ?? 256;
+  document.getElementById("synth-polyphony-value").textContent = String(defaults.polyphony ?? 256);
+  document.getElementById("synth-reverb").checked = defaults.reverb !== false;
+  document.getElementById("synth-chorus").checked = defaults.chorus !== false;
+  document.getElementById("synth-dynamic").checked = !!defaults.dynamic_sample_loading;
+  renderEffectSettings(defaults.reverb_effect, defaults.chorus_effect);
+  updateSynthPresetHint(defaults.audio_preset || "stable", {
+    presets: [{ id: "stable", period_size: 1024, period_count: 8 }],
+  });
+}
+
 function presetLabel(id) {
   return t(PRESET_I18N[id] || id);
 }
@@ -1305,15 +1379,33 @@ function renderSynthSettings(settings) {
   document.getElementById("synth-reverb").checked = !!settings.reverb;
   document.getElementById("synth-chorus").checked = !!settings.chorus;
   document.getElementById("synth-dynamic").checked = !!settings.dynamic_sample_loading;
+  renderEffectSettings(settings.reverb_effect, settings.chorus_effect);
   updateSynthPresetHint(settings.audio_preset, settings);
 }
 
 async function refreshSynthSettings() {
   try {
     const settings = await api("/api/synth/settings");
+    if (settings.stable_defaults) {
+      cachedStableSynthDefaults = settings.stable_defaults;
+    }
     renderSynthSettings(settings);
   } catch {
     /* ignore */
+  }
+}
+
+for (const controls of Object.values(SYNTH_EFFECT_CONTROLS)) {
+  for (const control of controls) {
+    document.getElementById(control.input)?.addEventListener("input", (e) => {
+      const label = document.getElementById(control.value);
+      if (label) {
+        label.textContent = formatEffectValue(
+          e.target.value,
+          control.decimals,
+        );
+      }
+    });
   }
 }
 
@@ -1324,8 +1416,12 @@ function collectSynthSettingsPayload() {
     reverb: document.getElementById("synth-reverb").checked,
     chorus: document.getElementById("synth-chorus").checked,
     dynamic_sample_loading: document.getElementById("synth-dynamic").checked,
+    reverb_effect: readEffectControls("reverb"),
+    chorus_effect: readEffectControls("chorus"),
   };
 }
+
+let cachedStableSynthDefaults = null;
 
 document.getElementById("synth-polyphony")?.addEventListener("input", (e) => {
   document.getElementById("synth-polyphony-value").textContent = e.target.value;
@@ -1367,13 +1463,15 @@ document.getElementById("btn-synth-apply")?.addEventListener("click", async () =
 });
 
 document.getElementById("btn-synth-standard")?.addEventListener("click", async () => {
-  document.getElementById("synth-preset").value = "stable";
-  document.getElementById("synth-polyphony").value = 256;
-  document.getElementById("synth-polyphony-value").textContent = "256";
-  document.getElementById("synth-reverb").checked = true;
-  document.getElementById("synth-chorus").checked = true;
-  document.getElementById("synth-dynamic").checked = false;
-  updateSynthPresetHint("stable", { presets: [{ id: "stable", period_size: 1024, period_count: 8 }] });
+  if (!cachedStableSynthDefaults) {
+    try {
+      const settings = await api("/api/synth/settings");
+      cachedStableSynthDefaults = settings.stable_defaults;
+    } catch {
+      cachedStableSynthDefaults = null;
+    }
+  }
+  applyStableSynthDefaults(cachedStableSynthDefaults);
   document.getElementById("btn-synth-apply").click();
 });
 

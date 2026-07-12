@@ -144,9 +144,75 @@
               <label class="synth-toggle"><input type="checkbox" id="synth-chorus" checked> <span data-i18n="labelChorus">Chorus</span></label>
               <label class="synth-toggle"><input type="checkbox" id="synth-dynamic"> <span data-i18n="labelDynamicLoading">Caricamento dinamico SF2</span></label>
             </div>
+            <details class="synth-effect-panel" id="synth-reverb-panel" open>
+              <summary data-i18n="labelReverbParams">Riverbero — parametri</summary>
+              <div class="synth-effect-fields">
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelReverbRoomSize">Room size</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-reverb-room-size" min="0" max="1" step="0.001" value="0.75">
+                    <span id="synth-reverb-room-size-value">0.750</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelReverbDamp">Damp</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-reverb-damp" min="0" max="1" step="0.001" value="0.15">
+                    <span id="synth-reverb-damp-value">0.150</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelReverbWidth">Width</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-reverb-width" min="0" max="100" step="0.1" value="0.8">
+                    <span id="synth-reverb-width-value">0.800</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelReverbLevel">Level</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-reverb-level" min="0" max="1" step="0.001" value="0.825">
+                    <span id="synth-reverb-level-value">0.825</span>
+                  </div>
+                </label>
+              </div>
+            </details>
+            <details class="synth-effect-panel" id="synth-chorus-panel" open>
+              <summary data-i18n="labelChorusParams">Chorus — parametri</summary>
+              <div class="synth-effect-fields">
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelChorusVoices">Voci</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-chorus-nr" min="0" max="99" step="1" value="3">
+                    <span id="synth-chorus-nr-value">3</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelChorusLevel">Level</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-chorus-level" min="0" max="10" step="0.01" value="0.6">
+                    <span id="synth-chorus-level-value">0.600</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelChorusSpeed">Speed (Hz)</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-chorus-speed" min="0.1" max="5" step="0.01" value="0.2">
+                    <span id="synth-chorus-speed-value">0.200</span>
+                  </div>
+                </label>
+                <label class="synth-field">
+                  <span class="label" data-i18n="labelChorusDepth">Depth</span>
+                  <div class="volume-row">
+                    <input type="range" id="synth-chorus-depth" min="0" max="256" step="0.01" value="4.25">
+                    <span id="synth-chorus-depth-value">4.250</span>
+                  </div>
+                </label>
+              </div>
+            </details>
             <div class="synth-actions">
-              <button type="button" id="btn-synth-apply" class="btn btn-primary" data-i18n="applySynthSettings">Applica</button>
               <button type="button" id="btn-synth-standard" class="btn btn-secondary" data-i18n="restoreStandardPreset">Ripristina stabile</button>
+              <button type="button" id="btn-synth-apply" class="btn btn-primary" data-i18n="applySynthSettings">Applica</button>
             </div>
             <p id="synth-msg" class="msg hidden"></p>
           </div>

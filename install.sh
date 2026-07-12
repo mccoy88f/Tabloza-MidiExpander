@@ -142,7 +142,19 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "polyphony": 256,
     "reverb": true,
     "chorus": true,
-    "dynamic_sample_loading": false
+    "dynamic_sample_loading": false,
+    "reverb_effect": {
+      "room_size": 0.75,
+      "damp": 0.15,
+      "width": 0.8,
+      "level": 0.825
+    },
+    "chorus_effect": {
+      "nr": 3,
+      "level": 0.6,
+      "speed": 0.2,
+      "depth": 4.25
+    }
   },
   "midi": {
     "jitter_buffer_ms": 25,

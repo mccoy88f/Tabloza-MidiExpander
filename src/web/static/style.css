@@ -423,6 +423,14 @@ input[type="text"] {
 .synth-toggles { display: flex; flex-direction: column; gap: 0.45rem; }
 .synth-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; cursor: pointer; }
 .synth-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.synth-effect-panel { margin: 0; }
+.synth-effect-panel summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+.synth-effect-fields { display: flex; flex-direction: column; gap: 0.65rem; padding: 0.35rem 0 0.15rem; }
 .upload-limit { font-size: 0.8rem; margin: 0.25rem 0 0.5rem; }
 .console-output {
   margin: 0;
