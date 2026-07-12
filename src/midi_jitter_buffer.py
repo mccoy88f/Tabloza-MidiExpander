@@ -229,6 +229,7 @@ def ensure_midi_gateway(buffer_ms: int, *, sysex_auto: bool = True) -> bool:
         _gateway = MidiGateway(max(0, buffer_ms), sysex_auto=sysex_auto)
         if _gateway.start():
             return True
+        log.error("Gateway MIDI: avvio fallito — %s", rtmidi_diagnostic())
         _gateway = None
         return False
 

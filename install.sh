@@ -82,8 +82,12 @@ python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
 log "Installazione python-rtmidi (gateway Tabloza Buffer)..."
 python3 -m pip uninstall -y rtmidi rtmidi-python 2>/dev/null || true
-python3 -m pip install --break-system-packages 'python-rtmidi>=1.4.9' 2>/dev/null \
-    || python3 -m pip install 'python-rtmidi>=1.4.9'
+if apt-get install -y python3-rtmidi 2>/dev/null; then
+    log "python-rtmidi da pacchetto apt"
+else
+    python3 -m pip install --break-system-packages 'python-rtmidi>=1.4.9' 2>/dev/null \
+        || python3 -m pip install 'python-rtmidi>=1.4.9'
+fi
 python3 -c "
 import sys
 sys.path.insert(0, '${INSTALL_DIR}/src')

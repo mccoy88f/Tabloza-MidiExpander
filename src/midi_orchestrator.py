@@ -95,10 +95,25 @@ soundfont_load_lock = threading.Lock()
 def _apply_midi_jitter_buffer(config: dict | None = None) -> bool:
     cfg = config or load_config()
     reset_runtime_bank_select(get_midi_bank_select(cfg))
-    return ensure_midi_gateway(
+    ok = ensure_midi_gateway(
         get_jitter_buffer_ms(cfg),
         sysex_auto=is_sysex_bank_auto_enabled(cfg),
     )
+    if ok:
+        from midi_jitter_buffer import jitter_buffer_status
+
+        st = jitter_buffer_status()
+        log.info(
+            "Gateway MIDI attivo (buffer=%sms, sysex=%s, porta=%s)",
+            st.get("buffer_ms", 0),
+            st.get("sysex_auto"),
+            (st.get("input_port") or {}).get("address", "—"),
+        )
+    else:
+        from rtmidi_compat import rtmidi_diagnostic
+
+        log.error("Gateway MIDI non attivo — %s", rtmidi_diagnostic())
+    return ok
 
 
 def load_config() -> dict:
