@@ -129,6 +129,54 @@ async def _client_handler(websocket) -> None:
         _clients.discard(websocket)
 
 
+_SETUP_HTML = """<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tabloza MidiExpander — Display</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #e8fff9; background: #0f172a; }}
+    h1 {{ font-size: 1.25rem; }}
+    p {{ color: #94a3b8; }}
+    .ok {{ color: #5eead4; font-weight: 600; }}
+  </style>
+</head>
+<body>
+  <h1>Certificato WSS accettato</h1>
+  <p class="ok">Porta {port} pronta per Tabloza Sing.</p>
+  <p>Chiudi questa scheda e torna al Display su tabloza.live. Se Chrome lo chiede, consenti anche <strong>Rete locale</strong> per tabloza.live.</p>
+</body>
+</html>"""
+
+
+def _is_websocket_upgrade(request) -> bool:
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return False
+    upgrade = (headers.get("Upgrade") or "").lower()
+    return upgrade == "websocket"
+
+
+async def _process_request(connection, request):
+    """Pagina HTTPS su :8765 per far accettare il certificato sulla porta WSS."""
+    path = (getattr(request, "path", None) or "/").split("?", 1)[0]
+    if path not in ("/", "/setup"):
+        return None
+    if _is_websocket_upgrade(request):
+        return None
+    port = _ws_port()
+    body = _SETUP_HTML.format(port=port).encode("utf-8")
+    response_headers = [
+        ("Content-Type", "text/html; charset=utf-8"),
+        ("Content-Length", str(len(body))),
+        ("Cache-Control", "no-store"),
+    ]
+    if hasattr(connection, "respond"):
+        return connection.respond(200, "OK", body, headers=response_headers)
+    return None
+
+
 async def _run_server(port: int) -> None:
     import websockets
 
@@ -140,6 +188,7 @@ async def _run_server(port: int) -> None:
         "0.0.0.0",
         port,
         ssl=ssl_context,
+        process_request=_process_request,
         ping_interval=20,
         ping_timeout=20,
         max_size=2**20,
