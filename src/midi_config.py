@@ -10,7 +10,7 @@ MIDI_BANK_SELECT_MODES = ("gm", "gs", "xg", "mma")
 DEFAULT_MIDI_CONFIG: dict = {
     "jitter_buffer_ms": DEFAULT_MIDI_JITTER_BUFFER_MS,
     "jitter_buffer_enabled": True,
-    "rtp_midi_timestamps_enabled": True,
+    "rtp_midi_timestamps_enabled": False,
     "sysex_bank_auto": True,
     "bank_select": DEFAULT_MIDI_BANK_SELECT,
 }

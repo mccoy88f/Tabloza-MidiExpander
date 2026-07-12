@@ -3,7 +3,7 @@
 set -euo pipefail
 
 RTPMIDID_REPO="https://github.com/mccoy88f/rtpmidid-ts.git"
-RTPMIDID_VER="26.01-ts.2"
+RTPMIDID_VER="26.01-ts.3"
 RELEASE_BASE="https://github.com/mccoy88f/rtpmidid-ts/releases/download/v${RTPMIDID_VER}"
 MARKER="/var/lib/tabloza/rtpmidid-ts.version"
 
