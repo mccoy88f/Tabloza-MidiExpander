@@ -36,6 +36,7 @@ from fluidsynth_client import (
 from midi_utils import (
     find_fluidsynth_input,
     get_active_routes,
+    midi_monitor_command,
     midi_monitor_port,
     refresh_midi_routes,
     route_rtpmidi_to_fluidsynth,
@@ -265,8 +266,8 @@ def _midi_monitor_loop():
     global midi_monitor_proc, shutdown
     monitored_key = None
     while not shutdown and not midi_monitor_stop.is_set():
-        port, monitor_key = midi_monitor_port()
-        if not port:
+        cmd, monitor_key = midi_monitor_command()
+        if not cmd or not monitor_key:
             _stop_monitor_proc()
             monitored_key = None
             if midi_monitor_stop.wait(2):
@@ -277,7 +278,7 @@ def _midi_monitor_loop():
             monitored_key = monitor_key
             try:
                 midi_monitor_proc = subprocess.Popen(
-                    ["aseqdump", "-p", port],
+                    cmd,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     text=True,
@@ -291,12 +292,22 @@ def _midi_monitor_loop():
                     break
                 continue
         if not midi_monitor_proc or midi_monitor_proc.poll() is not None:
+            if midi_monitor_proc and midi_monitor_proc.poll() is not None and monitored_key:
+                log.warning(
+                    "aseqdump terminato (exit=%s, %s)",
+                    midi_monitor_proc.returncode,
+                    monitored_key,
+                )
             monitored_key = None
             if midi_monitor_stop.wait(1):
                 break
             continue
         line = midi_monitor_proc.stdout.readline()
         if not line:
+            if midi_monitor_proc.poll() is not None:
+                monitored_key = None
+            else:
+                time.sleep(0.05)
             continue
         if is_aseqdump_midi_event(line):
             touch_midi_activity()

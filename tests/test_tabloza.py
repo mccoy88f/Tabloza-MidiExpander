@@ -296,44 +296,45 @@ class TestMidiMonitorPort(unittest.TestCase):
     @patch("midi_utils.find_rtpmidid_outputs")
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_prefers_active_route_source(self, mock_fs, mock_routes, mock_rtp, mock_usb):
-        from midi_utils import midi_monitor_port
+    def test_monitor_command_all_when_routes_exist(self, mock_fs, mock_routes, mock_rtp, mock_usb):
+        from midi_utils import midi_monitor_command, midi_monitor_port
 
-        mock_routes.return_value = [{"from": "14:0", "to": "129:0"}]
-        port, key = midi_monitor_port()
-        self.assertEqual(port, "14:0")
-        self.assertEqual(key, "src:14:0")
-        mock_rtp.assert_not_called()
+        mock_routes.return_value = [{"from": "128:1", "to": "129:0"}]
+        cmd, key = midi_monitor_command()
+        self.assertEqual(cmd, ["aseqdump"])
+        self.assertEqual(key, "all")
+        port, port_key = midi_monitor_port()
+        self.assertEqual(port, "all")
+        self.assertEqual(port_key, "all")
         mock_fs.assert_not_called()
 
     @patch("midi_utils.find_usb_midi_outputs")
     @patch("midi_utils.find_rtpmidid_outputs")
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
-    def test_uses_rtpmidid_when_no_routes(self, mock_fs, mock_routes, mock_rtp, mock_usb):
-        from midi_utils import midi_monitor_port
+    def test_monitor_command_all_when_rtpmidid_present(self, mock_fs, mock_routes, mock_rtp, mock_usb):
+        from midi_utils import midi_monitor_command
 
         mock_routes.return_value = []
-        mock_rtp.return_value = [{"address": "14:0", "client": "rtpmidid", "name": "Network"}]
+        mock_rtp.return_value = [{"address": "128:1", "client": "rtpmidid", "name": "Mac"}]
         mock_usb.return_value = []
-        port, key = midi_monitor_port()
-        self.assertEqual(port, "14:0")
-        self.assertEqual(key, "rtp:14:0")
-        mock_fs.assert_not_called()
+        cmd, key = midi_monitor_command()
+        self.assertEqual(cmd, ["aseqdump"])
+        self.assertEqual(key, "all")
 
     @patch("midi_utils.find_usb_midi_outputs")
     @patch("midi_utils.find_rtpmidid_outputs")
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
     def test_uses_fluidsynth_port(self, mock_fs, mock_routes, mock_rtp, mock_usb):
-        from midi_utils import midi_monitor_port
+        from midi_utils import midi_monitor_command
 
         mock_routes.return_value = []
         mock_rtp.return_value = []
         mock_usb.return_value = []
         mock_fs.return_value = {"address": "128:0"}
-        port, key = midi_monitor_port()
-        self.assertEqual(port, "128:0")
+        cmd, key = midi_monitor_command()
+        self.assertEqual(cmd, ["aseqdump", "-p", "128:0"])
         self.assertEqual(key, "fs:128:0")
 
     @patch("midi_utils.find_usb_midi_outputs")
@@ -341,14 +342,14 @@ class TestMidiMonitorPort(unittest.TestCase):
     @patch("midi_utils.get_active_routes")
     @patch("midi_utils.find_fluidsynth_input")
     def test_none_without_ports(self, mock_fs, mock_routes, mock_rtp, mock_usb):
-        from midi_utils import midi_monitor_port
+        from midi_utils import midi_monitor_command
 
         mock_routes.return_value = []
         mock_rtp.return_value = []
         mock_usb.return_value = []
         mock_fs.return_value = None
-        port, key = midi_monitor_port()
-        self.assertIsNone(port)
+        cmd, key = midi_monitor_command()
+        self.assertEqual(cmd, [])
         self.assertIsNone(key)
 
 

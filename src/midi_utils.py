@@ -241,28 +241,31 @@ def get_active_routes() -> list[dict]:
     return routes
 
 
-def midi_monitor_port() -> tuple[str | None, str | None]:
-    """Return an ALSA *output* port where aseqdump can see MIDI traffic.
+def midi_monitor_command() -> tuple[list[str], str | None]:
+    """Return argv + key for the MIDI activity aseqdump process.
 
-    ``aseqdump -p`` reports events sent *from* a port. Monitoring FluidSynth or
-    the gateway *input* port misses traffic that is routed into them. Prefer the
-    active route source (rtpmidid / USB), then any known MIDI outputs.
+    ``aseqdump -p PORT`` often exits immediately on rtpmidid per-session ports and
+    only sees one leg when Mac opens 128:1 and 128:2. Without ``-p``, aseqdump
+    receives all sequencer events and stays running.
     """
-    routes = get_active_routes()
-    if routes:
-        addr = routes[0]["from"]
-        return addr, f"src:{addr}"
-
-    for src in find_rtpmidid_outputs():
-        return src["address"], f"rtp:{src['address']}"
-
-    for src in find_usb_midi_outputs():
-        return src["address"], f"usb:{src['address']}"
-
+    if get_active_routes() or find_rtpmidid_outputs() or find_usb_midi_outputs():
+        return ["aseqdump"], "all"
     fs = find_fluidsynth_input()
     if fs:
-        return fs["address"], f"fs:{fs['address']}"
-    return None, None
+        return ["aseqdump", "-p", fs["address"]], f"fs:{fs['address']}"
+    return [], None
+
+
+def midi_monitor_port() -> tuple[str | None, str | None]:
+    """Backward-compatible helper — prefer :func:`midi_monitor_command`."""
+    cmd, key = midi_monitor_command()
+    if not cmd:
+        return None, None
+    if key == "all":
+        return "all", key
+    if len(cmd) == 3 and cmd[0] == "aseqdump" and cmd[1] == "-p":
+        return cmd[2], key
+    return None, key
 
 
 def get_midi_status() -> dict:
