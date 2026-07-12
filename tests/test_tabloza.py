@@ -256,6 +256,11 @@ class TestMidiConfig(unittest.TestCase):
         )
         self.assertFalse(gw._is_forwardable([0xFF, 0x51, 0x03, 0x07]))
         self.assertTrue(gw._is_forwardable([0x90, 0x3C, 0x64]))
+        # SMF/aplaymidi: spurious 0x00 after PC must not become prog 0 on same channel.
+        self.assertEqual(
+            gw._split_midi_messages([0xC6, 0x19, 0x00, 0xB6, 0x07, 0x4D]),
+            [[0xC6, 0x19], [0xB6, 0x07, 0x4D]],
+        )
 
     @patch("midi_jitter_buffer.is_usable_python_rtmidi", return_value=False)
     def test_ensure_gateway_without_rtmidi(self, _usable):
@@ -318,7 +323,8 @@ class TestMidiSysexMode(unittest.TestCase):
         msg = (0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7)
         self.assertTrue(maybe_apply_sysex_bank_mode(msg))
         mock_send.assert_any_call("set synth.midi-bank-select gm")
-        mock_send.assert_any_call("reset")
+        reset_calls = [c for c in mock_send.call_args_list if c[0][0] == "reset"]
+        self.assertEqual(reset_calls, [])
 
     def test_non_mode_sysex_not_consumed(self):
         from midi_sysex_mode import maybe_apply_sysex_bank_mode

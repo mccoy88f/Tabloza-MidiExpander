@@ -111,15 +111,8 @@ document.getElementById("btn-choose-file").addEventListener("click", () => {
 });
 
 // --- Status ---
-function renderMidiInputs(midi, activity) {
+function renderMidiInputs(midi) {
   const list = document.getElementById("midi-inputs-list");
-  const receivingMsg = document.getElementById("midi-receiving-msg");
-  const receiving = !!(activity?.midi?.receiving);
-
-  if (receivingMsg) {
-    receivingMsg.textContent = receiving ? t("midiReceiving") : "";
-    receivingMsg.classList.toggle("hidden", !receiving);
-  }
 
   list.innerHTML = "";
   const sources = (midi?.sources || []).filter((src) => src.type !== "gpio");
@@ -171,12 +164,11 @@ function sf2LoadingLabel(soundfont) {
   return t("sf2Loading", { name });
 }
 
-function sf2LoadingBadge(pct) {
-  if (pct != null && pct !== "") {
-    return t("sf2LoadingBadgePct", { pct });
-  }
+function sf2LoadingBadge() {
   return t("sf2LoadingBadge");
 }
+
+const TRASH_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
 
 function setStatusRefreshInterval(ms) {
   if (statusTimer) clearInterval(statusTimer);
@@ -417,7 +409,7 @@ async function refreshStatus() {
     document.getElementById("sf2-gain-slider").value = sliderVal;
     document.getElementById("sf2-gain-value").textContent = formatSf2Gain(sliderVal / 100);
   }
-  renderMidiInputs(s.midi, s.activity);
+  renderMidiInputs(s.midi);
   renderActivity(s.activity, s.midi, s.synth, s.soundfont);
   if (s.synth_settings) {
     const settingsKey = synthSettingsKey(s.synth_settings);
@@ -694,7 +686,7 @@ async function refreshSoundfonts() {
     const statusBadge = sf.loaded
       ? `<span class="sf2-active"> ${t("sf2LoadedBadge")}</span>`
       : sf.loading
-        ? `<span class="sf2-loading"> ${sf2LoadingBadge(loadProgress)}</span>`
+        ? `<span class="sf2-loading"> ${sf2LoadingBadge()}</span>`
         : sf.selected
           ? `<span class="sf2-selected"> ${t("sf2SelectedBadge")}</span>`
           : "";
@@ -711,7 +703,7 @@ async function refreshSoundfonts() {
       <div class="sf2-actions">
         ${!sf.loaded ? `<button class="btn btn-secondary" data-load="${escapeHtml(sf.name)}">${sf.loading ? (loadProgress != null ? `${loadProgress}%` : t("loading")) : t("load")}</button>` : ""}
         <button type="button" class="btn btn-secondary sf2-default-btn${isDefault ? " is-default" : ""}" data-toggle-default="${escapeHtml(sf.name)}" title="${isDefault ? t("clearDefaultSf2") : t("setDefaultSf2")}" aria-pressed="${isDefault}">${isDefault ? "★" : "☆"}</button>
-        <button class="btn btn-danger" data-del="${escapeHtml(sf.name)}">${t("delete")}</button>
+        <button type="button" class="btn btn-danger btn-icon" data-del="${escapeHtml(sf.name)}" title="${t("delete")}" aria-label="${t("delete")}">${TRASH_ICON}</button>
       </div>`;
     list.appendChild(div);
   });

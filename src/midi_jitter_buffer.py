@@ -226,7 +226,6 @@ class MidiGateway:
         while i < len(data):
             b = data[i]
             if b >= 0x80:
-                running_status = b
                 if b == 0xF0:
                     j = i + 1
                     while j < len(data) and data[j] != 0xF7:
@@ -250,10 +249,21 @@ class MidiGateway:
                 if len(chunk) == msg_len:
                     messages.append(chunk)
                 i += msg_len
+                # PC/CP do not leave running status: SMF players often emit a
+                # spurious 0x00 after PC that would become prog 0 on same channel.
+                if b < 0xF0 and (b & 0xF0) in (0xC0, 0xD0):
+                    running_status = None
+                elif b < 0xF0 and b >= 0xF4:
+                    running_status = None
+                elif 0xF0 <= b <= 0xF7:
+                    running_status = None
+                elif b < 0xF0:
+                    running_status = b
             elif running_status is not None:
                 hi = running_status & 0xF0
                 if hi in (0xC0, 0xD0):
                     messages.append([running_status, b])
+                    running_status = None
                     i += 1
                 elif i + 1 < len(data):
                     messages.append([running_status, b, data[i + 1]])

@@ -101,7 +101,7 @@ def apply_runtime_bank_select(mode: str, *, reset_synth: bool = True) -> bool:
     mode = normalize_bank_select(mode)
     with _runtime_lock:
         global _runtime_bank_select
-        if _runtime_bank_select == mode and not reset_synth:
+        if _runtime_bank_select == mode:
             return True
     from fluidsynth_client import send_command, shell_bound
 
@@ -133,5 +133,5 @@ def maybe_apply_sysex_bank_mode(message: tuple | list) -> bool:
     mode = detect_bank_mode_from_sysex(payload)
     if not mode or mode not in MIDI_BANK_SELECT_MODES:
         return False
-    apply_runtime_bank_select(mode)
+    apply_runtime_bank_select(mode, reset_synth=False)
     return True
