@@ -52,8 +52,44 @@ def _ws_port() -> int:
     return max(1, min(65535, port))
 
 
+def _lyrics_latency_ms() -> dict:
+    """Stima latenza end-to-end consigliata per sincronizzare i testi (non il MIDI).
+
+    Include:
+    - buffer anti-jitter WS (se attivo)
+    - buffer audio (period_size * period_count / sample_rate)
+    """
+    try:
+        from tabloza_common import load_config
+        from midi_config import get_ws_jitter_buffer_ms, is_ws_jitter_buffer_enabled
+        from synth_config import merge_fluidsynth_config
+
+        cfg = load_config()
+        ws_ms = get_ws_jitter_buffer_ms(cfg) if is_ws_jitter_buffer_enabled(cfg) else 0
+        fs = merge_fluidsynth_config(cfg.get("fluidsynth") if isinstance(cfg.get("fluidsynth"), dict) else None)
+        rate = int(fs.get("sample_rate", 44100)) or 44100
+        period_size = int(fs.get("period_size", 1024)) or 1024
+        period_count = int(fs.get("period_count", 8)) or 8
+        audio_ms = round((period_size * period_count) / rate * 1000)
+        total = max(0, int(ws_ms) + int(audio_ms))
+        return {
+            "latency_ms": total,
+            "ws_jitter_ms": int(ws_ms),
+            "audio_buffer_ms": int(audio_ms),
+        }
+    except Exception:
+        return {"latency_ms": 0, "ws_jitter_ms": 0, "audio_buffer_ms": 0}
+
+
 def _info_payload() -> str:
-    return json.dumps({"info": {"inputs": [], "outputs": [JZZ_OUTPUT_NAME]}})
+    latency = _lyrics_latency_ms()
+    return json.dumps({
+        "info": {
+            "inputs": [],
+            "outputs": [JZZ_OUTPUT_NAME],
+            **latency,
+        }
+    })
 
 
 def _init_midi_out() -> bool:
