@@ -156,13 +156,26 @@ _SETUP_HTML = """<!DOCTYPE html>
     .ok {{ color: #5eead4; font-weight: 600; }}
     code {{ color: #cbd5e1; }}
     a {{ color: #5eead4; }}
+    .buttons {{ display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }}
+    .btn {{ display: inline-block; padding: 0.6rem 1.2rem; border-radius: 0.5rem; font-weight: 600; font-size: 1rem; font-family: inherit; text-decoration: none; cursor: pointer; }}
+    .btn-primary {{ background: #5eead4; color: #0f172a; border: none; }}
+    .btn-secondary {{ background: transparent; color: #5eead4; border: 1px solid #5eead4; }}
   </style>
 </head>
 <body>
   <h1>Certificato WSS accettato</h1>
   <p class="ok">Porta {port} pronta per Tabloza Sing (<code>wss://{host}:{port}</code>).</p>
-  <p>Chiudi questa scheda e torna al Display su tabloza.live. Se Chrome lo chiede, consenti anche <strong>Rete locale</strong> per tabloza.live.</p>
-  <p>SoundFont e impostazioni: <a href="http://{host}/">pannello web</a> (porta 80).</p>
+  <p>Chiudi questa scheda e torna al Display su tabloza.live. Se il browser lo chiede, consenti anche <strong>Rete locale</strong> per tabloza.live.</p>
+  <div class="buttons">
+    <button type="button" class="btn btn-primary" onclick="closeTab()">Chiudi e torna a Tabloza</button>
+    <a class="btn btn-secondary" href="http://{host}/">Impostazioni MidiExpander</a>
+  </div>
+  <script>
+    function closeTab() {{
+      window.close();
+      setTimeout(function () {{ location.href = "https://tabloza.live"; }}, 300);
+    }}
+  </script>
 </body>
 </html>"""
 

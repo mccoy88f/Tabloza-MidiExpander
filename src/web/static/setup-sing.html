@@ -9,14 +9,27 @@
     p { color: #94a3b8; }
     a { color: #5eead4; font-weight: 600; }
     code { color: #cbd5e1; }
+    .buttons { display: flex; gap: 0.75rem; margin-top: 1.5rem; flex-wrap: wrap; }
+    .btn { display: inline-block; padding: 0.6rem 1.2rem; border-radius: 0.5rem; font-weight: 600; font-size: 1rem; font-family: inherit; text-decoration: none; cursor: pointer; }
+    .btn-primary { background: #5eead4; color: #0f172a; border: none; }
+    .btn-secondary { background: transparent; color: #5eead4; border: 1px solid #5eead4; }
   </style>
 </head>
 <body>
   <h1>Setup Tabloza Sing</h1>
   <p>Per usare il Display da <strong>tabloza.live</strong> devi accettare il certificato sulla porta WSS del MidiExpander.</p>
   <p id="link-line">Caricamento…</p>
-  <p>Dopo l'accettazione torna al Display. In Chrome consenti anche <strong>Rete locale</strong> per tabloza.live se richiesto.</p>
-  <p><a href="/">← Pannello web (porta 80)</a></p>
+  <p>Dopo l'accettazione torna al Display. Nel browser consenti anche <strong>Rete locale</strong> per tabloza.live se richiesto.</p>
+  <div class="buttons">
+    <button type="button" class="btn btn-primary" onclick="closeTab()">Chiudi e torna a Tabloza</button>
+    <a class="btn btn-secondary" href="/">Impostazioni MidiExpander</a>
+  </div>
+  <script>
+    function closeTab() {
+      window.close();
+      setTimeout(function () { location.href = "https://tabloza.live"; }, 300);
+    }
+  </script>
   <script>
     fetch("/api/version")
       .then(function (r) { return r.json(); })
