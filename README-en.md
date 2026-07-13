@@ -45,7 +45,7 @@ The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Lan
 
 | Section | Purpose |
 |---------|---------|
-| **Status** | mDNS address, per-interface IP, network mode, SF2, version, **MIDI inputs**, sound/jack test, **MIDI Reset**, **Stop notes** |
+| **Status** | mDNS address, per-interface IP, network mode, SF2, version, **connections**, sound/jack test, **MIDI Reset**, **Stop notes** |
 | **Audio output volume** | **0–100%** slider, auto-saved |
 | **Audio output** | ALSA playback device list; switch output (jack, USB, HDMI…) with synth restart |
 | **Synth engine** | Audio buffer preset, polyphony, reverb, chorus, dynamic loading |
@@ -76,7 +76,7 @@ The panel detects connectivity automatically and adapts available controls.
 
 **WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed). Use **Network → Disable Wi‑Fi** to turn off the radio (handy with Ethernet or direct LAN to avoid duplicate paths).
 
-### MIDI inputs
+### Connections (MIDI + synth)
 
 | Source | Status | Notes |
 |--------|--------|-------|
@@ -84,7 +84,7 @@ The panel detects connectivity automatically and adapts available controls.
 | **USB‑MIDI (dongle on Pi)** | ✅ Active | Keyboard/controller via USB adapter; auto-routing + hot-plug |
 | **GPIO DIN (UART)** | 🔜 Future development | Classic MIDI jack on GPIO 14/15 with optoisolator; UART script ready, ALSA bridge TBD |
 
-Under **Status → MIDI inputs** you see active sources (rtpmidid, USB, routing status). After plugging a USB dongle, wait ~5 s or use **MIDI Reset**.
+Under **Status → Connections** you see active sources (rtpmidid, USB, Tabloza Sing WSS) and synth status (FluidSynth). After plugging a USB dongle, wait ~5 s or use **MIDI Reset**.
 
 #### MIDI path (network and USB)
 

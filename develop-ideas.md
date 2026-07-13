@@ -147,14 +147,14 @@ Servizio `tabloza-web.service`:
 - `POST /api/volume` — volume master (MIDI CC 7)
 - `GET /api/wifi/scan` — scan reti (`nmcli`)
 - `POST /api/wifi/connect` — salva credenziali WiFi
-- `GET /api/status` — IP, modalità rete, ingressi MIDI attivi
+- `GET /api/status` — IP, modalità rete, connessioni (sorgenti + synth)
 - `POST /api/auth/change-password` — cambio password
 
 ### Fase 3 — Frontend Dashboard
 
 SPA responsive (HTML5 + Vanilla JS):
 1. Login
-2. Status bar (IP, hotspot/client, MIDI inputs)
+2. Status bar (IP, hotspot/client, connections)
 3. Libreria SoundFont (carica/elimina)
 4. Upload drag-and-drop con progress
 5. Slider volume master

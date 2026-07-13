@@ -6,7 +6,7 @@
 
 - Dongle USB‑MIDI o interfaccia USB collegata al Pi
 - L'orchestrator esegue `aconnect` periodico verso FluidSynth (come per `rtpmidid`)
-- Visibile in pannello → Stato → **Ingressi MIDI** con badge **Attivo** / **Collegato**
+- Visibile in pannello → Stato → **Connessioni** con badge **Attivo** / **Collegato**
 - Hot‑plug: inserire il dongle e attendere ~5 s, oppure **MIDI Reset**
 
 ## Tabloza Sing (WebSocket / JZZ-midi-WS)

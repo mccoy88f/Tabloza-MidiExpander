@@ -45,7 +45,7 @@ La UI è **bilingue** (IT/EN): usa i pulsanti **IT** / **EN** in alto. La lingua
 
 | Sezione | Cosa fa |
 |---------|---------|
-| **Stato** | Indirizzo mDNS, IP per interfaccia, modalità rete, SF2, versione, **ingressi MIDI**, test suono/jack, **MIDI Reset**, **Stop note** |
+| **Stato** | Indirizzo mDNS, IP per interfaccia, modalità rete, SF2, versione, **connessioni**, test suono/jack, **MIDI Reset**, **Stop note** |
 | **Volume uscita audio** | Slider **0–100%**, salvato automaticamente |
 | **Uscita audio** | Elenco dispositivi ALSA playback; cambio uscita (jack, USB, HDMI…) con riavvio synth |
 | **Motore synth** | Preset buffer audio, polifonia, riverbero, chorus, caricamento dinamico |
@@ -76,7 +76,7 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 
 **WiFi client:** scan reti, password, profilo salvato in NetworkManager. Con Ethernet attiva puoi aggiungere anche il WiFi (dual-homed). Da **Rete → Disattiva WiFi** spegni la radio (utile con cavo Ethernet o link LAN diretto).
 
-### Ingressi MIDI
+### Connessioni (MIDI + synth)
 
 | Sorgente | Stato | Note |
 |----------|-------|------|
@@ -84,7 +84,7 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 | **USB‑MIDI (dongle sul Pi)** | ✅ Attivo | Tastiera/controller via adattatore USB; routing automatico + hot‑plug |
 | **GPIO DIN (UART)** | 🔜 Sviluppo futuro | Presa MIDI classica su GPIO 14/15 con optoisolatore; script UART pronto, bridge ALSA da integrare |
 
-In **Stato → Ingressi MIDI** compaiono le sorgenti attive (rtpmidid, USB, stato routing). Dopo aver collegato un dongle USB, attendi ~5 s o usa **MIDI Reset**.
+In **Stato → Connessioni** compaiono le sorgenti attive (rtpmidid, USB, Tabloza Sing WSS) e lo stato del synth (FluidSynth). Dopo aver collegato un dongle USB, attendi ~5 s o usa **MIDI Reset**.
 
 #### Percorso MIDI (rete e USB)
 
