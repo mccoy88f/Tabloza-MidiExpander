@@ -947,8 +947,58 @@ def _get_ip() -> str:
         return "0.0.0.0"
 
 
+def _start_https_to_http_redirect(https_port: int, http_port: int) -> None:
+    """Intercetta browser con HSTS/HTTPS-first (es. dopo v2.3) e reindirizza a HTTP."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from tls_utils import load_ssl_context
+
+    ssl_context = load_ssl_context()
+
+    class _RedirectHandler(BaseHTTPRequestHandler):
+        def log_message(self, _format, *_args):
+            return
+
+        def _redirect(self) -> None:
+            host = (self.headers.get("Host") or MDNS_NAME).split(":")[0]
+            port_suffix = "" if http_port == 80 else f":{http_port}"
+            location = f"http://{host}{port_suffix}{self.path}"
+            self.send_response(301)
+            self.send_header("Location", location)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+
+        def do_GET(self):
+            self._redirect()
+
+        def do_HEAD(self):
+            self._redirect()
+
+        def do_POST(self):
+            self._redirect()
+
+    def _serve() -> None:
+        try:
+            server = HTTPServer(("0.0.0.0", https_port), _RedirectHandler)
+            server.socket = ssl_context.wrap_socket(server.socket, server_side=True)
+            server.serve_forever()
+        except OSError as exc:
+            log_event("web", f"Redirect HTTPS:{https_port}→HTTP:{http_port} non avviato ({exc})")
+
+    threading.Thread(
+        target=_serve,
+        daemon=True,
+        name="tabloza-https-redirect",
+    ).start()
+    log_event("web", f"Redirect HTTPS :{https_port} → HTTP :{http_port} (HSTS legacy)")
+
+
 if __name__ == "__main__":
     SOUNDFONTS_DIR.mkdir(parents=True, exist_ok=True)
     log_event("web", "Pannello web avviato")
     port = int(os.environ.get("TABLOZA_WEB_PORT", "80"))
+    https_redirect_port = int(os.environ.get("TABLOZA_WEB_HTTPS_REDIRECT_PORT", "443"))
+    if port == 80 and https_redirect_port != port:
+        _start_https_to_http_redirect(https_redirect_port, port)
     app.run(host="0.0.0.0", port=port, debug=False)

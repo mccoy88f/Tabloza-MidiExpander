@@ -41,6 +41,32 @@ curl -fsSL https://raw.githubusercontent.com/mccoy88f/Tabloza-MidiExpander/main/
 4. Verifica Avahi: `systemctl status avahi-daemon`
 5. Su Windows potrebbe servire [Bonjour](https://support.apple.com/kb/DL999) per `.local`
 
+### Il pannello funziona con l'IP ma non con tabloza-me.local (errore 301 / pagina vuota)
+
+Succede se il browser ha memorizzato **HTTPS** per `tabloza-me.local` (versioni v2.3.x del pannello). L'IP non ha quella cache, quindi funziona.
+
+**Fix automatico (v2.5.5+):** il Pi risponde su `https://tabloza-me.local` con redirect a `http://`. Aggiorna:
+
+```bash
+sudo tabloza-update
+sudo systemctl restart tabloza-web
+```
+
+**Fix manuale nel browser:**
+
+1. Apri sempre l'URL completo: `http://tabloza-me.local` (non `https://`)
+2. **Chrome:** `chrome://net-internals/#hsts` → *Delete domain security policies* → `tabloza-me.local`
+3. **Chrome:** Impostazioni → Privacy → Sicurezza → disattiva temporaneamente *Usa sempre connessioni sicure*
+4. **Safari:** Sviluppo → Svuota cache; se persiste, cancella dati sito per `tabloza-me.local`
+5. In DevTools → Network, verifica che `/api/status` risponda `401` o `200`, non `301` verso `https://`
+
+Verifica dal Mac/PC:
+
+```bash
+curl -sI http://tabloza-me.local/api/status    # atteso: 401
+curl -skI https://tabloza-me.local/api/status # v2.5.5+: Location: http://...
+```
+
 ### Password non accettata
 
 - Password predefinita: `tabloza`

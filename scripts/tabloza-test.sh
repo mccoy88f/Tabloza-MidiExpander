@@ -41,6 +41,14 @@ WEB_PORT=""
 if ss -tlnp 2>/dev/null | grep -q ':80 '; then
     WEB_PORT=80
     green "Web UI HTTP in ascolto sulla porta 80"
+    if ss -tlnp 2>/dev/null | grep -q ':443 '; then
+        REDIR=$(curl -skI "https://127.0.0.1/" 2>/dev/null | grep -i '^location:' | tr -d '\r')
+        if echo "$REDIR" | grep -qi '^location: http://'; then
+            green "Redirect HTTPS :443 → HTTP :80 attivo"
+        else
+            yellow "Porta 443 aperta ma redirect HTTP assente — esegui sudo tabloza-update"
+        fi
+    fi
 elif ss -tlnp 2>/dev/null | grep -q ':443 '; then
     WEB_PORT=443
     yellow "Web UI HTTPS sulla porta 443 — esegui tabloza-update per HTTP :80"

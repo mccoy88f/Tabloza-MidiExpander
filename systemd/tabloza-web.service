@@ -13,6 +13,7 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=/opt/tabloza/src
 Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
 Environment=TABLOZA_WEB_PORT=80
+Environment=TABLOZA_WEB_HTTPS_REDIRECT_PORT=443
 RuntimeDirectory=tabloza
 
 [Install]
