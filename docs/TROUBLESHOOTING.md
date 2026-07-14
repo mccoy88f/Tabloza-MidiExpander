@@ -59,6 +59,7 @@ sudo systemctl restart tabloza-web
 3. **Chrome:** Impostazioni → Privacy → Sicurezza → disattiva temporaneamente *Usa sempre connessioni sicure*
 4. **Safari:** Sviluppo → Svuota cache; se persiste, cancella dati sito per `tabloza-me.local`
 5. In DevTools → Network, verifica che `/api/status` risponda `401` o `200`, non `301` verso `https://`
+6. Se vedi **301 (disk cache)** su `status`, aggiorna a v2.5.6+ (`sudo tabloza-update`) oppure svuota la cache del sito per `tabloza-me.local`
 
 Verifica dal Mac/PC:
 

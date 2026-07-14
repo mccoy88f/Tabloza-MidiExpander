@@ -39,7 +39,13 @@ function synthSettingsKey(settings) {
 let lastSf2Loading = false;
 
 async function api(path, opts = {}) {
-  const res = await fetch(API + path, {
+  const method = (opts.method || "GET").toUpperCase();
+  let url = API + path;
+  if (method === "GET") {
+    const sep = path.includes("?") ? "&" : "?";
+    url += `${sep}_=${Date.now()}`;
+  }
+  const res = await fetch(url, {
     headers: { "Content-Type": "application/json", ...opts.headers },
     credentials: "same-origin",
     ...opts,

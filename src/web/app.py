@@ -82,6 +82,15 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\- ]+\.sf2$", re.IGNORECASE)
 
 
+@app.after_request
+def _disable_api_cache(response):
+    """Evita 301 HTTP→HTTPS in cache (v2.3) su /api/* e sulla shell HTML."""
+    if request.path.startswith("/api/") or request.path in ("/", "/setup/sing"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 @app.errorhandler(413)
 def request_entity_too_large(_e):
     max_mb = SF2_MAX_UPLOAD_BYTES // (1024 * 1024)
@@ -964,7 +973,7 @@ def _start_https_to_http_redirect(https_port: int, http_port: int) -> None:
             host = (self.headers.get("Host") or MDNS_NAME).split(":")[0]
             port_suffix = "" if http_port == 80 else f":{http_port}"
             location = f"http://{host}{port_suffix}{self.path}"
-            self.send_response(301)
+            self.send_response(302)
             self.send_header("Location", location)
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -976,6 +985,9 @@ def _start_https_to_http_redirect(https_port: int, http_port: int) -> None:
             self._redirect()
 
         def do_POST(self):
+            self._redirect()
+
+        def do_OPTIONS(self):
             self._redirect()
 
     def _serve() -> None:
