@@ -4,7 +4,7 @@ set -euo pipefail
 
 HOTSPOT_CONN="tabloza-hotspot"
 HOTSPOT_SSID="${TABLOZA_HOTSPOT_SSID:-Tabloza-MidiExpander}"
-HOTSPOT_PASSWORD="${TABLOZA_HOTSPOT_PASSWORD:-tabloza1}"
+HOTSPOT_PASSWORD="${TABLOZA_HOTSPOT_PASSWORD:-tabloza-hotspot}"
 TIMEOUT=20
 TABLOZA_COMMON="${TABLOZA_NETWORK_COMMON:-/usr/local/bin/tabloza-network-common.sh}"
 if [[ -f "$TABLOZA_COMMON" ]]; then

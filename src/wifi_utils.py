@@ -10,7 +10,7 @@ from event_log import log_event
 
 HOTSPOT_CONN = "tabloza-hotspot"
 HOTSPOT_SSID = os.environ.get("TABLOZA_HOTSPOT_SSID", "Tabloza-MidiExpander")
-HOTSPOT_PASSWORD = os.environ.get("TABLOZA_HOTSPOT_PASSWORD", "tabloza1")
+HOTSPOT_PASSWORD = os.environ.get("TABLOZA_HOTSPOT_PASSWORD", "tabloza-hotspot")
 WLAN_IFACE = "wlan0"
 WIFI_CONNECT_LOCK = os.environ.get("TABLOZA_WIFI_CONNECT_LOCK", "/run/tabloza/wifi-connecting")
 NM_WAIT_SEC = 90

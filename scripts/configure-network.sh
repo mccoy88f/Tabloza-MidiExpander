@@ -5,7 +5,7 @@ set -euo pipefail
 HOTSPOT_SSID="${1:-Tabloza-MidiExpander}"
 HOTSPOT_IP="${2:-192.168.4.1}"
 # WPA2 richiede ≥8 caratteri; rete aperta (key-mgmt=none) spesso non parte o non è visibile
-HOTSPOT_PASSWORD="${3:-tabloza1}"
+HOTSPOT_PASSWORD="${3:-tabloza-hotspot}"
 
 # Assicura NetworkManager attivo
 systemctl enable NetworkManager

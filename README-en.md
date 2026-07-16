@@ -64,7 +64,7 @@ The panel detects connectivity automatically and adapts available controls.
 | **Ethernet** | LAN cable to router only |
 | **Wi‑Fi (*network name*)** | WiFi client only |
 | **Ethernet + Wi‑Fi (*network name*)** | Cable and WiFi client active together |
-| **Hotspot** | Pi broadcasts `Tabloza-MidiExpander` (password `tabloza1`) → `http://192.168.4.1` |
+| **Hotspot** | Pi broadcasts `Tabloza-MidiExpander` (password `tabloza-hotspot`) → `http://192.168.4.1` |
 | **Direct LAN link** | Direct Pi ↔ computer cable, Pi @ `192.168.5.1` |
 | **Offline** | No usable connectivity |
 
@@ -72,7 +72,7 @@ The panel detects connectivity automatically and adapts available controls.
 
 **Ethernet with router:** the Pi tries normal DHCP first. If the cable is plugged in but no IP arrives within ~25 s (e.g. direct link to a computer), it automatically switches to **direct LAN link** (`192.168.5.1`, DHCP on the cable). You can force start/stop from the panel.
 
-**Hotspot:** starts automatically when there is no Ethernet and no reachable Wi‑Fi; WPA2 password `tabloza1`, panel at `http://192.168.4.1`. If a saved Wi‑Fi network is in range, unplugging Ethernet joins that network (no hotspot). With a router cable connected, hotspot remains optional from the panel.
+**Hotspot:** starts automatically when there is no Ethernet and no reachable Wi‑Fi; WPA2 password `tabloza-hotspot`, panel at `http://192.168.4.1`. If a saved Wi‑Fi network is in range, unplugging Ethernet joins that network (no hotspot). With a router cable connected, hotspot remains optional from the panel.
 
 **WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed). Use **Network → Disable Wi‑Fi** to turn off the radio (handy with Ethernet or direct LAN to avoid duplicate paths).
 
@@ -208,9 +208,9 @@ sudo reboot
 
 ### First access
 
-1. Connect to the device network or hotspot `Tabloza-MidiExpander`
-2. Open **http://tabloza-me.local** (or `http://<Pi-IP>`)
-3. Password: `tabloza`
+1. Connect to the device network or hotspot `Tabloza-MidiExpander` (Wi‑Fi password: `tabloza-hotspot`)
+2. Open **http://tabloza-me.local** (or `http://192.168.4.1` on the hotspot, or `http://<Pi-IP>`)
+3. Web panel password: `tabloza`
 
 ### Wireless RTP-MIDI setup
 

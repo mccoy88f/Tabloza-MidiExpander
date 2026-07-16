@@ -13,7 +13,7 @@ DEFAULT_PASSWORD="tabloza"
 HOSTNAME="tabloza-me"
 HOTSPOT_SSID="Tabloza-MidiExpander"
 HOTSPOT_IP="192.168.4.1"
-HOTSPOT_PASSWORD="tabloza1"
+HOTSPOT_PASSWORD="tabloza-hotspot"
 SECRET_FILE="${DATA_DIR}/secret.key"
 
 log()  { echo -e "\033[1;32m[Tabloza]\033[0m $*"; }
