@@ -70,15 +70,42 @@ else
 fi
 
 # --- Dipendenze ---
+# Ferma i servizi Python prima di apt: un upgrade di python3 a runtime
+# provoca "Failed to import encodings module" e può lasciare il sistema a metà.
+log "Arresto servizi Tabloza prima di apt..."
+systemctl stop tabloza-web tabloza-orchestrator tabloza-midi-ws 2>/dev/null || true
+
 log "Installazione dipendenze..."
-apt-get install -y -qq \
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq || warn "apt-get update fallito — proseguo con la cache locale"
+if ! apt-get install -y -qq \
     fluidsynth fluid-soundfont-gm \
     avahi-daemon avahi-utils \
     network-manager \
     python3 python3-flask python3-bcrypt python3-venv python3-pip \
     alsa-utils \
     libasound2-dev \
-    openssl
+    openssl; then
+    warn "apt-get install fallito — tentativo riparazione pacchetti..."
+    apt-get -y -f install || true
+    dpkg --configure -a || true
+    apt-get install -y -qq \
+        fluidsynth fluid-soundfont-gm \
+        avahi-daemon avahi-utils \
+        network-manager \
+        python3 python3-flask python3-bcrypt python3-venv python3-pip \
+        alsa-utils \
+        libasound2-dev \
+        openssl \
+        || die "Dipendenze non installabili — ripara Python con: apt-get install --reinstall python3 python3-minimal"
+fi
+
+# Verifica runtime Python prima di continuare
+if ! python3 -c "import encodings, flask, bcrypt" 2>/dev/null; then
+    warn "Python incompleto dopo apt — reinstallazione minima..."
+    apt-get install --reinstall -y -qq python3 python3-minimal python3-flask python3-bcrypt || true
+    python3 -c "import encodings" || die "Python ancora rotto (encodings). Da console: apt-get install --reinstall python3 python3-minimal && reboot"
+fi
 
 # Bluetooth ascolto opzionale (A2DP via Pulse/PipeWire)
 apt-get install -y -qq bluez pulseaudio-utils wireplumber 2>/dev/null \
