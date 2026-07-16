@@ -42,7 +42,7 @@ from midi_utils import (
     refresh_midi_routes,
     route_rtpmidi_to_fluidsynth,
     send_test_note,
-    set_fluidsynth_output_level,
+    set_fluidsynth_gain,
     set_midi_monitor_input,
 )
 
@@ -155,12 +155,12 @@ def load_config() -> dict:
 def build_fluidsynth_cmd(config: dict) -> list[str]:
     """FluidSynth senza SF2 — caricamento dinamico via shell."""
     fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
-    max_gain = fs_cfg.get("gain", 2.0)
     from audio_utils import normalize_volume, resolve_audio_device
-    from midi_utils import volume_to_gain
 
-    vol = normalize_volume(config.get("volume", 100))
-    initial_gain = volume_to_gain(vol, max_gain)
+    # -g = solo guadagno SoundFont; il volume uscita è ALSA/Pulse.
+    initial_gain = float(fs_cfg.get("gain", 2.0))
+    if normalize_volume(config.get("volume", 100)) == 0:
+        initial_gain = 0.0
     driver = (fs_cfg.get("audio_driver") or "alsa").strip().lower()
     raw_device = fs_cfg.get("audio_device", "plughw:0,0")
 
@@ -396,14 +396,20 @@ def stop_fluidsynth(*, shutdown_monitor: bool = False):
 
 
 def apply_volume(config: dict):
-    from audio_utils import apply_output_volume
+    """Applica volume uscita (ALSA/Pulse) e guadagno SoundFont (FluidSynth), separati."""
+    from audio_utils import apply_output_volume, normalize_volume
+    from synth_config import merge_fluidsynth_config, normalize_synth_gain
 
-    vol = config.get("volume", 100)
+    vol = normalize_volume(config.get("volume", 100))
     ok, detail = apply_output_volume(vol, config)
     if not ok:
-        log.warning("Volume ALSA non impostato: %s", detail)
-    max_gain = config.get("fluidsynth", {}).get("gain", 2.0)
-    set_fluidsynth_output_level(vol, max_gain=max_gain)
+        log.warning("Volume uscita non impostato: %s", detail)
+
+    fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
+    gain = normalize_synth_gain(fs_cfg.get("gain", 2.0))
+    if vol == 0:
+        gain = 0.0
+    set_fluidsynth_gain(gain)
 
 
 def stop_foreign_fluidsynth():

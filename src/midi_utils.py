@@ -635,9 +635,32 @@ def route_rtpmidi_to_fluidsynth() -> int:
 
 
 def volume_to_gain(volume: int, max_gain: float = 2.0) -> float:
+    """Legacy: mappa volume% → gain FluidSynth. Preferire fluidsynth.gain separato."""
     from audio_utils import normalize_volume
     vol = normalize_volume(volume)
     return round((vol / 100.0) * max_gain, 3) if vol > 0 else 0.0
+
+
+def set_fluidsynth_gain(
+    gain: float,
+    retries: int = 5,
+    delay: float = 0.5,
+) -> bool:
+    """Imposta solo il guadagno interno FluidSynth (slider SoundFont)."""
+    from fluidsynth_client import send_command, shell_bound
+    from synth_config import normalize_synth_gain
+
+    level = normalize_synth_gain(gain)
+    for attempt in range(retries):
+        if shell_bound() and find_fluidsynth_input():
+            ok_gain, _ = send_command(f"gain {level}")
+            if ok_gain:
+                log.info("FluidSynth gain=%.3f (SoundFont)", level)
+                return True
+        if attempt < retries - 1:
+            time.sleep(delay)
+    log.warning("Impossibile impostare gain FluidSynth (gain=%s)", level)
+    return False
 
 
 def set_fluidsynth_output_level(
@@ -646,23 +669,12 @@ def set_fluidsynth_output_level(
     retries: int = 5,
     delay: float = 0.5,
 ) -> bool:
-    """Keep FluidSynth at full internal level; ALSA mixer handles loudness."""
-    from fluidsynth_client import send_command, shell_bound
-
-    from audio_utils import normalize_volume
-    gain = volume_to_gain(volume, max_gain)
-    if normalize_volume(volume) == 0:
-        gain = 0.0
-    for attempt in range(retries):
-        if shell_bound() and find_fluidsynth_input():
-            ok_gain, _ = send_command(f"gain {gain}")
-            if ok_gain:
-                log.info("FluidSynth gain=%.3f (volume master via ALSA)", gain)
-                return True
-        if attempt < retries - 1:
-            time.sleep(delay)
-    log.warning("Impossibile impostare gain FluidSynth (volume=%d)", volume)
-    return False
+    """Compat: non usare per il volume uscita — solo gain SF2 da volume legacy."""
+    return set_fluidsynth_gain(
+        volume_to_gain(volume, max_gain),
+        retries=retries,
+        delay=delay,
+    )
 
 
 def set_master_volume(

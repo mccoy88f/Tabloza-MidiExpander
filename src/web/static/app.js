@@ -954,41 +954,57 @@ function showUploadStatus(msg, isError, isOk) {
   el.classList.remove("hidden");
 }
 
-// --- Volume ---
-let volumeTimer;
+// --- Volume (uscita): aggiorna etichetta in drag, applica solo al rilascio ---
 let volumeAdjusting = false;
 const volumeSlider = document.getElementById("volume-slider");
-volumeSlider.addEventListener("pointerdown", () => { volumeAdjusting = true; });
-volumeSlider.addEventListener("pointerup", () => { volumeAdjusting = false; });
-volumeSlider.addEventListener("pointercancel", () => { volumeAdjusting = false; });
+
+function setVolumeAdjusting(on) {
+  volumeAdjusting = on;
+}
+
+async function commitOutputVolume() {
+  const vol = parseInt(volumeSlider.value, 10);
+  document.getElementById("volume-value").textContent = String(vol);
+  setVolumeAdjusting(true);
+  try {
+    await api("/api/volume", { method: "POST", body: JSON.stringify({ volume: vol }) });
+  } finally {
+    setVolumeAdjusting(false);
+  }
+}
+
+volumeSlider.addEventListener("pointerdown", () => setVolumeAdjusting(true));
+volumeSlider.addEventListener("pointercancel", () => setVolumeAdjusting(false));
 volumeSlider.addEventListener("input", (e) => {
+  setVolumeAdjusting(true);
   document.getElementById("volume-value").textContent = e.target.value;
-  clearTimeout(volumeTimer);
-  volumeTimer = setTimeout(async () => {
-    await api("/api/volume", { method: "POST", body: JSON.stringify({ volume: parseInt(e.target.value) }) });
-    volumeAdjusting = false;
-  }, 200);
+});
+volumeSlider.addEventListener("change", () => {
+  commitOutputVolume().catch(() => setVolumeAdjusting(false));
 });
 
 function formatSf2Gain(gain) {
   return (Math.round(gain * 10) / 10).toFixed(1);
 }
 
-let sf2GainTimer;
 let sf2GainAdjusting = false;
 const sf2GainSlider = document.getElementById("sf2-gain-slider");
 if (sf2GainSlider) {
   sf2GainSlider.addEventListener("pointerdown", () => { sf2GainAdjusting = true; });
-  sf2GainSlider.addEventListener("pointerup", () => { sf2GainAdjusting = false; });
   sf2GainSlider.addEventListener("pointercancel", () => { sf2GainAdjusting = false; });
   sf2GainSlider.addEventListener("input", (e) => {
+    sf2GainAdjusting = true;
     const gain = parseInt(e.target.value, 10) / 100;
     document.getElementById("sf2-gain-value").textContent = formatSf2Gain(gain);
-    clearTimeout(sf2GainTimer);
-    sf2GainTimer = setTimeout(async () => {
+  });
+  sf2GainSlider.addEventListener("change", async () => {
+    const gain = parseInt(sf2GainSlider.value, 10) / 100;
+    sf2GainAdjusting = true;
+    try {
       await api("/api/synth-gain", { method: "POST", body: JSON.stringify({ gain }) });
+    } finally {
       sf2GainAdjusting = false;
-    }, 200);
+    }
   });
 }
 

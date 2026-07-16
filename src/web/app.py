@@ -1066,11 +1066,18 @@ def api_midi_reset():
             capture_output=True, timeout=15, check=True,
         )
         time.sleep(3)
+        # Ripristina volume uscita salvato (BT/Pulse spesso torna al default dopo restart).
+        config = load_config()
+        vol = config.get("volume", 100)
+        ok_vol, vol_detail = apply_output_volume(vol, config)
+        if not ok_vol:
+            log_event("web", f"Volume dopo MIDI reset non applicato: {vol_detail}", "error")
         trigger_orchestrator_apply_volume()
         midi = get_midi_status()
         return jsonify({
             "ok": True,
             "message": "FluidSynth e routing MIDI riavviati",
+            "volume": vol,
             "midi": midi,
         })
     except subprocess.CalledProcessError:

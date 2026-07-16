@@ -806,6 +806,33 @@ class TestBluetoothAudio(unittest.TestCase):
             isinstance(x, str) and x.startswith("audio.alsa.device=") for x in cmd
         ))
 
+    def test_build_fluidsynth_cmd_gain_independent_of_volume(self):
+        from midi_orchestrator import build_fluidsynth_cmd
+
+        cmd = build_fluidsynth_cmd({
+            "volume": 40,
+            "fluidsynth": {
+                "audio_driver": "alsa",
+                "audio_device": "plughw:0,0",
+                "audio_preset": "stable",
+                "gain": 2.0,
+            },
+            "midi": {},
+        })
+        self.assertEqual(cmd[cmd.index("-g") + 1], "2.0")
+
+        cmd_mute = build_fluidsynth_cmd({
+            "volume": 0,
+            "fluidsynth": {
+                "audio_driver": "alsa",
+                "audio_device": "plughw:0,0",
+                "audio_preset": "stable",
+                "gain": 2.0,
+            },
+            "midi": {},
+        })
+        self.assertEqual(cmd_mute[cmd_mute.index("-g") + 1], "0.0")
+
     def test_build_fluidsynth_cmd_alsa(self):
         from midi_orchestrator import build_fluidsynth_cmd
 
