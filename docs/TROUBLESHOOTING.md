@@ -162,10 +162,22 @@ sudo tabloza-test
 4. Se manca `pactl`/`bluetoothctl`: `sudo apt install pipewire-pulse pulseaudio-utils bluez` poi `sudo tabloza-update`
 5. Latenza elevata è normale su A2DP — per live usa jack/USB/HDMI
 
+**`br-connection-profile-unavailable`:** manca il profilo A2DP sul Pi (WirePlumber non ha registrato Audio Source). Su Lite headless è tipico senza fix seat-monitoring (v2.5.14+). Verifica:
+
+```bash
+bluetoothctl show | grep -i "Audio Source"
+# deve comparire UUID Audio Source (0000110a-…)
+wpctl status   # deve elencare Devices bluez5 dopo connect
+```
+
+Se manca Audio Source: `sudo tabloza-update` (installa `/etc/wireplumber/.../51-disable-bluez-seat-monitoring.conf`) oppure riavvia `systemctl --user restart wireplumber` come utente `pi`.
+
+**`br-connection-refused`:** cuffie già collegate al telefono, spente o non in ascolto — disconnettile dal telefono, riapri la custodia e riprova Accoppia/Collega.
+
 Alternativa da SSH (senza pannello):
 
 ```bash
-sudo bluetoothctl
+bluetoothctl
 power on
 scan on
 # … pair / trust / connect …

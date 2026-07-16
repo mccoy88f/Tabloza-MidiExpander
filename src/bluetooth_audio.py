@@ -242,6 +242,24 @@ def list_bluetooth_devices(*, known_only: bool = False) -> list[dict]:
     return enriched
 
 
+def _remove_unpaired_discovered_devices() -> int:
+    """Drop cached discoveries so a new scan starts from an empty list (keeps paired)."""
+    removed = 0
+    for dev in list_bluetooth_devices(known_only=False):
+        if dev.get("paired") or dev.get("trusted") or dev.get("connected"):
+            continue
+        address = dev.get("address") or ""
+        if not address:
+            continue
+        result = _btctl("remove", address, timeout=10)
+        out = ((result.stdout or "") + (result.stderr or "")).strip()
+        if result.returncode == 0 or "removed" in out.lower():
+            removed += 1
+    if removed:
+        log.info("Rimossi %d dispositivi Bluetooth non accoppiati prima della scansione", removed)
+    return removed
+
+
 def scan_bluetooth_devices(duration_sec: int | None = None) -> tuple[list[dict], str | None]:
     """Scan for nearby devices (headless). Leaves adapter powered on."""
     ok, detail = ensure_bluetooth_adapter()
@@ -254,6 +272,9 @@ def scan_bluetooth_devices(duration_sec: int | None = None) -> tuple[list[dict],
         BT_SCAN_LOCK.write_text(str(os.getpid()), encoding="utf-8")
     except OSError:
         pass
+
+    # Reset lista: togli discovery vecchie (i paired restano)
+    _remove_unpaired_discovered_devices()
 
     log.info("Scansione Bluetooth (%ds)…", seconds)
     # Su BlueZ recenti `scan on` esce subito e ferma la discovery: usare --timeout
@@ -274,6 +295,50 @@ def scan_bluetooth_devices(duration_sec: int | None = None) -> tuple[list[dict],
     return devices, None
 
 
+def _btctl_bg_scan_start() -> subprocess.Popen | None:
+    """Keep discovery running in background during pair/connect."""
+    try:
+        return subprocess.Popen(
+            ["bluetoothctl", "scan", "on"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except OSError as exc:
+        log.warning("Impossibile avviare scan BT in background: %s", exc)
+        return None
+
+
+def _btctl_bg_scan_stop(proc: subprocess.Popen | None) -> None:
+    _btctl("scan", "off", timeout=8)
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=3)
+    except (OSError, subprocess.TimeoutExpired):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+
+
+def _wait_device_available(mac: str, timeout_sec: float = 20.0) -> bool:
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        info_txt = _btctl("info", mac, timeout=5)
+        text = (info_txt.stdout or "") + (info_txt.stderr or "")
+        if "not available" not in text.lower() and (
+            f"Device {mac}" in text or "Name:" in text or "Alias:" in text
+        ):
+            return True
+        devices = _parse_devices_output(_btctl("devices", timeout=5).stdout or "")
+        if any(d["address"] == mac for d in devices):
+            return True
+        time.sleep(1.0)
+    return False
+
+
 def pair_bluetooth_device(address: str) -> tuple[bool, str]:
     """Pair + trust + connect for A2DP headphones/speakers."""
     try:
@@ -286,38 +351,115 @@ def pair_bluetooth_device(address: str) -> tuple[bool, str]:
         return False, detail
 
     log.info("Pairing Bluetooth %s…", mac)
-    # Prefer connect if already paired
-    info = _device_info(mac)
-    if info.get("paired") and not info.get("connected"):
-        conn = _btctl("connect", mac, timeout=45)
-        if conn.returncode == 0 or "Connection successful" in ((conn.stdout or "") + (conn.stderr or "")):
-            time.sleep(2.0)
-            return True, f"Collegato a {_device_info(mac).get('name', mac)}"
+    scan_proc = _btctl_bg_scan_start()
+    try:
+        # Auricolari LE (es. OPPO Enco) spariscono subito: tieni la discovery attiva
+        time.sleep(2.0)
+        if not _wait_device_available(mac, timeout_sec=18.0):
+            return False, (
+                "Dispositivo non raggiungibile — rimetti le cuffie in modalità pairing "
+                "e rilancia la scansione, poi Accoppia subito"
+            )
 
-    pair = _btctl("pair", mac, timeout=60)
-    pair_out = ((pair.stdout or "") + (pair.stderr or "")).strip()
-    if pair.returncode != 0 and "AlreadyExists" not in pair_out and "already" not in pair_out.lower():
-        # Some stacks fail pair if already paired — continue to trust/connect
-        if "Failed" in pair_out or "Authentication" in pair_out:
-            return False, pair_out or "Pairing fallito — metti il dispositivo in modalità accoppiamento"
+        info = _device_info(mac)
+        if info.get("paired") and info.get("connected"):
+            return True, f"Già collegato a {info.get('name', mac)}"
 
-    _btctl("trust", mac, timeout=15)
-    conn = _btctl("connect", mac, timeout=45)
-    conn_out = ((conn.stdout or "") + (conn.stderr or "")).strip()
-    time.sleep(2.5)  # leave time for A2DP sink to appear in Pulse
+        if info.get("paired") and not info.get("connected"):
+            conn_out = _connect_with_retry(mac)
+            info = _device_info(mac)
+            if info.get("connected"):
+                return True, f"Collegato a {info.get('name', mac)}"
+            return False, _friendly_connect_error(conn_out)
 
-    info = _device_info(mac)
-    if info.get("connected") or conn.returncode == 0 or "Connection successful" in conn_out:
-        name = info.get("name") or mac
-        # Wait briefly for bluez sink
-        for _ in range(10):
-            sinks = list_bluetooth_sinks()
-            if sinks:
-                break
-            time.sleep(0.5)
-        return True, f"Accoppiato e collegato: {name}"
+        pair = _btctl("pair", mac, timeout=90)
+        pair_out = ((pair.stdout or "") + (pair.stderr or "")).strip()
+        pair_ok = (
+            pair.returncode == 0
+            or "Pairing successful" in pair_out
+            or "AlreadyExists" in pair_out
+            or "already paired" in pair_out.lower()
+        )
+        if not pair_ok and (
+            "Failed" in pair_out
+            or "Authentication" in pair_out
+            or "not available" in pair_out.lower()
+            or "No agent" in pair_out
+        ):
+            if "not available" in pair_out.lower():
+                return False, (
+                    "Dispositivo sparito durante il pairing — tieni le cuffie "
+                    "in modalità pairing vicino al Pi e riprova subito dopo la scansione"
+                )
+            return False, pair_out or "Pairing fallito"
 
-    return False, conn_out or pair_out or "Connessione fallita — riprova con il dispositivo in pairing"
+        time.sleep(1.5)
+        info = _device_info(mac)
+        if not info.get("paired") and not pair_ok:
+            return False, (
+                pair_out
+                or "Pairing non completato — conferma la modalità pairing sulle cuffie e riprova"
+            )
+
+        _btctl("trust", mac, timeout=15)
+        conn_out = _connect_with_retry(mac, attempts=3, timeout=60)
+
+        info = _device_info(mac)
+        if info.get("connected"):
+            name = info.get("name") or mac
+            for _ in range(12):
+                if list_bluetooth_sinks():
+                    break
+                time.sleep(0.5)
+            if list_bluetooth_sinks():
+                return True, f"Accoppiato e collegato: {name} (audio pronto)"
+            return True, (
+                f"Accoppiato e collegato: {name} — se non compare in Uscita audio, "
+                "premi Aggiorna elenco tra qualche secondo"
+            )
+
+        return False, _friendly_connect_error(conn_out or pair_out)
+    finally:
+        _btctl_bg_scan_stop(scan_proc)
+
+
+def _connect_with_retry(mac: str, attempts: int = 2, timeout: int = 45) -> str:
+    """bluetoothctl connect; retry su refused (cuffie ancora in setup A2DP)."""
+    last = ""
+    for i in range(max(1, attempts)):
+        result = _btctl("connect", mac, timeout=timeout)
+        last = ((result.stdout or "") + (result.stderr or "")).strip()
+        time.sleep(2.0)
+        if _device_info(mac).get("connected") or "Connection successful" in last:
+            return last or "Connection successful"
+        if "profile-unavailable" in last.lower():
+            break
+        if i + 1 < attempts:
+            time.sleep(1.5)
+    return last
+
+
+def _friendly_connect_error(raw: str) -> str:
+    text = (raw or "").strip()
+    low = text.lower()
+    if "profile-unavailable" in low:
+        return (
+            "Profilo audio A2DP non disponibile sul Pi (WirePlumber/BlueZ). "
+            "Esegui sudo tabloza-update oppure: "
+            "systemctl --user restart wireplumber "
+            "poi verifica: bluetoothctl show | grep 'Audio Source'"
+        )
+    if "connection refused" in low or "br-connection-refused" in low:
+        return (
+            "Connessione rifiutata dalle cuffie — disconnettile dal telefono, "
+            "riaprirle vicino al Pi e riprova Accoppia/Collega"
+        )
+    if "not available" in low:
+        return (
+            "Cuffie non più in range/pairing durante la connessione — "
+            "riapri la custodia in modalità pairing e riprova"
+        )
+    return text or "Connessione fallita"
 
 
 def connect_bluetooth_device(address: str) -> tuple[bool, str]:
@@ -328,13 +470,16 @@ def connect_bluetooth_device(address: str) -> tuple[bool, str]:
     ok, detail = ensure_bluetooth_adapter()
     if not ok:
         return False, detail
-    result = _btctl("connect", mac, timeout=45)
-    out = ((result.stdout or "") + (result.stderr or "")).strip()
-    time.sleep(2.0)
-    info = _device_info(mac)
-    if info.get("connected") or result.returncode == 0:
-        return True, f"Collegato a {info.get('name', mac)}"
-    return False, out or "Connessione fallita"
+    scan_proc = _btctl_bg_scan_start()
+    try:
+        time.sleep(1.0)
+        out = _connect_with_retry(mac)
+        info = _device_info(mac)
+        if info.get("connected"):
+            return True, f"Collegato a {info.get('name', mac)}"
+        return False, _friendly_connect_error(out)
+    finally:
+        _btctl_bg_scan_stop(scan_proc)
 
 
 def disconnect_bluetooth_device(address: str) -> tuple[bool, str]:

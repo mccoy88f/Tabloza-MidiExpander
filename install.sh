@@ -96,7 +96,19 @@ rfkill unblock bluetooth 2>/dev/null || true
 # PipeWire per utente pi (Lite headless) + servizi root che parlano al suo Pulse
 if id pi >/dev/null 2>&1; then
     loginctl enable-linger pi 2>/dev/null || true
+    # Senza seat grafico logind riporta "online" (non "active"): WirePlumber non
+    # avvia il monitor BlueZ → manca UUID Audio Source → br-connection-profile-unavailable.
+    mkdir -p /etc/wireplumber/wireplumber.conf.d
+    cat > /etc/wireplumber/wireplumber.conf.d/51-disable-bluez-seat-monitoring.conf <<'EOF'
+# Headless / linger: avvia sempre il monitor BlueZ (A2DP Source).
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}
+EOF
     sudo -u pi XDG_RUNTIME_DIR=/run/user/"$(id -u pi)" systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null || true
+    sudo -u pi XDG_RUNTIME_DIR=/run/user/"$(id -u pi)" systemctl --user restart wireplumber 2>/dev/null || true
     PI_UID="$(id -u pi)"
     mkdir -p /etc/systemd/system/tabloza-web.service.d
     mkdir -p /etc/systemd/system/tabloza-orchestrator.service.d

@@ -1207,7 +1207,11 @@ async function loadPairedBluetoothDevices(opts = {}) {
 
 document.getElementById("btn-bt-scan")?.addEventListener("click", async () => {
   const btn = document.getElementById("btn-bt-scan");
+  const list = document.getElementById("bt-device-list");
   if (btn) btn.disabled = true;
+  if (list) {
+    list.innerHTML = `<p class="muted">${escapeHtml(t("btScanningList"))}</p>`;
+  }
   showBtMsg(t("btScanning"), false);
   try {
     const res = await api("/api/bluetooth/scan", {
