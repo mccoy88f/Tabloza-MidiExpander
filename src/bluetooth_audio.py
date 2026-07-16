@@ -256,15 +256,18 @@ def scan_bluetooth_devices(duration_sec: int | None = None) -> tuple[list[dict],
         pass
 
     log.info("Scansione Bluetooth (%ds)…", seconds)
-    _btctl("scan", "on", timeout=5)
+    # Su BlueZ recenti `scan on` esce subito e ferma la discovery: usare --timeout
+    scan = _run(
+        ["bluetoothctl", f"--timeout={seconds}", "scan", "on"],
+        timeout=seconds + 15,
+    )
+    scan_out = ((scan.stdout or "") + (scan.stderr or "")).strip()
+    if scan.returncode not in (0, 124) and "Discovery started" not in scan_out:
+        log.warning("bluetoothctl scan: %s", scan_out or f"exit {scan.returncode}")
     try:
-        time.sleep(seconds)
-    finally:
-        _btctl("scan", "off", timeout=8)
-        try:
-            BT_SCAN_LOCK.unlink(missing_ok=True)
-        except OSError:
-            pass
+        BT_SCAN_LOCK.unlink(missing_ok=True)
+    except OSError:
+        pass
 
     devices = list_bluetooth_devices(known_only=False)
     log.info("Bluetooth: trovati %d dispositivi", len(devices))

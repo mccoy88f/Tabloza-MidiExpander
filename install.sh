@@ -81,8 +81,10 @@ apt-get install -y -qq \
     openssl
 
 # Bluetooth ascolto opzionale (A2DP via Pulse/PipeWire)
-apt-get install -y -qq bluez pulseaudio-utils 2>/dev/null \
+apt-get install -y -qq bluez pulseaudio-utils wireplumber 2>/dev/null \
     || warn "bluez/pulseaudio-utils non installati — uscita Bluetooth non disponibile"
+apt-get install -y -qq libspa-0.2-bluetooth 2>/dev/null \
+    || warn "libspa-0.2-bluetooth non installato — A2DP potrebbe non funzionare"
 if ! apt-get install -y -qq pipewire-pulse pipewire 2>/dev/null; then
     apt-get install -y -qq pulseaudio 2>/dev/null \
         || warn "Pulse/PipeWire non installato — uscita Bluetooth non disponibile"
@@ -90,6 +92,26 @@ fi
 systemctl enable bluetooth 2>/dev/null || true
 systemctl start bluetooth 2>/dev/null || true
 rfkill unblock bluetooth 2>/dev/null || true
+
+# PipeWire per utente pi (Lite headless) + servizi root che parlano al suo Pulse
+if id pi >/dev/null 2>&1; then
+    loginctl enable-linger pi 2>/dev/null || true
+    sudo -u pi XDG_RUNTIME_DIR=/run/user/"$(id -u pi)" systemctl --user enable --now pipewire pipewire-pulse wireplumber 2>/dev/null || true
+    PI_UID="$(id -u pi)"
+    mkdir -p /etc/systemd/system/tabloza-web.service.d
+    mkdir -p /etc/systemd/system/tabloza-orchestrator.service.d
+    cat > /etc/systemd/system/tabloza-web.service.d/pulse.conf <<EOF
+[Service]
+Environment=PULSE_SERVER=unix:/run/user/${PI_UID}/pulse/native
+Environment=XDG_RUNTIME_DIR=/run/user/${PI_UID}
+EOF
+    cat > /etc/systemd/system/tabloza-orchestrator.service.d/pulse.conf <<EOF
+[Service]
+Environment=PULSE_SERVER=unix:/run/user/${PI_UID}/pulse/native
+Environment=XDG_RUNTIME_DIR=/run/user/${PI_UID}
+EOF
+    usermod -aG audio,bluetooth pi 2>/dev/null || true
+fi
 
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
