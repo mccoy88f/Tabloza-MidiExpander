@@ -110,8 +110,8 @@ class TestSynthConfig(unittest.TestCase):
         self.assertEqual(fs["polyphony"], 256)
         self.assertTrue(fs["reverb"])
         self.assertTrue(fs["chorus"])
-        self.assertEqual(fs["reverb_effect"]["room_size"], 0.75)
-        self.assertEqual(fs["reverb_effect"]["level"], 0.825)
+        self.assertEqual(fs["reverb_effect"]["room_size"], 0.7)
+        self.assertEqual(fs["reverb_effect"]["level"], 0.5)
         self.assertEqual(fs["chorus_effect"]["nr"], 3)
 
     def test_parse_update_effect_runtime_only(self):
@@ -143,7 +143,7 @@ class TestSynthConfig(unittest.TestCase):
         from synth_config import fluidsynth_effect_set_commands, merge_fluidsynth_config
 
         cmds = fluidsynth_effect_set_commands(merge_fluidsynth_config({}))
-        self.assertIn("set synth.reverb.room-size 0.75", cmds)
+        self.assertIn("set synth.reverb.room-size 0.7", cmds)
         self.assertIn("set synth.chorus.depth 4.25", cmds)
 
     def test_parse_update_needs_restart_on_preset(self):

@@ -25,10 +25,10 @@ MAX_SYNTH_GAIN = 4.0
 DEFAULT_SYNTH_GAIN = 2.0
 
 DEFAULT_REVERB_EFFECT: dict[str, float] = {
-    "room_size": 0.75,
+    "room_size": 0.7,
     "damp": 0.15,
     "width": 0.8,
-    "level": 0.825,
+    "level": 0.5,
 }
 
 DEFAULT_CHORUS_EFFECT: dict[str, float | int] = {

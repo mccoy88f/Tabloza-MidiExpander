@@ -148,10 +148,10 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     "chorus": true,
     "dynamic_sample_loading": false,
     "reverb_effect": {
-      "room_size": 0.75,
+      "room_size": 0.7,
       "damp": 0.15,
       "width": 0.8,
-      "level": 0.825
+      "level": 0.5
     },
     "chorus_effect": {
       "nr": 3,
