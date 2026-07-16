@@ -798,75 +798,153 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-// --- Upload ---
+// --- Upload (selezione multipla, coda uno alla volta) ---
 const uploadZone = document.getElementById("upload-zone");
 const fileInput = document.getElementById("sf2-upload");
+const SF2_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+let uploadBusy = false;
 
 uploadZone.addEventListener("dragover", (e) => { e.preventDefault(); uploadZone.classList.add("dragover"); });
 uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("dragover"));
 uploadZone.addEventListener("drop", (e) => {
   e.preventDefault();
   uploadZone.classList.remove("dragover");
-  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+  if (e.dataTransfer.files.length) queueUploadFiles(e.dataTransfer.files);
 });
-fileInput.addEventListener("change", () => { if (fileInput.files.length) uploadFile(fileInput.files[0]); });
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) queueUploadFiles(fileInput.files);
+});
 
-function uploadFile(file) {
-  if (!file.name.toLowerCase().endsWith(".sf2")) {
-    showUploadStatus(t("sf2Only"), true);
+function queueUploadFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  if (uploadBusy) {
+    showUploadStatus(t("uploadBusy"), true);
     return;
   }
-  const maxBytes = 2 * 1024 * 1024 * 1024;
-  if (file.size > maxBytes) {
-    showUploadStatus(t("uploadTooLarge", { max: "2 GB" }), true);
-    return;
-  }
+  uploadFilesSequentially(files);
+}
 
+async function uploadFilesSequentially(files) {
+  uploadBusy = true;
   const prog = document.getElementById("upload-progress");
   const bar = document.getElementById("upload-progress-bar");
+  const total = files.length;
+  let okCount = 0;
+  let failCount = 0;
+  const failures = [];
+
   prog.classList.remove("hidden");
-  bar.style.width = "0%";
-  showUploadStatus(t("uploading", { name: file.name }), false);
 
-  const form = new FormData();
-  form.append("file", file);
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const index = i + 1;
 
-  const xhr = new XMLHttpRequest();
-  xhr.open("POST", "/api/soundfonts/upload");
-  xhr.withCredentials = true;
+      if (!file.name.toLowerCase().endsWith(".sf2")) {
+        failCount += 1;
+        failures.push(`${file.name}: ${t("sf2Only")}`);
+        showUploadStatus(t("uploadingSkip", { name: file.name, index, total }), true);
+        continue;
+      }
+      if (file.size > SF2_MAX_BYTES) {
+        failCount += 1;
+        failures.push(`${file.name}: ${t("uploadTooLarge", { max: "2 GB" })}`);
+        showUploadStatus(t("uploadingSkip", { name: file.name, index, total }), true);
+        continue;
+      }
 
-  xhr.upload.addEventListener("progress", (e) => {
-    if (e.lengthComputable) {
-      const pct = Math.round((e.loaded / e.total) * 100);
-      bar.style.width = `${pct}%`;
-      showUploadStatus(t("uploadingPct", { pct }), false);
-    }
-  });
-
-  xhr.addEventListener("load", () => {
-    if (xhr.status === 401) { showLogin(); return; }
-    let data = {};
-    try { data = JSON.parse(xhr.responseText); } catch (_) {}
-    if (xhr.status >= 200 && xhr.status < 300) {
-      showUploadStatus(t("uploadDone", { name: file.name }), false, true);
-      refreshAll();
-    } else {
-      showUploadStatus(data.error || t("uploadFailed"), true);
-    }
-    setTimeout(() => {
-      prog.classList.add("hidden");
       bar.style.width = "0%";
+      showUploadStatus(t("uploadingOf", { name: file.name, index, total }), false);
+
+      try {
+        await uploadOneFile(file, ({ pct }) => {
+          bar.style.width = `${pct}%`;
+          showUploadStatus(
+            t("uploadingOfPct", { name: file.name, index, total, pct }),
+            false,
+          );
+        });
+        okCount += 1;
+        showUploadStatus(t("uploadDoneOf", { name: file.name, index, total }), false, true);
+      } catch (err) {
+        if (err?.auth) {
+          showLogin();
+          return;
+        }
+        failCount += 1;
+        failures.push(`${file.name}: ${err?.message || t("uploadFailed")}`);
+        showUploadStatus(
+          t("uploadFailedOf", { name: file.name, index, total }),
+          true,
+        );
+      }
+    }
+
+    if (okCount) await refreshAll();
+
+    if (total === 1 && okCount === 1) {
+      showUploadStatus(t("uploadDone", { name: files[0].name }), false, true);
+    } else if (failCount === 0) {
+      showUploadStatus(t("uploadBatchDone", { count: okCount }), false, true);
+    } else if (okCount === 0) {
+      showUploadStatus(
+        failures[0] || t("uploadBatchFailed", { fail: failCount }),
+        true,
+      );
+    } else {
+      showUploadStatus(
+        t("uploadBatchPartial", { ok: okCount, fail: failCount }),
+        true,
+      );
+    }
+  } finally {
+    uploadBusy = false;
+    fileInput.value = "";
+    setTimeout(() => {
+      if (!uploadBusy) {
+        prog.classList.add("hidden");
+        bar.style.width = "0%";
+      }
     }, 2000);
-    fileInput.value = "";
-  });
+  }
+}
 
-  xhr.addEventListener("error", () => {
-    showUploadStatus(t("uploadNetworkError"), true);
-    prog.classList.add("hidden");
-    fileInput.value = "";
-  });
+function uploadOneFile(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("file", file);
 
-  xhr.send(form);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/soundfonts/upload");
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (e.lengthComputable && typeof onProgress === "function") {
+        onProgress({ pct: Math.round((e.loaded / e.total) * 100) });
+      }
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status === 401) {
+        reject(Object.assign(new Error(t("authRequired")), { auth: true }));
+        return;
+      }
+      let data = {};
+      try { data = JSON.parse(xhr.responseText); } catch (_) {}
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+      } else {
+        reject(new Error(data.error || t("uploadFailed")));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      reject(new Error(t("uploadNetworkError")));
+    });
+
+    xhr.send(form);
+  });
 }
 
 function showUploadStatus(msg, isError, isOk) {
