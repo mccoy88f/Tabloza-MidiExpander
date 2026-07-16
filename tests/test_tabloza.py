@@ -800,7 +800,7 @@ class TestBluetoothAudio(unittest.TestCase):
             },
             "midi": {},
         })
-        self.assertEqual(cmd[cmd.index("-a") + 1], "pulse")
+        self.assertEqual(cmd[cmd.index("-a") + 1], "pulseaudio")
         self.assertIn("audio.pulseaudio.device=bluez_sink.test.a2dp_sink", cmd)
         self.assertFalse(any(
             isinstance(x, str) and x.startswith("audio.alsa.device=") for x in cmd

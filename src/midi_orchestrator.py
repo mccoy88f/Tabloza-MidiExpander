@@ -164,9 +164,13 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
     driver = (fs_cfg.get("audio_driver") or "alsa").strip().lower()
     raw_device = fs_cfg.get("audio_device", "plughw:0,0")
 
+    # Internamente usiamo "pulse"; FluidSynth 2.4+ vuole il nome driver "pulseaudio".
+    fs_audio_driver = "pulseaudio" if driver == "pulse" else (
+        "alsa" if driver == "alsa" else "alsa"
+    )
     cmd = [
         FLUIDSYNTH_BIN,
-        "-a", driver if driver in ("alsa", "pulse") else "alsa",
+        "-a", fs_audio_driver,
     ]
     if driver == "pulse":
         from bluetooth_audio import pulse_sink_from_device_id
