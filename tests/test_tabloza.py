@@ -16,7 +16,13 @@ if "alsaaudio" not in sys.modules:
     try:
         import alsaaudio  # noqa: F401
     except ImportError:
-        sys.modules["alsaaudio"] = MagicMock()
+        _alsa = MagicMock()
+
+        class _ALSAAudioError(Exception):
+            pass
+
+        _alsa.ALSAAudioError = _ALSAAudioError
+        sys.modules["alsaaudio"] = _alsa
 
 from audio_utils import (  # noqa: E402
     alsa_device_for_card,
@@ -710,6 +716,110 @@ card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
         self.assertFalse(changed)
         self.assertEqual(updated, config)
         self.assertEqual(msg, "")
+
+    @patch("bluetooth_audio.list_bluetooth_sinks")
+    @patch("audio_utils.list_playback_devices")
+    def test_list_all_playback_devices_includes_bluetooth(self, mock_alsa, mock_bt):
+        from audio_utils import list_all_playback_devices
+
+        mock_alsa.return_value = [{"id": "plughw:0,0", "kind": "alsa", "label": "Jack"}]
+        mock_bt.return_value = [{
+            "id": "pulse:bluez_sink.AA_BB.a2dp_sink",
+            "kind": "bluetooth",
+            "label": "Bluetooth — Cuffie",
+        }]
+        devices = list_all_playback_devices()
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices[1]["kind"], "bluetooth")
+
+    def test_current_audio_device_id_pulse(self):
+        from audio_utils import current_audio_device_id
+
+        self.assertEqual(
+            current_audio_device_id({
+                "audio_driver": "pulse",
+                "audio_device": "bluez_sink.AA.a2dp_sink",
+            }),
+            "pulse:bluez_sink.AA.a2dp_sink",
+        )
+
+
+class TestBluetoothAudio(unittest.TestCase):
+    def test_pulse_device_id_helpers(self):
+        from bluetooth_audio import (
+            is_pulse_device_id,
+            pulse_device_id,
+            pulse_sink_from_device_id,
+        )
+
+        self.assertTrue(is_pulse_device_id("pulse:bluez_sink.x"))
+        self.assertFalse(is_pulse_device_id("plughw:0,0"))
+        self.assertEqual(pulse_device_id("bluez_sink.x"), "pulse:bluez_sink.x")
+        self.assertEqual(pulse_sink_from_device_id("pulse:bluez_sink.x"), "bluez_sink.x")
+
+    @patch("bluetooth_audio._pactl_short_sinks")
+    @patch("bluetooth_audio._sink_description")
+    @patch("bluetooth_audio.pulse_available", return_value=True)
+    def test_list_bluetooth_sinks_filters_bluez(self, _avail, mock_desc, mock_short):
+        from bluetooth_audio import list_bluetooth_sinks
+
+        mock_short.return_value = [
+            ("alsa_output.platform-bcm2835", "RUNNING"),
+            ("bluez_output.AA_BB_CC.1", "IDLE"),
+        ]
+        mock_desc.return_value = "AirPods"
+        sinks = list_bluetooth_sinks()
+        self.assertEqual(len(sinks), 1)
+        self.assertEqual(sinks[0]["id"], "pulse:bluez_output.AA_BB_CC.1")
+        self.assertIn("AirPods", sinks[0]["label"])
+
+    def test_normalize_mac_and_parse_devices(self):
+        from bluetooth_audio import BT_MAC_RE, _normalize_mac, _parse_devices_output
+
+        self.assertTrue(BT_MAC_RE.match("AA:BB:CC:DD:EE:FF"))
+        self.assertEqual(_normalize_mac("aa:bb:cc:dd:ee:ff"), "AA:BB:CC:DD:EE:FF")
+        with self.assertRaises(ValueError):
+            _normalize_mac("not-a-mac")
+        devices = _parse_devices_output(
+            "Device AA:BB:CC:DD:EE:FF Sony WH-1000XM4\n"
+            "Device 11:22:33:44:55:66\n"
+        )
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(devices[0]["name"], "Sony WH-1000XM4")
+        self.assertEqual(devices[1]["address"], "11:22:33:44:55:66")
+
+    def test_build_fluidsynth_cmd_pulse(self):
+        from midi_orchestrator import build_fluidsynth_cmd
+
+        cmd = build_fluidsynth_cmd({
+            "volume": 100,
+            "fluidsynth": {
+                "audio_driver": "pulse",
+                "audio_device": "pulse:bluez_sink.test.a2dp_sink",
+                "audio_preset": "stable",
+            },
+            "midi": {},
+        })
+        self.assertEqual(cmd[cmd.index("-a") + 1], "pulse")
+        self.assertIn("audio.pulseaudio.device=bluez_sink.test.a2dp_sink", cmd)
+        self.assertFalse(any(
+            isinstance(x, str) and x.startswith("audio.alsa.device=") for x in cmd
+        ))
+
+    def test_build_fluidsynth_cmd_alsa(self):
+        from midi_orchestrator import build_fluidsynth_cmd
+
+        cmd = build_fluidsynth_cmd({
+            "volume": 100,
+            "fluidsynth": {
+                "audio_driver": "alsa",
+                "audio_device": "plughw:0,0",
+                "audio_preset": "stable",
+            },
+            "midi": {},
+        })
+        self.assertEqual(cmd[cmd.index("-a") + 1], "alsa")
+        self.assertIn("audio.alsa.device=plughw:0,0", cmd)
 
 
 class TestFluidSynthClient(unittest.TestCase):

@@ -80,6 +80,17 @@ apt-get install -y -qq \
     libasound2-dev \
     openssl
 
+# Bluetooth ascolto opzionale (A2DP via Pulse/PipeWire)
+apt-get install -y -qq bluez pulseaudio-utils 2>/dev/null \
+    || warn "bluez/pulseaudio-utils non installati — uscita Bluetooth non disponibile"
+if ! apt-get install -y -qq pipewire-pulse pipewire 2>/dev/null; then
+    apt-get install -y -qq pulseaudio 2>/dev/null \
+        || warn "Pulse/PipeWire non installato — uscita Bluetooth non disponibile"
+fi
+systemctl enable bluetooth 2>/dev/null || true
+systemctl start bluetooth 2>/dev/null || true
+rfkill unblock bluetooth 2>/dev/null || true
+
 python3 -m pip install --break-system-packages pyalsaaudio 2>/dev/null \
     || python3 -m pip install pyalsaaudio
 python3 -m pip install --break-system-packages 'websockets>=12.0' 2>/dev/null \

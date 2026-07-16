@@ -135,7 +135,7 @@ def _build_playback_device(
 
 
 def list_playback_devices() -> list[dict]:
-    """List all ALSA playback devices (jack, USB, HDMI…) via aplay or pyalsaaudio."""
+    """List ALSA playback devices (jack, USB, HDMI…) via aplay or pyalsaaudio."""
     devices: list[dict] = []
     seen: set[str] = set()
 
@@ -143,6 +143,7 @@ def list_playback_devices() -> list[dict]:
     if aplay_entries:
         for card_i, dev_i, card_name, pcm_name in aplay_entries:
             dev = _build_playback_device(card_i, dev_i, card_name, pcm_name)
+            dev["kind"] = "alsa"
             if dev["id"] not in seen:
                 seen.add(dev["id"])
                 devices.append(dev)
@@ -156,10 +157,34 @@ def list_playback_devices() -> list[dict]:
 
     for card_i, name in enumerate(cards):
         dev = _build_playback_device(card_i, 0, name)
+        dev["kind"] = "alsa"
         if dev["id"] not in seen:
             seen.add(dev["id"])
             devices.append(dev)
     return devices
+
+
+def list_all_playback_devices() -> list[dict]:
+    """ALSA devices plus optional Bluetooth sinks (Pulse/PipeWire)."""
+    devices = list_playback_devices()
+    try:
+        from bluetooth_audio import list_bluetooth_sinks
+        for bt in list_bluetooth_sinks():
+            devices.append(bt)
+    except Exception as exc:
+        log.warning("Elenco Bluetooth non disponibile: %s", exc)
+    return devices
+
+
+def current_audio_device_id(fs_cfg: dict | None) -> str:
+    """Canonical device id for UI/API (pulse:… for Bluetooth)."""
+    fs = fs_cfg or {}
+    driver = (fs.get("audio_driver") or "alsa").strip().lower()
+    device = (fs.get("audio_device") or "plughw:0,0").strip()
+    if driver == "pulse":
+        from bluetooth_audio import is_pulse_device_id, pulse_device_id
+        return device if is_pulse_device_id(device) else pulse_device_id(device)
+    return resolve_audio_device(device)
 
 
 def device_label(device_id: str, devices: list[dict] | None = None) -> str:
@@ -314,8 +339,13 @@ def set_alsa_output_volume(
 
 
 def apply_output_volume(volume: int, config: dict) -> tuple[bool, str]:
-    """Apply master volume on the ALSA output path (jack / DAC)."""
+    """Apply master volume on the active output path (ALSA or Bluetooth/Pulse)."""
     fs_cfg = config.get("fluidsynth", {})
+    driver = (fs_cfg.get("audio_driver") or "alsa").strip().lower()
+    if driver == "pulse":
+        from bluetooth_audio import pulse_sink_from_device_id, set_pulse_sink_volume
+        sink = pulse_sink_from_device_id(fs_cfg.get("audio_device", ""))
+        return set_pulse_sink_volume(sink, volume)
     return set_alsa_output_volume(
         volume,
         card=int(fs_cfg.get("alsa_card", 0)),

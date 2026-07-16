@@ -161,11 +161,23 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
 
     vol = normalize_volume(config.get("volume", 100))
     initial_gain = volume_to_gain(vol, max_gain)
-    audio_dev = resolve_audio_device(fs_cfg.get("audio_device", "plughw:0,0"))
+    driver = (fs_cfg.get("audio_driver") or "alsa").strip().lower()
+    raw_device = fs_cfg.get("audio_device", "plughw:0,0")
+
     cmd = [
         FLUIDSYNTH_BIN,
-        "-a", fs_cfg.get("audio_driver", "alsa"),
-        "-o", f"audio.alsa.device={audio_dev}",
+        "-a", driver if driver in ("alsa", "pulse") else "alsa",
+    ]
+    if driver == "pulse":
+        from bluetooth_audio import pulse_sink_from_device_id
+        sink = pulse_sink_from_device_id(raw_device)
+        if sink:
+            cmd.extend(["-o", f"audio.pulseaudio.device={sink}"])
+    else:
+        audio_dev = resolve_audio_device(raw_device)
+        cmd.extend(["-o", f"audio.alsa.device={audio_dev}"])
+
+    cmd.extend([
         "-r", str(fs_cfg.get("sample_rate", 44100)),
         "-z", str(fs_cfg.get("period_size", 512)),
         "-c", str(fs_cfg.get("period_count", 6)),
@@ -174,7 +186,7 @@ def build_fluidsynth_cmd(config: dict) -> list[str]:
         "-o", "midi.autoconnect=false",
         "-o", "synth.default-soundfont=",
         "-o", f"synth.midi-bank-select={get_midi_bank_select(config)}",
-    ]
+    ])
     if is_sysex_bank_auto_enabled(config):
         cmd.extend(["-o", "synth.device-id=127"])
     for opt in fluidsynth_startup_options(fs_cfg):
@@ -535,6 +547,16 @@ def start_fluidsynth(config: dict) -> bool:
     if fallback_used:
         log.warning(fallback_msg)
         log_event("orchestrator", fallback_msg, "error")
+
+    fs_cfg = merge_fluidsynth_config(config.get("fluidsynth"))
+    if (fs_cfg.get("audio_driver") or "").lower() == "pulse":
+        from bluetooth_audio import ensure_pulse_sink_ready, pulse_sink_from_device_id
+        sink = pulse_sink_from_device_id(fs_cfg.get("audio_device", ""))
+        ok_bt, bt_detail = ensure_pulse_sink_ready(sink)
+        if not ok_bt:
+            log.error("Bluetooth/Pulse non pronto: %s", bt_detail)
+            log_event("orchestrator", f"Bluetooth non pronto: {bt_detail}", "error")
+            return False
 
     _ensure_alsa_seq()
     stop_foreign_fluidsynth()

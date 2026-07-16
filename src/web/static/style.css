@@ -308,6 +308,35 @@ input[type="text"] {
 .wifi-item:hover { background: rgba(255,255,255,0.03); }
 .wifi-signal { color: var(--muted); font-size: 0.85rem; }
 
+.bt-pair-block {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border, #2a2d3a);
+}
+.bt-pair-title {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.bt-device-list { margin-top: 0.75rem; }
+.bt-device-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #2a2d3a);
+  border-radius: 8px;
+  margin-bottom: 0.5rem;
+  background: var(--bg);
+}
+.bt-device-meta { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.bt-device-name { font-weight: 600; word-break: break-word; }
+.bt-device-addr { font-size: 0.8rem; color: var(--muted); font-family: ui-monospace, monospace; }
+.bt-device-badges { font-size: 0.8rem; color: var(--muted); }
+.bt-device-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
 .network-status-badge {
   display: inline-block;
   margin: 0 0 1rem;

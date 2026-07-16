@@ -1007,7 +1007,9 @@ async function refreshAudioDevices() {
     if (!data.devices || !data.devices.length) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = t("audioDeviceEmpty");
+      opt.textContent = data.bluetooth_available === false
+        ? t("audioDeviceEmpty")
+        : t("audioDeviceEmptyBt");
       select.appendChild(opt);
       select.disabled = true;
       return;
@@ -1059,6 +1061,174 @@ document.getElementById("btn-audio-apply").addEventListener("click", async () =>
     msg.className = "msg err";
   } finally {
     btn.disabled = false;
+  }
+});
+
+// --- Bluetooth pairing wizard ---
+function showBtMsg(text, isError, isOk) {
+  const el = document.getElementById("bt-pair-msg");
+  if (!el) return;
+  el.textContent = text;
+  el.className = "msg " + (isError ? "err" : isOk ? "ok" : "");
+  el.classList.remove("hidden");
+}
+
+function btDeviceBadges(dev) {
+  const parts = [];
+  if (dev.connected) parts.push(t("btBadgeConnected"));
+  else if (dev.paired) parts.push(t("btBadgePaired"));
+  if (dev.trusted) parts.push(t("btBadgeTrusted"));
+  return parts.join(" · ");
+}
+
+function renderBluetoothDevices(devices) {
+  const list = document.getElementById("bt-device-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!devices || !devices.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = t("btNoDevices");
+    list.appendChild(empty);
+    return;
+  }
+  devices.forEach((dev) => {
+    const row = document.createElement("div");
+    row.className = "bt-device-item";
+    const meta = document.createElement("div");
+    meta.className = "bt-device-meta";
+    meta.innerHTML = `
+      <span class="bt-device-name">${escapeHtml(dev.name || dev.address)}</span>
+      <span class="bt-device-addr">${escapeHtml(dev.address || "")}</span>
+      <span class="bt-device-badges">${escapeHtml(btDeviceBadges(dev))}</span>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "bt-device-actions";
+
+    if (!dev.connected) {
+      const pairBtn = document.createElement("button");
+      pairBtn.type = "button";
+      pairBtn.className = "btn btn-primary";
+      pairBtn.textContent = t("btPairConnect");
+      pairBtn.addEventListener("click", () => pairBluetoothDevice(dev.address, pairBtn));
+      actions.appendChild(pairBtn);
+    }
+    if (dev.connected) {
+      const discBtn = document.createElement("button");
+      discBtn.type = "button";
+      discBtn.className = "btn btn-secondary";
+      discBtn.textContent = t("btDisconnect");
+      discBtn.addEventListener("click", () => disconnectBluetoothDevice(dev.address, discBtn));
+      actions.appendChild(discBtn);
+    }
+    if (dev.paired || dev.trusted) {
+      const remBtn = document.createElement("button");
+      remBtn.type = "button";
+      remBtn.className = "btn btn-secondary";
+      remBtn.textContent = t("btRemove");
+      remBtn.addEventListener("click", () => removeBluetoothDevice(dev.address, remBtn));
+      actions.appendChild(remBtn);
+    }
+
+    row.appendChild(meta);
+    row.appendChild(actions);
+    list.appendChild(row);
+  });
+}
+
+async function pairBluetoothDevice(address, btn) {
+  if (btn) btn.disabled = true;
+  showBtMsg(t("btPairing"), false);
+  try {
+    const res = await api("/api/bluetooth/pair", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    });
+    showBtMsg(res.message || t("btPairOk"), false, true);
+    await refreshAudioDevices();
+    await loadPairedBluetoothDevices({ quiet: true });
+  } catch (err) {
+    showBtMsg(err.message, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function disconnectBluetoothDevice(address, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api("/api/bluetooth/disconnect", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    });
+    showBtMsg(res.message || t("btDisconnectOk"), false, true);
+    await refreshAudioDevices();
+    await loadPairedBluetoothDevices({ quiet: true });
+  } catch (err) {
+    showBtMsg(err.message, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function removeBluetoothDevice(address, btn) {
+  if (!confirm(t("btRemoveConfirm"))) return;
+  if (btn) btn.disabled = true;
+  try {
+    const res = await api("/api/bluetooth/remove", {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    });
+    showBtMsg(res.message || t("btRemoveOk"), false, true);
+    await refreshAudioDevices();
+    await loadPairedBluetoothDevices({ quiet: true });
+  } catch (err) {
+    showBtMsg(err.message, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function loadPairedBluetoothDevices(opts = {}) {
+  const quiet = !!opts.quiet;
+  try {
+    const status = await api("/api/bluetooth/status");
+    renderBluetoothDevices(status.devices || []);
+    if (quiet) return;
+    if (!status.bluetoothctl) {
+      showBtMsg(t("btNoBluetoothctl"), true);
+    } else if (!status.adapter_ok && !(status.devices || []).length) {
+      showBtMsg(status.adapter_detail || t("btAdapterFail"), true);
+    }
+  } catch (err) {
+    if (!quiet) showBtMsg(err.message, true);
+  }
+}
+
+document.getElementById("btn-bt-scan")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-bt-scan");
+  if (btn) btn.disabled = true;
+  showBtMsg(t("btScanning"), false);
+  try {
+    const res = await api("/api/bluetooth/scan", {
+      method: "POST",
+      body: JSON.stringify({ duration_sec: 12 }),
+    });
+    renderBluetoothDevices(res.devices || []);
+    showBtMsg(t("btScanDone", { count: (res.devices || []).length }), false, true);
+  } catch (err) {
+    showBtMsg(err.message, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
+
+document.getElementById("btn-bt-refresh-paired")?.addEventListener("click", async () => {
+  showBtMsg(t("btLoadingPaired"), false);
+  await loadPairedBluetoothDevices();
+  const el = document.getElementById("bt-pair-msg");
+  if (el && !el.classList.contains("err")) {
+    showBtMsg(t("btPairedLoaded"), false, true);
   }
 });
 
@@ -1687,6 +1857,7 @@ function refreshAll() {
   if (onDashboard) {
     void refreshStatus().then(() => refreshSoundfonts());
     refreshAudioDevices();
+    void loadPairedBluetoothDevices({ quiet: true });
     refreshSynthSettings();
     refreshMidiSettings();
   }

@@ -154,6 +154,23 @@ sudo tabloza-test
 4. FluidSynth attivo: `systemctl status tabloza-orchestrator`
 5. Log FluidSynth: `journalctl -u tabloza-orchestrator -n 50`
 
+### Bluetooth non compare / nessun suono
+
+1. Nel pannello: **Uscita audio → Bluetooth → 1. Avvia scansione** (cuffie in pairing), poi **2. Accoppia e collega**
+2. Seleziona `Bluetooth — …` nell’elenco uscite → **Applica uscita**
+3. Verifica sink: `pactl list short sinks | grep -i bluez`
+4. Se manca `pactl`/`bluetoothctl`: `sudo apt install pipewire-pulse pulseaudio-utils bluez` poi `sudo tabloza-update`
+5. Latenza elevata è normale su A2DP — per live usa jack/USB/HDMI
+
+Alternativa da SSH (senza pannello):
+
+```bash
+sudo bluetoothctl
+power on
+scan on
+# … pair / trust / connect …
+```
+
 ### Audio scattante
 
 - Usa Pi 4 o 5 (Pi 3 ha limitazioni)

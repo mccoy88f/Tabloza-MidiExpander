@@ -146,6 +146,8 @@ def merge_fluidsynth_config(stored: dict | None) -> dict:
     merged["chorus_effect"] = merge_chorus_effect(merged.get("chorus_effect"))
     if merged.get("audio_preset") not in AUDIO_PRESETS:
         merged["audio_preset"] = DEFAULT_AUDIO_PRESET
+    driver = str(merged.get("audio_driver") or "alsa").strip().lower()
+    merged["audio_driver"] = driver if driver in ("alsa", "pulse") else "alsa"
     return merged
 
 

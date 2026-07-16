@@ -12,7 +12,7 @@ The project originated as support for [www.tabloza.live](https://www.tabloza.liv
 
 Tabloza MidiExpander is a **standalone MIDI synthesizer** built on Raspberry Pi. The device runs **headless** (no screen, no buttons): everything is controlled from a browser (smartphone or PC) via a responsive web interface.
 
-It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Windows) and, in parallel, from a **USB‑MIDI dongle** plugged into the Pi. Audio uses **FluidSynth** and SoundFont (`.sf2`) files, with configurable output (jack, USB, HDMI).
+It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Windows) and, in parallel, from a **USB‑MIDI dongle** plugged into the Pi. Audio uses **FluidSynth** and SoundFont (`.sf2`) files, with configurable output (jack, USB, HDMI, optional Bluetooth).
 
 > **Future development:** **GPIO MIDI** input (DIN port on UART GPIO 14/15 + optoisolator) — not implemented yet. See [docs/TODO.md](docs/TODO.md).
 
@@ -24,7 +24,7 @@ It receives MIDI over **network RTP-MIDI** (compatible with iOS, macOS, and Wind
 | **Synth engine** | Audio buffer presets (default **Stable**), polyphony, reverb, chorus, dynamic SF2 loading |
 | **MIDI settings** | Bank modes GM/GS/XG/MMA (default GS), RTP anti-jitter buffer, hardware-like **SysEx auto** |
 | **MIDI gateway** | ALSA port `Tabloza Buffer`: RTP buffer (~25 ms) + SysEx interception toward FluidSynth |
-| **Audio output** | ALSA device selection (built-in jack, USB, HDMI) with volume in percent |
+| **Audio output** | Device selection (jack, USB, HDMI, Bluetooth listening) with volume in percent |
 | **RTP-MIDI** | Discoverable as `tabloza-me.local` (rtpmidid + Avahi) |
 | **USB MIDI** | USB‑MIDI dongle/interface on the Pi, auto-routed in parallel with network MIDI |
 | **Web panel** | Responsive bilingual UI (IT/EN), collapsible sections |
@@ -47,7 +47,7 @@ The UI is **bilingual** (IT/EN): use the **IT** / **EN** buttons at the top. Lan
 |---------|---------|
 | **Status** | mDNS address, per-interface IP, network mode, SF2, version, **connections**, sound/jack test, **MIDI Reset**, **Stop notes** |
 | **Audio output volume** | **0–100%** slider, auto-saved |
-| **Audio output** | ALSA playback device list; switch output (jack, USB, HDMI…) with synth restart |
+| **Audio output** | ALSA + Bluetooth device list (when paired); switch output with synth restart |
 | **Synth engine** | Audio buffer preset, polyphony, reverb, chorus, dynamic loading |
 | **MIDI settings** | Bank mode, RTP anti-jitter buffer, automatic SysEx; shows active runtime mode |
 | **SoundFont Library** | List, load, delete, upload `.sf2`, **Eject SF2** (unload from RAM) |
@@ -158,14 +158,16 @@ In addition to selecting and uploading `.sf2` files:
 
 | Control | Description |
 |---------|-------------|
-| **Audio output volume** | 0–100% on the ALSA mixer (PCM/Headphone/Master of the active device) |
-| **Device** | ALSA card for FluidSynth: jack `plughw:0,0`, USB `hw:N,0`, HDMI, etc. |
+| **Audio output volume** | 0–100% on the ALSA mixer (jack/USB/HDMI) or Pulse sink (Bluetooth) |
+| **Device** | Jack `plughw:0,0`, USB, HDMI, or **Bluetooth — …** (optional A2DP listening) |
 | **Apply output** | Change device and restart the synth |
 | **Sound test** | Test note via FluidSynth (checks SF2 + routing) |
-| **Jack test** | Direct beep on ALSA hardware (bypasses FluidSynth) |
+| **Jack test** | Direct beep on ALSA hardware; on Bluetooth sends a MIDI test note instead |
 | **Stop notes** | Silence all notes (in **Status**, next to MIDI Reset) |
 
 USB/HDMI cards may automatically use a 48 kHz sample rate.
+
+**Bluetooth (optional listening):** use the **Bluetooth (listening)** wizard in the panel (scan + pair — useful on Pi OS Lite without a GUI), then select `Bluetooth — …` as output. Higher latency than jack/USB.
 
 ### Diagnostics
 

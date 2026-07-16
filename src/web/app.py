@@ -19,7 +19,9 @@ import alsaaudio
 from audio_utils import (  # noqa: E402
     apply_output_volume,
     card_from_audio_device,
+    current_audio_device_id,
     device_label,
+    list_all_playback_devices,
     list_playback_devices,
     play_stereo_tone,
     resolve_audio_device,
@@ -244,7 +246,8 @@ def api_status():
         "volume": config.get("volume", 100),
         "synth_gain": merge_fluidsynth_config(config.get("fluidsynth")).get("gain", 2.0),
         "audio": {
-            "device": resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0")),
+            "device": current_audio_device_id(config.get("fluidsynth")),
+            "driver": (config.get("fluidsynth") or {}).get("audio_driver", "alsa"),
             "alsa_card": int(config.get("fluidsynth", {}).get("alsa_card", 0)),
         },
         "synth_settings": synth_settings_for_api(config),
@@ -638,15 +641,19 @@ def api_synth_gain():
 @require_auth
 def api_audio_devices():
     config = load_config()
-    current = resolve_audio_device(config.get("fluidsynth", {}).get("audio_device", "plughw:0,0"))
-    devices = list_playback_devices()
+    fs = config.get("fluidsynth", {})
+    current = current_audio_device_id(fs)
+    devices = list_all_playback_devices()
     current_label = device_label(current, devices)
     if current and current not in {d["id"] for d in devices}:
         current_label = f"{current} (non rilevato)"
+    from bluetooth_audio import pulse_available
     return jsonify({
         "devices": devices,
         "current": current,
         "current_label": current_label,
+        "bluetooth_available": pulse_available(),
+        "driver": (fs.get("audio_driver") or "alsa"),
     })
 
 
@@ -654,24 +661,46 @@ def api_audio_devices():
 @require_auth
 def api_audio_select():
     from audio_utils import AUDIO_DEVICE_ID_RE
+    from bluetooth_audio import (
+        ensure_pulse_sink_ready,
+        is_pulse_device_id,
+        pulse_device_id,
+        pulse_sink_from_device_id,
+    )
 
     data = request.get_json(silent=True) or {}
     device = data.get("device", "").strip()
-    if not AUDIO_DEVICE_ID_RE.match(device):
+    if not device:
         return jsonify({"error": "Dispositivo non valido"}), 400
 
-    devices = list_playback_devices()
+    devices = list_all_playback_devices()
     match = next((d for d in devices if d["id"] == device), None)
     if devices and not match:
-        return jsonify({"error": "Dispositivo non trovato"}), 404
+        return jsonify({"error": "Dispositivo non trovato — aggiorna l'elenco"}), 404
 
     config = load_config()
-    card = card_from_audio_device(device)
-    resolved = resolve_audio_device(device)
     config.setdefault("fluidsynth", {})
-    config["fluidsynth"]["audio_device"] = resolved
-    config["fluidsynth"]["alsa_card"] = card
-    config["fluidsynth"]["sample_rate"] = sample_rate_for_device(resolved)
+
+    if is_pulse_device_id(device):
+        sink = pulse_sink_from_device_id(device)
+        ok_bt, bt_detail = ensure_pulse_sink_ready(sink)
+        if not ok_bt:
+            return jsonify({"error": bt_detail}), 400
+        config["fluidsynth"]["audio_driver"] = "pulse"
+        config["fluidsynth"]["audio_device"] = pulse_device_id(sink)
+        config["fluidsynth"]["sample_rate"] = 44100
+        resolved = pulse_device_id(sink)
+        card = int(config["fluidsynth"].get("alsa_card", 0))
+    else:
+        if not AUDIO_DEVICE_ID_RE.match(device):
+            return jsonify({"error": "Dispositivo non valido"}), 400
+        card = card_from_audio_device(device)
+        resolved = resolve_audio_device(device)
+        config["fluidsynth"]["audio_driver"] = "alsa"
+        config["fluidsynth"]["audio_device"] = resolved
+        config["fluidsynth"]["alsa_card"] = card
+        config["fluidsynth"]["sample_rate"] = sample_rate_for_device(resolved)
+
     from synth_config import merge_fluidsynth_config
     save_config({"fluidsynth": merge_fluidsynth_config(config.get("fluidsynth"))})
     config = load_config()
@@ -680,20 +709,116 @@ def api_audio_select():
         return jsonify({"error": "Orchestrator non attivo"}), 503
     if not wait_fluidsynth_midi_ready(50.0):
         return jsonify({
-            "error": "FluidSynth non ripartito con la nuova uscita — verifica dispositivo e log (HDMI richiede plughw)",
+            "error": (
+                "FluidSynth non ripartito con la nuova uscita — "
+                "per Bluetooth verifica pairing e profilo A2DP; per HDMI usa plughw"
+            ),
         }), 503
 
-    ok_alsa, alsa_detail = apply_output_volume(config.get("volume", 100), config)
+    ok_vol, vol_detail = apply_output_volume(config.get("volume", 100), config)
 
     return jsonify({
         "ok": True,
         "device": resolved,
         "label": device_label(resolved, devices),
+        "driver": config.get("fluidsynth", {}).get("audio_driver", "alsa"),
         "alsa_card": card,
-        "alsa": alsa_detail,
-        "alsa_ok": ok_alsa,
+        "alsa": vol_detail,
+        "alsa_ok": ok_vol,
         "startup_soundfont": startup_soundfont_name(config),
     })
+
+
+# --- Bluetooth pairing (Pi Lite / headless) ---
+
+@app.route("/api/bluetooth/status")
+@require_auth
+def api_bluetooth_status():
+    from bluetooth_audio import bluetooth_status
+    return jsonify(bluetooth_status())
+
+
+@app.route("/api/bluetooth/scan", methods=["POST"])
+@require_auth
+def api_bluetooth_scan():
+    from bluetooth_audio import scan_bluetooth_devices
+    data = request.get_json(silent=True) or {}
+    duration = data.get("duration_sec")
+    try:
+        devices, err = scan_bluetooth_devices(duration)
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        log_event("bluetooth", f"Scan fallito: {exc}", "error")
+        return jsonify({"error": f"Scansione Bluetooth fallita: {exc}"}), 500
+    if err:
+        return jsonify({"error": err, "devices": devices}), 500
+    log_event("bluetooth", f"Scansione: {len(devices)} dispositivi")
+    return jsonify({"ok": True, "devices": devices})
+
+
+@app.route("/api/bluetooth/pair", methods=["POST"])
+@require_auth
+def api_bluetooth_pair():
+    from bluetooth_audio import pair_bluetooth_device
+    data = request.get_json(silent=True) or {}
+    address = (data.get("address") or "").strip()
+    if not address:
+        return jsonify({"error": "Indirizzo Bluetooth richiesto"}), 400
+    ok, detail = pair_bluetooth_device(address)
+    if not ok:
+        log_event("bluetooth", f"Pair fallito {address}: {detail}", "error")
+        return jsonify({"error": detail}), 400
+    log_event("bluetooth", detail)
+    from bluetooth_audio import list_bluetooth_sinks
+    return jsonify({
+        "ok": True,
+        "message": detail,
+        "sinks": list_bluetooth_sinks(),
+    })
+
+
+@app.route("/api/bluetooth/connect", methods=["POST"])
+@require_auth
+def api_bluetooth_connect():
+    from bluetooth_audio import connect_bluetooth_device, list_bluetooth_sinks
+    data = request.get_json(silent=True) or {}
+    address = (data.get("address") or "").strip()
+    if not address:
+        return jsonify({"error": "Indirizzo Bluetooth richiesto"}), 400
+    ok, detail = connect_bluetooth_device(address)
+    if not ok:
+        return jsonify({"error": detail}), 400
+    log_event("bluetooth", detail)
+    return jsonify({"ok": True, "message": detail, "sinks": list_bluetooth_sinks()})
+
+
+@app.route("/api/bluetooth/disconnect", methods=["POST"])
+@require_auth
+def api_bluetooth_disconnect():
+    from bluetooth_audio import disconnect_bluetooth_device
+    data = request.get_json(silent=True) or {}
+    address = (data.get("address") or "").strip()
+    if not address:
+        return jsonify({"error": "Indirizzo Bluetooth richiesto"}), 400
+    ok, detail = disconnect_bluetooth_device(address)
+    if not ok:
+        return jsonify({"error": detail}), 400
+    log_event("bluetooth", detail)
+    return jsonify({"ok": True, "message": detail})
+
+
+@app.route("/api/bluetooth/remove", methods=["POST"])
+@require_auth
+def api_bluetooth_remove():
+    from bluetooth_audio import remove_bluetooth_device
+    data = request.get_json(silent=True) or {}
+    address = (data.get("address") or "").strip()
+    if not address:
+        return jsonify({"error": "Indirizzo Bluetooth richiesto"}), 400
+    ok, detail = remove_bluetooth_device(address)
+    if not ok:
+        return jsonify({"error": detail}), 400
+    log_event("bluetooth", detail)
+    return jsonify({"ok": True, "message": detail})
 
 
 # --- WiFi ---
@@ -874,11 +999,35 @@ def api_audio_test():
 @app.route("/api/audio/test-hardware", methods=["POST"])
 @require_auth
 def api_audio_test_hardware():
-    """Play a sine tone directly on the configured ALSA output (bypasses FluidSynth/MIDI)."""
-    cfg = load_config().get("fluidsynth", {})
+    """Play a sine tone on ALSA output, or a MIDI test note when on Bluetooth."""
+    config = load_config()
+    cfg = config.get("fluidsynth", {})
+    from bluetooth_audio import is_pulse_device_id
+
+    device_id = current_audio_device_id(cfg)
+    label = device_label(device_id, list_all_playback_devices())
+
+    if is_pulse_device_id(device_id) or (cfg.get("audio_driver") or "").lower() == "pulse":
+        if not trigger_orchestrator_test_note():
+            return jsonify({
+                "error": (
+                    "Uscita Bluetooth attiva — impossibile il tono ALSA diretto; "
+                    "anche la nota MIDI di test non è partita"
+                ),
+            }), 503
+        return jsonify({
+            "ok": True,
+            "message": (
+                f"Uscita Bluetooth ({label}): inviata nota di test via FluidSynth "
+                "(tono hardware ALSA non disponibile su A2DP)"
+            ),
+            "device": device_id,
+            "label": label,
+            "via": "fluidsynth",
+        })
+
     device = resolve_audio_device(cfg.get("audio_device", "plughw:0,0"))
     rate = int(cfg.get("sample_rate", sample_rate_for_device(device)))
-    label = device_label(device)
     try:
         play_stereo_tone(device, sample_rate=rate)
         return jsonify({
