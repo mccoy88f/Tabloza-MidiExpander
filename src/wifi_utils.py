@@ -9,6 +9,8 @@ import time
 from event_log import log_event
 
 HOTSPOT_CONN = "tabloza-hotspot"
+HOTSPOT_SSID = os.environ.get("TABLOZA_HOTSPOT_SSID", "Tabloza-MidiExpander")
+HOTSPOT_PASSWORD = os.environ.get("TABLOZA_HOTSPOT_PASSWORD", "tabloza1")
 WLAN_IFACE = "wlan0"
 WIFI_CONNECT_LOCK = os.environ.get("TABLOZA_WIFI_CONNECT_LOCK", "/run/tabloza/wifi-connecting")
 NM_WAIT_SEC = 90
@@ -404,6 +406,9 @@ def get_network_status() -> dict:
         "wifi_ip": wifi_ip,
         "wifi_enabled": _wifi_radio_enabled(),
         "wlan_present": _wlan_device_present(),
+        "hotspot_ssid": HOTSPOT_SSID,
+        "hotspot_password": HOTSPOT_PASSWORD,
+        "hotspot_ip": "192.168.4.1",
     }
 
 
@@ -414,20 +419,25 @@ def start_hotspot() -> tuple[bool, str | None]:
 
     with _WifiConnectLock():
         log_event("wifi", "Avvio hotspot provisioning…")
+        _run(["nmcli", "radio", "wifi", "on"], timeout=5)
         _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
+        time.sleep(1.0)
         result = _run(["nmcli", "connection", "up", HOTSPOT_CONN], timeout=30)
         if result.returncode != 0:
             result = _run([
                 "nmcli", "device", "wifi", "hotspot",
                 "ifname", WLAN_IFACE,
-                "ssid", "Tabloza-MidiExpander",
-                "password", "",
+                "ssid", HOTSPOT_SSID,
+                "password", HOTSPOT_PASSWORD,
             ], timeout=30)
         if result.returncode != 0:
             err = (result.stderr or result.stdout or "hotspot fallito").strip()
             log_event("wifi", f"Hotspot fallito: {err}", "error")
             return False, err
-        log_event("wifi", "Hotspot Tabloza-MidiExpander attivo")
+        log_event(
+            "wifi",
+            f"Hotspot {HOTSPOT_SSID} attivo (password {HOTSPOT_PASSWORD})",
+        )
         return True, None
 
 
@@ -476,6 +486,7 @@ def enable_wifi() -> tuple[bool, str | None]:
         _run(["nmcli", "device", "disconnect", WLAN_IFACE], timeout=15)
         _run(["nmcli", "device", "wifi", "rescan"], timeout=15)
         log_event("wifi", "Radio WiFi attiva")
+        # Se non c'è Ethernet, lascia al fallback monitor avviare client/hotspot
         return True, None
 
 

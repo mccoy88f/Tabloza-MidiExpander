@@ -33,6 +33,7 @@ check_carrier_transition() {
 
     if [[ "$was_on" -eq 1 && "$is_on" -eq 0 ]]; then
         log "Cavo Ethernet rimosso — avvio fallback WiFi/hotspot"
+        nmcli radio wifi on >/dev/null 2>&1 || true
         "$FALLBACK_SCRIPT" || true
     fi
 

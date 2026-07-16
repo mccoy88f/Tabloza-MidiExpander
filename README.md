@@ -64,7 +64,7 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 | **Ethernet** | Solo cavo LAN al router |
 | **WiFi (*nome rete*)** | Solo WiFi client |
 | **Ethernet + WiFi (*nome rete*)** | Cavo e WiFi client attivi insieme |
-| **Hotspot** | Pi emette `Tabloza-MidiExpander` (es. primo avvio o senza rete) |
+| **Hotspot** | Pi emette `Tabloza-MidiExpander` (password `tabloza1`) → `http://192.168.4.1` |
 | **Link LAN diretto** | Cavo diretto Pi ↔ computer, Pi @ `192.168.5.1` |
 | **Offline** | Nessuna connessione utile |
 
@@ -72,7 +72,7 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 
 **Ethernet con router:** il Pi tenta prima il DHCP normale. Se il cavo è collegato ma non arriva IP entro ~25 s (es. link diretto a un computer), passa automaticamente al **link LAN diretto** (`192.168.5.1`, DHCP sul cavo). Puoi forzare avvio/stop dal pannello.
 
-**Hotspot:** parte automaticamente se non c’è Ethernet né WiFi configurato; puoi avviarlo/fermarlo manualmente quando non sei su LAN router. Con cavo al router, l’hotspot resta opzionale (utile per configurare da smartphone).
+**Hotspot:** parte automaticamente se non c’è Ethernet né WiFi raggiungibile; password WPA2 `tabloza1`, pannello su `http://192.168.4.1`. Se hai già una rete WiFi salvata e in copertura, staccando il cavo il Pi si collega a quella (non apre l’hotspot). Con cavo al router, l’hotspot resta opzionale dal pannello.
 
 **WiFi client:** scan reti, password, profilo salvato in NetworkManager. Con Ethernet attiva puoi aggiungere anche il WiFi (dual-homed). Da **Rete → Disattiva WiFi** spegni la radio (utile con cavo Ethernet o link LAN diretto).
 

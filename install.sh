@@ -13,6 +13,7 @@ DEFAULT_PASSWORD="tabloza"
 HOSTNAME="tabloza-me"
 HOTSPOT_SSID="Tabloza-MidiExpander"
 HOTSPOT_IP="192.168.4.1"
+HOTSPOT_PASSWORD="tabloza1"
 SECRET_FILE="${DATA_DIR}/secret.key"
 
 log()  { echo -e "\033[1;32m[Tabloza]\033[0m $*"; }
@@ -237,7 +238,7 @@ warn "Vedi docs/TODO.md — per ora solo RTP-MIDI (rtpmidid)."
 
 # --- NetworkManager hotspot fallback ---
 log "Configurazione WiFi hotspot fallback..."
-bash "${INSTALL_DIR}/scripts/configure-network.sh" "${HOTSPOT_SSID}" "${HOTSPOT_IP}"
+bash "${INSTALL_DIR}/scripts/configure-network.sh" "${HOTSPOT_SSID}" "${HOTSPOT_IP}" "${HOTSPOT_PASSWORD}"
 
 # --- Permessi audio real-time ---
 log "Configurazione priorità audio real-time..."
@@ -303,7 +304,8 @@ log "  Web UI:    http://${HOSTNAME}.local"
 log "  WSS MIDI:  wss://${HOSTNAME}.local:8765  (setup: https://${HOSTNAME}.local:8765/setup)"
 log "  mDNS:      ${HOSTNAME}.local"
 log "  Hotspot:   ${HOTSPOT_SSID} → http://${HOTSPOT_IP}"
-log "  Password:  ${DEFAULT_PASSWORD}"
+log "  Hotspot PW: ${HOTSPOT_PASSWORD}"
+log "  Web login: ${DEFAULT_PASSWORD}"
 log ""
 log "  Riavvia con: sudo reboot"
 log "  Test:       sudo tabloza-test"

@@ -49,6 +49,8 @@ while true; do
     fi
 
     if ! is_wlan_connected; then
+        # Se la radio era spenta dal pannello, riaccendila prima del fallback
+        nmcli radio wifi on >/dev/null 2>&1 || true
         log "WiFi disconnesso — tentativo riconnessione o hotspot"
         "$FALLBACK_SCRIPT" || true
     fi

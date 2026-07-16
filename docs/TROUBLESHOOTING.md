@@ -166,10 +166,17 @@ sudo tabloza-test
 
 ### Hotspot non si attiva
 
-1. `systemctl status tabloza-wifi`
-2. Log: `journalctl -u tabloza-wifi -f`
-3. Verifica profilo: `nmcli connection show tabloza-hotspot`
-4. Riavvia NetworkManager: `sudo systemctl restart NetworkManager tabloza-wifi`
+1. `systemctl status tabloza-wifi tabloza-lan`
+2. Log: `journalctl -u tabloza-wifi -u tabloza-lan -n 50 --no-pager`
+3. Verifica radio: `nmcli radio` (deve essere `WIFI: enabled`)
+4. Verifica profilo: `nmcli connection show tabloza-hotspot`
+5. Avvio manuale: `sudo nmcli connection up tabloza-hotspot`
+6. Riavvia: `sudo systemctl restart NetworkManager tabloza-wifi tabloza-lan`
+
+**Note (v2.5.8+):**
+- SSID: `Tabloza-MidiExpander` — password WPA2: **`tabloza1`** → pannello `http://192.168.4.1`
+- Se hai già una rete WiFi salvata e in copertura, staccando il cavo LAN il Pi **si collega a quella rete** (non apre l’hotspot)
+- Se dal pannello hai premuto **Disattiva WiFi**, la radio resta spenta: riattivala o aggiorna a v2.5.8+ (il fallback la riaccende da solo)
 
 ### WiFi si disconnette
 
