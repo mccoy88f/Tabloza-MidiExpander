@@ -138,7 +138,20 @@ def _read_temperature_c() -> float | None:
 
 def fluidsynth_rss_mb() -> int | None:
     """Resident memory (RSS) of the FluidSynth process, in MB."""
-    return _process_rss_mb("fluidsynth")
+    rss = _process_rss_mb("fluidsynth")
+    if rss is not None:
+        return rss
+    # Fallback se il nome processo non matcha esattamente -x
+    return _process_rss_mb("fluidsynth", match_pattern="/usr/bin/fluidsynth")
+
+
+def mem_available_mb() -> float | None:
+    """MemAvailable di sistema in MB (scende mentre il kernel/cache carica l'SF2)."""
+    mem = _read_meminfo_kb()
+    avail_kb = mem.get("MemAvailable", mem.get("MemFree"))
+    if avail_kb is None:
+        return None
+    return round(avail_kb / 1024, 1)
 
 
 def get_memory_stats(soundfonts_dir: Path | None = None) -> dict:

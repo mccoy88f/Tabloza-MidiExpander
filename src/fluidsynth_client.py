@@ -36,6 +36,7 @@ def _default_state() -> dict:
         "load_progress": None,
         "load_ram_baseline_mb": None,
         "load_expected_mb": None,
+        "load_mem_available_baseline_mb": None,
     }
 
 
@@ -266,22 +267,65 @@ def _file_size_mb(path: Path) -> float:
         return 0.0
 
 
-def estimate_sf2_load_progress(baseline_mb: float, expected_mb: float) -> int:
-    """Estimate SF2 load % from FluidSynth RSS growth vs file size (capped at 99)."""
+def estimate_sf2_load_progress(
+    baseline_mb: float,
+    expected_mb: float,
+    *,
+    baseline_available_mb: float | None = None,
+    started_at: float | None = None,
+    timeout_sec: float | None = None,
+) -> int:
+    """Stima % caricamento SF2 (max 99).
+
+    Combina:
+    - crescita RSS FluidSynth
+    - calo MemAvailable di sistema (spesso scende prima della RSS, es. cache file)
+    - avanzamento temporale (evita di restare a 0% se la RSS non si muove)
+    """
     if expected_mb <= 0:
         return 0
-    from system_stats import fluidsynth_rss_mb
 
-    current = fluidsynth_rss_mb()
-    if current is None:
+    from system_stats import fluidsynth_rss_mb, mem_available_mb
+
+    candidates: list[int] = []
+
+    current_rss = fluidsynth_rss_mb()
+    if current_rss is not None:
+        rss_delta = max(0.0, float(current_rss) - float(baseline_mb))
+        candidates.append(int(100.0 * rss_delta / expected_mb))
+
+    if baseline_available_mb is not None:
+        avail = mem_available_mb()
+        if avail is not None:
+            avail_delta = max(0.0, float(baseline_available_mb) - float(avail))
+            candidates.append(int(100.0 * avail_delta / expected_mb))
+
+    if started_at is not None:
+        elapsed = max(0.0, time.time() - float(started_at))
+        # Durata tipica < timeout massimo; stima conservativa dal peso file.
+        est = max(8.0, min(float(timeout_sec or 120.0) * 0.55, 12.0 + expected_mb * 0.4))
+        candidates.append(int(100.0 * elapsed / est))
+
+    if not candidates:
         return 0
-    delta = max(0.0, float(current) - baseline_mb)
-    pct = int(100.0 * delta / expected_mb)
-    return min(99, max(0, pct))
+    return min(99, max(0, max(candidates)))
 
 
-def _update_load_progress_from_ram(baseline_mb: float, expected_mb: float) -> int:
-    progress = estimate_sf2_load_progress(baseline_mb, expected_mb)
+def _update_load_progress_from_ram(
+    baseline_mb: float,
+    expected_mb: float,
+    *,
+    baseline_available_mb: float | None = None,
+    started_at: float | None = None,
+    timeout_sec: float | None = None,
+) -> int:
+    progress = estimate_sf2_load_progress(
+        baseline_mb,
+        expected_mb,
+        baseline_available_mb=baseline_available_mb,
+        started_at=started_at,
+        timeout_sec=timeout_sec,
+    )
     write_soundfont_state(load_progress=progress)
     return progress
 
@@ -291,6 +335,7 @@ def _clear_load_progress_fields() -> dict:
         "load_progress": None,
         "load_ram_baseline_mb": None,
         "load_expected_mb": None,
+        "load_mem_available_baseline_mb": None,
     }
 
 
@@ -302,6 +347,9 @@ def _wait_for_load_completion(
     *,
     ram_baseline_mb: float = 0.0,
     ram_expected_mb: float = 0.0,
+    mem_available_baseline_mb: float | None = None,
+    started_at: float | None = None,
+    timeout_sec: float | None = None,
 ) -> tuple[bool, str | None]:
     """Wait until FluidSynth finishes processing `load` or deadline expires."""
     saw_log_activity = False
@@ -314,7 +362,13 @@ def _wait_for_load_completion(
             return False, "FluidSynth terminato durante il caricamento SF2"
 
         if ram_expected_mb > 0:
-            _update_load_progress_from_ram(ram_baseline_mb, ram_expected_mb)
+            _update_load_progress_from_ram(
+                ram_baseline_mb,
+                ram_expected_mb,
+                baseline_available_mb=mem_available_baseline_mb,
+                started_at=started_at,
+                timeout_sec=timeout_sec,
+            )
 
         chunk = _read_fluidsynth_log_since(log_offset)
         err = parse_load_error_from_log(chunk)
@@ -351,21 +405,33 @@ def load_soundfont(
     if detail == "cancelled":
         return False, "cancelled"
 
-    from system_stats import fluidsynth_rss_mb
+    from system_stats import fluidsynth_rss_mb, mem_available_mb
 
+    # Breve pausa: dopo unload la RSS può ancora scendere.
+    time.sleep(0.35)
     baseline_mb = float(fluidsynth_rss_mb() or 0)
+    baseline_available_mb = mem_available_mb()
     expected_mb = _file_size_mb(path)
+    started_at = time.time()
     write_soundfont_state(
         load_progress=0,
         load_ram_baseline_mb=round(baseline_mb, 1),
         load_expected_mb=round(expected_mb, 1),
+        load_mem_available_baseline_mb=(
+            round(baseline_available_mb, 1) if baseline_available_mb is not None else None
+        ),
     )
 
     wait_sec = load_timeout_for(path)
     log_offset = _log_file_size()
     log.info(
-        "Caricamento SF2 %s (verifica fino a %.0fs, baseline RAM %.0f MB, file %.0f MB)",
-        path.name, wait_sec, baseline_mb, expected_mb,
+        "Caricamento SF2 %s (verifica fino a %.0fs, baseline RAM %.0f MB, "
+        "MemAvailable %.0f MB, file %.0f MB)",
+        path.name,
+        wait_sec,
+        baseline_mb,
+        baseline_available_mb or 0,
+        expected_mb,
     )
     ok, detail = send_command(f"load {shlex.quote(str(path))} reset")
     if not ok:
@@ -384,6 +450,9 @@ def load_soundfont(
         should_cancel=should_cancel,
         ram_baseline_mb=baseline_mb,
         ram_expected_mb=expected_mb,
+        mem_available_baseline_mb=baseline_available_mb,
+        started_at=started_at,
+        timeout_sec=wait_sec,
     )
     if not completed:
         write_soundfont_state(**_clear_load_progress_fields())
@@ -403,7 +472,13 @@ def load_soundfont(
             return False, "FluidSynth terminato dopo il caricamento SF2"
 
         if expected_mb > 0:
-            _update_load_progress_from_ram(baseline_mb, expected_mb)
+            _update_load_progress_from_ram(
+                baseline_mb,
+                expected_mb,
+                baseline_available_mb=baseline_available_mb,
+                started_at=started_at,
+                timeout_sec=wait_sec,
+            )
 
         chunk = _read_fluidsynth_log_since(log_offset)
         err = parse_load_error_from_log(chunk)

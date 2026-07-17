@@ -4,6 +4,7 @@
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -387,24 +388,56 @@ class TestMidiSysexMode(unittest.TestCase):
 
 
 class TestSf2LoadProgress(unittest.TestCase):
+    @patch("system_stats.mem_available_mb", return_value=1800)
     @patch("system_stats.fluidsynth_rss_mb", return_value=150)
-    def test_estimate_progress_from_ram(self, _rss):
+    def test_estimate_progress_from_ram(self, _rss, _avail):
         from fluidsynth_client import estimate_sf2_load_progress
 
         self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 25)
         self.assertEqual(estimate_sf2_load_progress(100.0, 100.0), 50)
 
+    @patch("system_stats.mem_available_mb", return_value=1800)
     @patch("system_stats.fluidsynth_rss_mb", return_value=500)
-    def test_estimate_progress_caps_at_99(self, _rss):
+    def test_estimate_progress_caps_at_99(self, _rss, _avail):
         from fluidsynth_client import estimate_sf2_load_progress
 
         self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 99)
 
+    @patch("system_stats.mem_available_mb", return_value=None)
     @patch("system_stats.fluidsynth_rss_mb", return_value=None)
-    def test_estimate_progress_without_rss(self, _rss):
+    def test_estimate_progress_without_rss(self, _rss, _avail):
         from fluidsynth_client import estimate_sf2_load_progress
 
         self.assertEqual(estimate_sf2_load_progress(100.0, 200.0), 0)
+
+    @patch("system_stats.mem_available_mb", return_value=1500)
+    @patch("system_stats.fluidsynth_rss_mb", return_value=50)
+    def test_estimate_progress_uses_mem_available_drop(self, _rss, _avail):
+        from fluidsynth_client import estimate_sf2_load_progress
+
+        # RSS flat (50-50=0) but MemAvailable dropped 200 MB → 40%
+        pct = estimate_sf2_load_progress(
+            50.0,
+            500.0,
+            baseline_available_mb=1700.0,
+        )
+        self.assertEqual(pct, 40)
+
+    @patch("system_stats.mem_available_mb", return_value=2000)
+    @patch("system_stats.fluidsynth_rss_mb", return_value=50)
+    def test_estimate_progress_time_fallback(self, _rss, _avail):
+        from fluidsynth_client import estimate_sf2_load_progress
+
+        started = time.time() - 20.0
+        pct = estimate_sf2_load_progress(
+            50.0,
+            500.0,
+            baseline_available_mb=2000.0,
+            started_at=started,
+            timeout_sec=120.0,
+        )
+        self.assertGreaterEqual(pct, 1)
+        self.assertLessEqual(pct, 99)
 
 
 class TestRtmidiCompat(unittest.TestCase):

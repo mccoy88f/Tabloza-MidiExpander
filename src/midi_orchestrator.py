@@ -467,6 +467,7 @@ def _eject_soundfont_state() -> bool:
     write_soundfont_state(
         selected="", loaded="", loading=False, error=None, load_started_at=None,
         load_progress=None, load_ram_baseline_mb=None, load_expected_mb=None,
+        load_mem_available_baseline_mb=None,
     )
     if ok:
         log.info("SoundFont espulso (reset synth)")
