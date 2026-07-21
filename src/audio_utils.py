@@ -346,8 +346,11 @@ def apply_output_volume(volume: int, config: dict) -> tuple[bool, str]:
         from bluetooth_audio import pulse_sink_from_device_id, set_pulse_sink_volume
         sink = pulse_sink_from_device_id(fs_cfg.get("audio_device", ""))
         return set_pulse_sink_volume(sink, volume)
+    # Card dal device attivo (non alsa_card stale da un'uscita precedente).
+    device = str(fs_cfg.get("audio_device") or FALLBACK_AUDIO_DEVICE)
+    card = card_from_audio_device(device)
     return set_alsa_output_volume(
         volume,
-        card=int(fs_cfg.get("alsa_card", 0)),
+        card=card,
         control=fs_cfg.get("alsa_mixer_control"),
     )
