@@ -747,13 +747,44 @@ card 2: vc4hdmi1 [vc4-hdmi-1], device 0: MAI PCM i2s-hifi-0 [MAI PCM i2s-hifi-0]
         self.assertFalse(ok)
         self.assertIn("No such device", err or "")
 
-    @patch("audio_utils.probe_playback_device", return_value=(False, "busy"))
-    def test_apply_audio_fallback_if_needed(self, _probe):
+    @patch("audio_utils.time.sleep")
+    @patch("audio_utils.audio_device_available")
+    def test_apply_audio_fallback_session_only(self, mock_avail, _sleep):
+        # Preferito non pronto, jack sì → fallback solo in memoria.
+        mock_avail.side_effect = lambda d: d == "plughw:0,0"
+        config = {"fluidsynth": {"audio_device": "plughw:1,0", "alsa_card": 1}}
+        updated, changed, msg = apply_audio_fallback_if_needed(config)
+        self.assertTrue(changed)
+        self.assertEqual(updated["fluidsynth"]["audio_device"], "plughw:0,0")
+        self.assertEqual(config["fluidsynth"]["audio_device"], "plughw:1,0")
+        self.assertIn("preferenza conservata", msg)
+
+    @patch("audio_utils.time.sleep")
+    @patch("audio_utils.audio_device_available", return_value=False)
+    def test_apply_audio_fallback_both_unavailable(self, _avail, _sleep):
         config = {"fluidsynth": {"audio_device": "plughw:2,0", "alsa_card": 2}}
         updated, changed, msg = apply_audio_fallback_if_needed(config)
         self.assertFalse(changed)
         self.assertEqual(updated, config)
+        self.assertIn("non disponibile", msg)
+
+    @patch("audio_utils.time.sleep")
+    @patch("audio_utils.audio_device_available")
+    def test_apply_audio_fallback_waits_then_ok(self, mock_avail, mock_sleep):
+        # HDMI pronto al 3° tentativo: niente fallback.
+        calls = {"n": 0}
+
+        def avail(device):
+            calls["n"] += 1
+            return calls["n"] >= 3
+
+        mock_avail.side_effect = avail
+        config = {"fluidsynth": {"audio_device": "plughw:1,0", "alsa_card": 1}}
+        updated, changed, msg = apply_audio_fallback_if_needed(config)
+        self.assertFalse(changed)
+        self.assertEqual(updated, config)
         self.assertEqual(msg, "")
+        self.assertEqual(mock_sleep.call_count, 2)
 
     @patch("bluetooth_audio.list_bluetooth_sinks")
     @patch("audio_utils.list_playback_devices")

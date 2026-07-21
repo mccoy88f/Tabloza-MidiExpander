@@ -5,6 +5,7 @@ import math
 import re
 import struct
 import subprocess
+import time
 
 import alsaaudio
 
@@ -16,6 +17,9 @@ APLAY_PLAYBACK_RE = re.compile(
     r"^card (\d+): (.+?), device (\d+): (.+)$",
 )
 FALLBACK_AUDIO_DEVICE = "plughw:0,0"
+# HDMI/USB a volte non sono pronti subito al boot: ritenta prima del fallback.
+AUDIO_DEVICE_READY_ATTEMPTS = 6
+AUDIO_DEVICE_READY_DELAY_SEC = 1.0
 
 
 def card_from_audio_device(device: str) -> int:
@@ -211,17 +215,33 @@ def audio_device_available(device: str) -> bool:
     return ok
 
 
-def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
-    """Se l'uscita scelta non si apre (es. HDMI senza monitor), passa al jack."""
-    from tabloza_common import save_config
+def wait_audio_device_ready(
+    device: str,
+    attempts: int = AUDIO_DEVICE_READY_ATTEMPTS,
+    delay_sec: float = AUDIO_DEVICE_READY_DELAY_SEC,
+) -> bool:
+    """Attende che il device ALSA si apra (utile per HDMI al boot)."""
+    for attempt in range(max(1, attempts)):
+        if audio_device_available(device):
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(max(0.0, delay_sec))
+    return False
 
+
+def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
+    """Se l'uscita scelta non si apre, usa il jack solo per questa sessione.
+
+    Non sovrascrive la preferenza salvata: al riavvio (o quando HDMI è pronto)
+    si riparte dall'uscita scelta dall'utente.
+    """
     fs = dict(config.get("fluidsynth") or {})
     driver = (fs.get("audio_driver") or "alsa").strip().lower()
     if driver != "alsa":
         return config, False, ""
 
     device = str(fs.get("audio_device") or FALLBACK_AUDIO_DEVICE)
-    if audio_device_available(device):
+    if wait_audio_device_ready(device):
         return config, False, ""
 
     if device == FALLBACK_AUDIO_DEVICE or not audio_device_available(FALLBACK_AUDIO_DEVICE):
@@ -229,15 +249,13 @@ def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
             f"Uscita audio non disponibile: {device}"
         )
 
+    # Solo in memoria: la scelta utente resta in config.json.
     fs["audio_device"] = FALLBACK_AUDIO_DEVICE
     fs["alsa_card"] = card_from_audio_device(FALLBACK_AUDIO_DEVICE)
     config = {**config, "fluidsynth": fs}
-    try:
-        save_config({"fluidsynth": fs})
-    except OSError:
-        pass
     msg = (
-        f"Uscita {device} non disponibile — fallback a {FALLBACK_AUDIO_DEVICE}"
+        f"Uscita {device} non ancora pronta — avvio temporaneo su "
+        f"{FALLBACK_AUDIO_DEVICE} (preferenza conservata)"
     )
     return config, True, msg
 
