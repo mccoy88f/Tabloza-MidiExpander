@@ -212,8 +212,34 @@ def audio_device_available(device: str) -> bool:
 
 
 def apply_audio_fallback_if_needed(config: dict) -> tuple[dict, bool, str]:
-    """Keep the user-selected output; FluidSynth retry backoff handles transient failures."""
-    return config, False, ""
+    """Se l'uscita scelta non si apre (es. HDMI senza monitor), passa al jack."""
+    from tabloza_common import save_config
+
+    fs = dict(config.get("fluidsynth") or {})
+    driver = (fs.get("audio_driver") or "alsa").strip().lower()
+    if driver != "alsa":
+        return config, False, ""
+
+    device = str(fs.get("audio_device") or FALLBACK_AUDIO_DEVICE)
+    if audio_device_available(device):
+        return config, False, ""
+
+    if device == FALLBACK_AUDIO_DEVICE or not audio_device_available(FALLBACK_AUDIO_DEVICE):
+        return config, False, (
+            f"Uscita audio non disponibile: {device}"
+        )
+
+    fs["audio_device"] = FALLBACK_AUDIO_DEVICE
+    fs["alsa_card"] = card_from_audio_device(FALLBACK_AUDIO_DEVICE)
+    config = {**config, "fluidsynth": fs}
+    try:
+        save_config({"fluidsynth": fs})
+    except OSError:
+        pass
+    msg = (
+        f"Uscita {device} non disponibile — fallback a {FALLBACK_AUDIO_DEVICE}"
+    )
+    return config, True, msg
 
 
 def _open_playback_pcm(device: str, sample_rate: int, channels: int = 2) -> alsaaudio.PCM:
