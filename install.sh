@@ -81,7 +81,7 @@ apt-get update -qq || warn "apt-get update fallito — proseguo con la cache loc
 if ! apt-get install -y -qq \
     fluidsynth fluid-soundfont-gm \
     avahi-daemon avahi-utils \
-    network-manager \
+    network-manager dnsmasq-base \
     python3 python3-flask python3-bcrypt python3-venv python3-pip \
     alsa-utils \
     libasound2-dev \
@@ -92,7 +92,7 @@ if ! apt-get install -y -qq \
     apt-get install -y -qq \
         fluidsynth fluid-soundfont-gm \
         avahi-daemon avahi-utils \
-        network-manager \
+        network-manager dnsmasq-base \
         python3 python3-flask python3-bcrypt python3-venv python3-pip \
         alsa-utils \
         libasound2-dev \
@@ -188,6 +188,17 @@ for unit in nginx apache2 lighttpd; do
     systemctl disable "$unit" 2>/dev/null || true
     systemctl mask "$unit" 2>/dev/null || true
 done
+
+# NetworkManager (ipv4.method=shared, hotspot fallback) lancia da sé il binario
+# dnsmasq per servire DHCP/DNS ai client dell'AP — richiede solo dnsmasq-base
+# (installato sopra). Un dnsmasq.service di sistema già attivo occuperebbe le
+# stesse porte (53/67) e farebbe fallire silenziosamente il DHCP dell'hotspot:
+# il client si associa alla rete WiFi ma non riceve un IP valido, quindi non
+# raggiunge né l'IP (192.168.4.1) né tabloza-me.local.
+log "Disabilito eventuale dnsmasq di sistema (serve solo il binario per l'hotspot NetworkManager)..."
+systemctl stop dnsmasq 2>/dev/null || true
+systemctl disable dnsmasq 2>/dev/null || true
+systemctl mask dnsmasq 2>/dev/null || true
 
 # --- Directory dati persistenti ---
 log "Configurazione directory dati in ${DATA_DIR}..."

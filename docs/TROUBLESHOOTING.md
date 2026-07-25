@@ -211,6 +211,33 @@ scan on
 
 Il servizio `tabloza-wifi` monitora ogni 30 secondi e tenta riconnessione o hotspot automatico.
 
+### Hotspot attivo (mi connetto alla rete) ma né l'IP né tabloza-me.local aprono il pannello
+
+Causa tipica: manca `dnsmasq-base` sul Pi. NetworkManager (`ipv4.method=shared`,
+usato dal profilo `tabloza-hotspot`) delega a `dnsmasq` il DHCP/DNS per i client
+dell'AP. Senza quel binario l'hotspot si accende comunque (SSID visibile,
+associazione WiFi riuscita) ma **nessun client riceve un IP valido** sulla
+subnet `192.168.4.0/24` — il telefono resta con un IP a vuoto o auto-assegnato
+(`169.254.x.x`), quindi non ha una rotta né verso `192.168.4.1` né verso il
+nome mDNS risolto.
+
+**Verifica sul Pi** (con hotspot attivo):
+```bash
+which dnsmasq || echo "dnsmasq NON installato"
+journalctl -u NetworkManager -n 100 --no-pager | grep -i dnsmasq
+ip -4 addr show wlan0   # atteso: 192.168.4.1/24
+```
+Sul telefono, controlla l'IP assegnato nei dettagli della rete `Tabloza-MidiExpander`:
+se è `169.254.x.x` o assente, conferma il problema.
+
+**Fix (v2.5.25+):** `sudo tabloza-update` installa `dnsmasq-base` e maschera un
+eventuale `dnsmasq.service` di sistema (che altrimenti confligge sulle porte
+53/67 con l'istanza lanciata da NetworkManager per l'hotspot). Poi:
+```bash
+sudo nmcli connection down tabloza-hotspot 2>/dev/null || true
+sudo systemctl restart tabloza-wifi
+```
+
 ---
 
 ## Servizi utili
