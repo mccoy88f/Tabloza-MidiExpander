@@ -83,6 +83,7 @@ if ! apt-get install -y -qq \
     avahi-daemon avahi-utils \
     network-manager dnsmasq-base \
     python3 python3-flask python3-bcrypt python3-venv python3-pip \
+    python3-gpiozero \
     alsa-utils \
     libasound2-dev \
     openssl; then
@@ -94,6 +95,7 @@ if ! apt-get install -y -qq \
         avahi-daemon avahi-utils \
         network-manager dnsmasq-base \
         python3 python3-flask python3-bcrypt python3-venv python3-pip \
+        python3-gpiozero \
         alsa-utils \
         libasound2-dev \
         openssl \
@@ -366,10 +368,11 @@ install -m 644 "${INSTALL_DIR}/systemd/tabloza-web.service"     /etc/systemd/sys
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-wifi.service"    /etc/systemd/system/tabloza-wifi.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-lan.service"     /etc/systemd/system/tabloza-lan.service
 install -m 644 "${INSTALL_DIR}/systemd/tabloza-midi-ws.service" /etc/systemd/system/tabloza-midi-ws.service
+install -m 644 "${INSTALL_DIR}/systemd/tabloza-gpio.service"    /etc/systemd/system/tabloza-gpio.service
 
 systemctl daemon-reload
-systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
-systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
+systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws tabloza-gpio
+systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws tabloza-gpio
 
 # systemctl restart su più unit insieme a volte non fa ripartire tabloza-web
 # se un'altra unit (es. tabloza-midi-ws, arresto più lento per via del server
