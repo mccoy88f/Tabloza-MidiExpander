@@ -238,6 +238,29 @@ sudo nmcli connection down tabloza-hotspot 2>/dev/null || true
 sudo systemctl restart tabloza-wifi
 ```
 
+### Note MIDI che arrivano in ritardo "a raffica" (Tabloza Sing via WebSocket)
+
+Causa tipica: **power-save del driver WiFi** (`brcmfmac`, chip BCM4345/6 dei
+Raspberry Pi). Con il risparmio energetico attivo la radio dorme tra un beacon
+e l'altro; i pacchetti WebSocket in arrivo vengono bufferizzati dal router e
+consegnati tutti insieme al risveglio — il jitter buffer software (25 ms sul
+gateway "Tabloza Sing WS") assorbe la variazione di rete minima ma non i picchi
+di 100-200 ms del power-save, quindi le note si accumulano ed escono a raffica.
+
+**Verifica sul Pi:**
+```bash
+journalctl -k -b --no-pager | grep -i power_mgmt
+# "power save enabled" conferma la causa
+```
+
+**Fix (v2.5.26+):** ogni connessione WiFi client creata dal pannello disabilita
+il power-save (`802-11-wireless.powersave=2`, vedi `_apply_autoconnect` in
+`src/wifi_utils.py`). Per un device già configurato con una versione precedente:
+```bash
+sudo nmcli connection modify "<nome-connessione-wifi>" 802-11-wireless.powersave 2
+sudo nmcli connection up "<nome-connessione-wifi>"
+```
+
 ---
 
 ## Servizi utili

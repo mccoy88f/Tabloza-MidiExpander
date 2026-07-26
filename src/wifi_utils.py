@@ -260,6 +260,10 @@ def _apply_autoconnect(conn_name: str) -> None:
         "nmcli", "connection", "modify", conn_name,
         "connection.autoconnect", "yes",
         "connection.autoconnect-priority", "100",
+        # Il power-save del driver brcmfmac introduce burst di 100-200ms sui
+        # pacchetti in arrivo (radio sleep tra i beacon): con MIDI via WS
+        # questo si sente come note che arrivano in ritardo a raffica.
+        "802-11-wireless.powersave", "2",
     ], timeout=10)
     _run(["nmcli", "connection", "down", HOTSPOT_CONN], timeout=10)
 
