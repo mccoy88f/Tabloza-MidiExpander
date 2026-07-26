@@ -80,6 +80,7 @@ ensure_wifi_radio || true
 ACTIVE=$(nmcli -t -f NAME,TYPE connection show --active 2>/dev/null | grep ":802-11-wireless" | head -1 | cut -d: -f1 || true)
 if [[ -n "$ACTIVE" && "$ACTIVE" != "$HOTSPOT_CONN" ]]; then
     log "Connesso a: ${ACTIVE}"
+    tabloza_claim_wifi_profile || true
     exit 0
 fi
 
@@ -102,6 +103,7 @@ if [[ -n "$PROFILES" ]]; then
             if nmcli -t -f DEVICE,STATE device 2>/dev/null | grep -q '^wlan0:connected'; then
                 wait "$UP_PID" 2>/dev/null || true
                 log "Connesso a: ${profile}"
+                tabloza_claim_wifi_profile || true
                 exit 0
             fi
             sleep 1

@@ -261,6 +261,21 @@ sudo nmcli connection modify "<nome-connessione-wifi>" 802-11-wireless.powersave
 sudo nmcli connection up "<nome-connessione-wifi>"
 ```
 
+**Doppio profilo WiFi per la stessa rete (v2.5.28+):** su un device appena
+flashato può esistere già un profilo WiFi creato dall'immagine base (es.
+`netplan-wlan0-<ssid>`, da Raspberry Pi Imager/raspi-config) *oltre* a quello
+gestito da Tabloza (`tabloza-wifi-<ssid>`). Se al boot NetworkManager si
+connette prima al profilo residuo, per qualche secondo il power-save è di
+nuovo attivo (il profilo residuo non ha il fix v2.5.26) prima che Tabloza
+forzi lo switch al proprio profilo a priorità più alta.
+
+**Fix (v2.5.28+):** `tabloza_claim_wifi_profile()` in `scripts/network-common.sh`
+rinomina il profilo WiFi client attivo in `tabloza-wifi-<ssid>` (senza
+disconnettere) applicando `powersave=2`, e rimuove ogni altro profilo residuo
+per la stessa SSID. Viene chiamata da `wifi-fallback.sh` dopo ogni connessione
+riuscita e ad ogni ciclo di `wifi-monitor.sh` (ogni 30s) come rete di
+sicurezza, così resta sempre un solo profilo — quello di Tabloza.
+
 ---
 
 ## Servizi utili

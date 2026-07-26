@@ -53,5 +53,9 @@ while true; do
         nmcli radio wifi on >/dev/null 2>&1 || true
         log "WiFi disconnesso — tentativo riconnessione o hotspot"
         "$FALLBACK_SCRIPT" || true
+    else
+        # Rete di sicurezza: se NetworkManager è tornato su un profilo non
+        # gestito da Tabloza (es. dopo un riavvio o un blip di rete), lo adotta.
+        tabloza_claim_wifi_profile || true
     fi
 done
