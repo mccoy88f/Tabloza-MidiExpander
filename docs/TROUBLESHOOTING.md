@@ -142,6 +142,21 @@ sudo tabloza-test
 3. Riavvia orchestratore: `sudo systemctl restart tabloza-orchestrator`
 4. Log: `journalctl -u tabloza-orchestrator -f`
 
+### `fluidsynth.log` mostra "SysEx DT1: dropping message ... incorrect checksum"
+
+Alcuni file MIDI GS incorporano SysEx di sistema (es. Reverb/Chorus Macro,
+indirizzo `0x40 0x01 0x00`) con un byte di checksum scorretto già nel file
+sorgente — non generato da Tabloza. FluidSynth lo scarta correttamente
+perché il checksum non torna; l'effetto è solo un preset di reverb/chorus
+non applicato, non riguarda il timing delle note.
+
+**Fix (v2.5.29+):** `repair_gs_sysex_checksum()` in `src/midi_sysex_mode.py`
+ricalcola il checksum Roland GS (somma indirizzo+dati, 128 - somma mod 128)
+prima di inoltrare il messaggio a FluidSynth, così i SysEx GS con checksum
+errato nel file sorgente vengono corretti invece di scartati. Il gateway
+MIDI (`src/midi_jitter_buffer.py`, `_forward_message`) applica la
+correzione automaticamente su ogni SysEx in transito.
+
 ---
 
 ## Audio
@@ -275,6 +290,34 @@ disconnettere) applicando `powersave=2`, e rimuove ogni altro profilo residuo
 per la stessa SSID. Viene chiamata da `wifi-fallback.sh` dopo ogni connessione
 riuscita e ad ogni ciclo di `wifi-monitor.sh` (ogni 30s) come rete di
 sicurezza, così resta sempre un solo profilo — quello di Tabloza.
+
+---
+
+## Aggiornamento
+
+### Dopo `sudo tabloza-update` il pannello web non torna raggiungibile
+
+`install.sh` ferma `tabloza-web`, `tabloza-orchestrator` e `tabloza-midi-ws`
+insieme prima di reinstallare le dipendenze, poi li riavvia tutti insieme a
+fine script. Se `tabloza-midi-ws` impiega più tempo a fermarsi (chiusura
+delle connessioni WebSocket attive), il successivo `systemctl restart` su più
+unit contemporaneamente a volte non fa ripartire `tabloza-web` insieme alle
+altre.
+
+**Verifica:**
+```bash
+systemctl is-active tabloza-web tabloza-orchestrator tabloza-midi-ws
+journalctl -u tabloza-web --no-pager | grep -E 'Started|Stopped|Stopping'
+```
+Se `tabloza-web` risulta `inactive` mentre gli altri sono `active`:
+```bash
+sudo systemctl start tabloza-web
+```
+
+**Fix (v2.5.29+):** a fine `install.sh`, dopo il riavvio di tutti i servizi,
+uno script verifica esplicitamente `tabloza-web` e lo riavvia (fino a 10
+tentativi, 2s di intervallo) se non risulta attivo — l'aggiornamento non si
+considera concluso finché il pannello non è di nuovo su.
 
 ---
 

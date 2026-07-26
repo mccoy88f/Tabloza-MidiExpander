@@ -313,6 +313,9 @@ class MidiGateway:
             if not self._midi_out:
                 return
             for payload in parts:
+                if payload and payload[0] == 0xF0:
+                    from midi_sysex_mode import repair_gs_sysex_checksum
+                    payload = repair_gs_sysex_checksum(payload)
                 try:
                     self._midi_out.send_message(payload)
                     touch_midi_activity()

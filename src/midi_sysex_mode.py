@@ -135,3 +135,32 @@ def maybe_apply_sysex_bank_mode(message: tuple | list) -> bool:
         return False
     apply_runtime_bank_select(mode, reset_synth=False)
     return True
+
+
+def repair_gs_sysex_checksum(part: list[int]) -> list[int]:
+    """Ricalcola il checksum Roland GS (DT1) se non valido.
+
+    Alcuni file MIDI GS incorporano SysEx (es. Reverb/Chorus Macro) con un
+    byte di checksum scorretto; FluidSynth li scarta ("incorrect checksum").
+    Il checksum copre solo indirizzo+dati (non F0/manufacturer/device/model/
+    command né il checksum stesso): 128 - (somma % 128), mod 128.
+    """
+    if len(part) < 10 or part[0] != 0xF0:
+        return part
+    if part[1] != SYSEX_MANUF_ROLAND or part[3] != SYSEX_GS_MODEL or part[4] != SYSEX_GS_DT1:
+        return part
+    end = len(part) - 1 if part[-1] == 0xF7 else len(part)
+    checksum_idx = end - 1
+    if checksum_idx < 5:
+        return part
+    body = part[5:checksum_idx]
+    checksum = (0x80 - (sum(body) % 0x80)) % 0x80
+    if part[checksum_idx] == checksum:
+        return part
+    fixed = list(part)
+    fixed[checksum_idx] = checksum
+    log.info(
+        "SysEx GS DT1: checksum corretto 0x%02x → 0x%02x",
+        part[checksum_idx], checksum,
+    )
+    return fixed

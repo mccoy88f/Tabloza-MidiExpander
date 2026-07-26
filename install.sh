@@ -371,6 +371,17 @@ systemctl daemon-reload
 systemctl enable rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
 systemctl restart rtpmidid tabloza-orchestrator tabloza-web tabloza-wifi tabloza-lan tabloza-midi-ws
 
+# systemctl restart su più unit insieme a volte non fa ripartire tabloza-web
+# se un'altra unit (es. tabloza-midi-ws, arresto più lento per via del server
+# WebSocket) impiega più tempo a fermarsi: verifica esplicitamente e riprova.
+for _i in $(seq 1 10); do
+    systemctl is-active --quiet tabloza-web && break
+    systemctl start tabloza-web 2>/dev/null || true
+    sleep 2
+done
+systemctl is-active --quiet tabloza-web \
+    || warn "tabloza-web non risulta attivo dopo il riavvio — controlla: journalctl -u tabloza-web"
+
 # --- Permessi ---
 chown -R root:root "${INSTALL_DIR}"
 chmod -R 755 "${INSTALL_DIR}"
