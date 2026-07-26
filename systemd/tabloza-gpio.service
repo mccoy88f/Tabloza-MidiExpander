@@ -1,0 +1,18 @@
+[Unit]
+Description=Tabloza MidiExpander — pannello GPIO (LED stato + pulsanti)
+After=tabloza-orchestrator.service
+Wants=tabloza-orchestrator.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/tabloza/src/gpio_panel.py
+WorkingDirectory=/opt/tabloza/src
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/tabloza/src
+Environment=TABLOZA_DATA_DIR=/var/lib/tabloza
+SupplementaryGroups=gpio
+
+[Install]
+WantedBy=multi-user.target
