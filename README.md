@@ -35,6 +35,7 @@ Riceve note MIDI via **RTP-MIDI di rete** (compatibile con iOS, macOS e Windows)
 | **Monitor rete** | Riconnessione WiFi, fallback hotspot, gestione automatica Ethernet |
 | **Diagnostica** | RAM, CPU, disco, temperatura, console eventi e verifica aggiornamenti |
 | **MIDI Reset / Stop note** | Riavvio FluidSynth + routing; silenzia tutte le note senza riavvio |
+| **Pannello GPIO (opzionale)** | 2 LED di stato (motore pronto, SF2 caricato/attività MIDI) + 2 pulsanti fisici (All Notes Off, riavvio motore) |
 | **Sicurezza** | Login con password (default: `tabloza`) |
 
 ### Interfaccia web (UI)
@@ -176,6 +177,38 @@ Oltre a selezionare e caricare `.sf2` via upload:
 Su schede USB/HDMI il sample rate può passare automaticamente a 48 kHz.
 
 **Bluetooth (ascolto opzionale):** nel pannello, sezione **Bluetooth (ascolto)** — scansione e accoppiamento guidato (utile su Pi OS Lite senza GUI). Poi seleziona `Bluetooth — …` come uscita. Latenza tipicamente più alta rispetto a jack/USB.
+
+### Pannello GPIO (opzionale)
+
+Due LED di stato + due pulsanti fisici, utili quando il Pi è installato in un case senza accesso comodo al pannello web. **Disattivato di default** — nessun pin viene toccato finché non lo attivi.
+
+**Attivazione:** aggiungi in `/var/lib/tabloza/config.json` la sezione `gpio` (oppure modifica quella esistente):
+
+```json
+{
+  "gpio": {
+    "enabled": true,
+    "led_ready_pin": 17,
+    "led_sf2_pin": 27,
+    "btn_allnotesoff_pin": 22,
+    "btn_restart_pin": 23,
+    "active_low": false
+  }
+}
+```
+
+poi `sudo systemctl restart tabloza-gpio`. I pin sono numeri **BCM** e tutti configurabili; i default sopra non entrano in conflitto con il futuro ingresso MIDI GPIO (UART su GPIO 14/15).
+
+| Componente | Comportamento |
+|------------|----------------|
+| **LED rosso** (`led_ready_pin`) | Acceso finché FluidSynth non è pronto (processo avviato + porta MIDI ALSA attiva); spento a motore pronto — stesso criterio di "starting" mostrato in **Stato** |
+| **LED verde** (`led_sf2_pin`) | Spento senza SF2 caricato; **acceso fisso** con SF2 in memoria; **lampeggia** mentre arriva MIDI (stessa finestra di attività di 5 s usata dall'indicatore "MIDI in" del pannello web) |
+| **Pulsante 1** (`btn_allnotesoff_pin`) | All Notes Off — equivalente al pulsante **Stop note** del pannello web (reset FluidSynth, nessun riavvio) |
+| **Pulsante 2** (`btn_restart_pin`) | Riavvia il motore FluidSynth (stesso meccanismo usato dopo un cambio di uscita audio), senza toccare rtpmidid |
+
+**Cablaggio:** LED con resistenza in serie (~220–330 Ω) tra il pin GPIO e GND; pulsanti tra il pin GPIO e GND (pull-up interno abilitato via software, nessuna resistenza esterna necessaria). Imposta `active_low: true` se i LED sono cablati a logica invertita (catodo verso il pin).
+
+Il servizio gira separato dall'orchestratore audio (`tabloza-gpio.service`): un problema hardware sui pin non influisce su FluidSynth/rete/pannello web.
 
 ### Diagnostica
 
@@ -376,7 +409,7 @@ Esempio `config.json` (estratti):
 ### Servizi
 
 ```bash
-sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid
+sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan rtpmidid tabloza-gpio
 ```
 
 | Servizio | Ruolo |
@@ -386,6 +419,7 @@ sudo systemctl status tabloza-web tabloza-orchestrator tabloza-wifi tabloza-lan 
 | `tabloza-wifi` | Monitor WiFi, hotspot fallback |
 | `tabloza-lan` | Monitor Ethernet, link LAN diretto automatico |
 | `rtpmidid` | Sessione RTP-MIDI di rete |
+| `tabloza-gpio` | Pannello GPIO opzionale (LED stato + pulsanti fisici); esce subito se disattivato in config |
 
 ### Troubleshooting
 
