@@ -31,6 +31,7 @@ interface-name=wlan0
 [wifi]
 mode=ap
 ssid=${HOTSPOT_SSID}
+powersave=2
 
 [wifi-security]
 key-mgmt=wpa-psk
