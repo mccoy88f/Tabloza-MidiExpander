@@ -76,6 +76,14 @@ Il pannello rileva automaticamente la connettività e adatta i controlli disponi
 
 **WiFi client:** scan reti, password, profilo salvato in NetworkManager. Con Ethernet attiva puoi aggiungere anche il WiFi (dual-homed). Da **Rete → Disattiva WiFi** spegni la radio (utile con cavo Ethernet o link LAN diretto).
 
+**Router (Ethernet/WiFi) o link LAN diretto?** Quando possibile preferisci collegare il Pi al router (via cavo o WiFi): il pannello resta raggiungibile da qualsiasi dispositivo della rete, non solo dal computer collegato via cavo. Usa il **link LAN diretto** solo quando non hai un router a disposizione (es. in mobilità).
+
+**Link LAN diretto + computer già connesso a internet via WiFi:** il link diretto condivide (NAT) la connessione WiFi del Pi verso il computer via cavo, quindi offre anche lui un gateway di default (necessario per funzionare). Se il computer ha già una propria connessione internet (il suo WiFi), verifica che l'interfaccia WiFi abbia **priorità più alta** del cavo Ethernet — altrimenti il traffico generale del computer rischia di passare per il doppio salto computer→Pi→WiFi del Pi invece che direttamente, con internet lento o non funzionante:
+
+- **macOS:** Impostazioni di Sistema → Rete → menu **···** → *Imposta ordine dei servizi* → trascina **Wi-Fi** sopra la scheda Ethernet/USB LAN. Da terminale: `sudo networksetup -ordernetworkservices Wi-Fi "USB 10/100 LAN"` (aggiungi gli altri servizi elencati da `networksetup -listnetworkserviceorder`, nello stesso ordine, dopo i primi due).
+- **Windows:** Pannello di controllo → Rete e Internet → Centro connessioni di rete → *Modifica impostazioni scheda* → premi **Alt** per mostrare il menu → *Impostazioni avanzate…* → nell'elenco **Connessioni** sposta il Wi-Fi sopra la scheda Ethernet con le frecce su/giù.
+- **Linux (NetworkManager):** imposta una metrica di route più bassa (= priorità più alta) sul WiFi rispetto all'Ethernet: `nmcli connection modify <profilo-wifi> ipv4.route-metric 50` e `nmcli connection modify <profilo-ethernet> ipv4.route-metric 100`.
+
 ### Connessioni (MIDI + synth)
 
 | Sorgente | Stato | Note |

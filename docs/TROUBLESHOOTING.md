@@ -253,6 +253,24 @@ sudo nmcli connection down tabloza-hotspot 2>/dev/null || true
 sudo systemctl restart tabloza-wifi
 ```
 
+### Link LAN diretto attivo: il computer perde/non ha più internet
+
+Il **link LAN diretto** (`ipv4.method=shared`, vedi README § Modalità di rete)
+condivide via NAT la connessione WiFi del Pi verso il computer collegato via
+cavo — per funzionare offre quindi anche lui, via DHCP sul cavo, un gateway
+di default. Se il computer ha già una propria connessione internet (il suo
+WiFi), può capitare che il sistema operativo preferisca instradare tutto il
+traffico attraverso il cavo (doppio salto computer→Pi→WiFi del Pi) invece che
+direttamente dal proprio WiFi — con internet lento o non funzionante, anche
+se il WiFi del computer da solo va benissimo.
+
+**Non è un difetto da disattivare lato Tabloza** (il gateway sul cavo serve
+proprio per condividere internet quando il computer non ne ha altro). Il fix
+è verificare la priorità delle interfacce di rete **sul computer**, dando
+priorità al WiFi rispetto al cavo Ethernet/USB LAN — vedi README §
+*Router (Ethernet/WiFi) o link LAN diretto?* per le istruzioni su
+macOS/Windows/Linux.
+
 ### Note MIDI che arrivano in ritardo "a raffica" (Tabloza Sing via WebSocket)
 
 Causa tipica: **power-save del driver WiFi** (`brcmfmac`, chip BCM4345/6 dei
