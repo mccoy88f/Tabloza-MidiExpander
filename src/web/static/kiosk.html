@@ -23,7 +23,7 @@
           <span>🎼</span><span data-i18n="kioskTabSoundfont">SoundFont & MIDI</span>
         </button>
         <button type="button" class="kiosk-tab-btn" data-tab="2">
-          <span>📶</span><span data-i18n="kioskTabConnection">Connessione</span>
+          <span>⚙️</span><span data-i18n="kioskTabConnection">Dispositivo</span>
         </button>
       </nav>
 
@@ -39,7 +39,7 @@
 
         <!-- PAGE 0: STATO -->
         <div class="kiosk-page">
-          <!-- Left Card: Server Info, Master Volume & SF2 Gain -->
+          <!-- Left Card: Dispositivo & Volumi -->
           <div class="kiosk-card">
             <div>
               <div class="card-title">Dispositivo & Volumi</div>
@@ -75,46 +75,8 @@
             </div>
           </div>
 
-          <!-- Right Card: Panic Stop Notes & Reboot -->
+          <!-- Right Card: Stato Attività Hardware & Panic -->
           <div class="kiosk-card">
-            <div>
-              <div class="card-title">Controllo Emergenza & Sistema</div>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
-                Silenzia istantaneamente tutte le note su FluidSynth o riavvia il sistema.
-              </div>
-            </div>
-
-            <button type="button" id="btn-panic-stop" class="btn-panic">
-              <span style="font-size: 24px;">🛑</span>
-              <span id="panic-btn-text">PANIC — SILENZIA TUTTO</span>
-            </button>
-
-            <button type="button" id="btn-open-reboot-modal" class="kiosk-btn kiosk-btn-danger" style="height: 48px;">
-              🔄 Riavvia Dispositivo
-            </button>
-          </div>
-        </div>
-
-        <!-- PAGE 1: SOUNDFONT & MIDI -->
-        <div class="kiosk-page">
-          <!-- Left Card: SoundFont Select -->
-          <div class="kiosk-card">
-            <div class="card-title">SoundFont Caricato / Libreria</div>
-            <div class="sf2-scroll-list" id="sf2-list-container">
-              <div style="color: var(--text-muted); font-size: 12px;">Caricamento elenco SF2...</div>
-            </div>
-          </div>
-
-          <!-- Right Card: Audio Output, Activity & Effects -->
-          <div class="kiosk-card">
-            <!-- Audio Output Device Picker -->
-            <div>
-              <div class="card-title">Uscita Audio</div>
-              <select id="kiosk-audio-device-select" class="kiosk-select">
-                <option value="">Caricamento uscite audio...</option>
-              </select>
-            </div>
-
             <!-- Activity Status LEDs matching Standard UI -->
             <div>
               <div class="card-title">Stato Attività Hardware</div>
@@ -136,6 +98,37 @@
                   <div class="act-label">Audio</div>
                 </div>
               </div>
+            </div>
+
+            <!-- Big Panic Button -->
+            <div>
+              <div class="card-title">Controllo Emergenza</div>
+              <button type="button" id="btn-panic-stop" class="btn-panic" style="margin-top: 4px;">
+                <span style="font-size: 24px;">🛑</span>
+                <span id="panic-btn-text">PANIC — SILENZIA TUTTO</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 1: SOUNDFONT & MIDI -->
+        <div class="kiosk-page">
+          <!-- Left Card: SoundFont Select -->
+          <div class="kiosk-card" style="display: flex; flex-direction: column;">
+            <div class="card-title">SoundFont Caricato / Libreria</div>
+            <div class="sf2-scroll-list" id="sf2-list-container">
+              <div style="color: var(--text-muted); font-size: 12px;">Caricamento elenco SF2...</div>
+            </div>
+          </div>
+
+          <!-- Right Card: Audio Output, Effects & MIDI Connections -->
+          <div class="kiosk-card">
+            <!-- Audio Output Device Picker -->
+            <div>
+              <div class="card-title">Uscita Audio</div>
+              <select id="kiosk-audio-device-select" class="kiosk-select">
+                <option value="">Caricamento uscite audio...</option>
+              </select>
             </div>
 
             <!-- Synth Effects (Reverb & Chorus) -->
@@ -177,9 +170,9 @@
               </button>
             </div>
 
-            <!-- MIDI Inputs -->
+            <!-- MIDI Inputs (WSS & RTP AppleMIDI) -->
             <div>
-              <div class="card-title">Connessioni MIDI USB / WSS</div>
+              <div class="card-title">Connessioni MIDI (WSS & RTP AppleMIDI)</div>
               <div id="kiosk-midi-inputs" style="font-size: 12px; color: var(--text-muted); background: var(--bg-dark); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
                 In attesa di connessioni...
               </div>
@@ -187,33 +180,30 @@
           </div>
         </div>
 
-        <!-- PAGE 2: CONNESSIONE -->
+        <!-- PAGE 2: DISPOSITIVO -->
         <div class="kiosk-page">
           <!-- Left Card: Rete & mDNS -->
           <div class="kiosk-card">
             <div>
               <div class="card-title">Stato Rete & Indirizzo</div>
-              <div style="margin-top: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="margin-top: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 8px;">
                 <div><span style="color: var(--text-muted);">Modalità Rete:</span> <strong style="color: var(--accent-cyan);" id="net-mode-label">---</strong></div>
                 <div><span style="color: var(--text-muted);">Host mDNS:</span> <strong style="color: var(--text-main);" id="net-mdns">tabloza-me.local</strong></div>
                 <div><span style="color: var(--text-muted);">IP Locale:</span> <strong id="net-ip">---</strong></div>
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
-              <a href="https://tabloza-me.local:8765/setup" target="_blank" class="kiosk-btn" style="text-decoration: none; color: var(--accent-cyan);">
-                🔗 Setup Certificato WSS (:8765)
-              </a>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
               <a href="/" target="_blank" class="kiosk-btn" style="text-decoration: none; color: var(--text-main);">
-                🖥️ Pannello Web Completo
+                🖥️ Apri Pannello Web Completo
               </a>
             </div>
           </div>
 
-          <!-- Right Card: System Info -->
+          <!-- Right Card: System Control & Reboot/Shutdown -->
           <div class="kiosk-card">
             <div>
-              <div class="card-title">Informazioni Hardware</div>
+              <div class="card-title">Informazioni Hardware & Controllo</div>
               <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5;">
                 <div>• Versione: <strong id="kiosk-version-text" style="color: var(--text-main);">v3.1.0</strong></div>
                 <div>• Display Target: <strong style="color: var(--accent-cyan);">DSI 4.3" / 7" / 11" & Mobile</strong></div>
@@ -221,9 +211,14 @@
               </div>
             </div>
 
-            <button type="button" id="btn-shutdown" class="kiosk-btn kiosk-btn-danger" style="height: 48px; margin-top: 12px;">
-              ⚡ Spegni Raspberry Pi
-            </button>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+              <button type="button" id="btn-open-reboot-modal" class="kiosk-btn kiosk-btn-danger" style="height: 48px;">
+                🔄 Riavvia Dispositivo
+              </button>
+              <button type="button" id="btn-shutdown" class="kiosk-btn kiosk-btn-danger" style="height: 48px;">
+                ⚡ Spegni Raspberry Pi
+              </button>
+            </div>
           </div>
         </div>
 

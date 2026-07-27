@@ -100,22 +100,23 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateUI(data) {
+    const engineRunning = !!(data.synth && data.synth.engine_running);
+    const midiReady = !!(data.synth && data.synth.midi_ready);
+    const starting = !!(data.synth && data.synth.starting);
+    const sfLoaded = !!(data.soundfont && data.soundfont.loaded);
+    const sfLoading = !!(data.soundfont && data.soundfont.loading);
+
     // Header Status Dot: Grigio (Avvio...), Giallo (Caricamento...), Verde (Pronto)
     const dot = document.getElementById("status-dot-indicator");
     const label = document.getElementById("status-label-text");
 
-    const engineRunning = data.synth && data.synth.engine_running;
-    const midiReady = data.synth && data.synth.midi_ready;
-    const sfLoaded = data.soundfont && data.soundfont.loaded;
-    const sfLoading = data.soundfont && data.soundfont.loading;
-
     let sysState = "startup";
     let sysText = typeof t === "function" ? t("kioskStatusStarting") : "Avvio...";
 
-    if (sfLoading || (engineRunning && !midiReady)) {
+    if (sfLoading || starting || (engineRunning && !midiReady)) {
       sysState = "loading";
       sysText = typeof t === "function" ? t("kioskStatusLoading") : "Caricamento...";
-    } else if (engineRunning && midiReady && sfLoaded) {
+    } else if (engineRunning && midiReady) {
       sysState = "ready";
       sysText = typeof t === "function" ? t("kioskStatusReady") : "Pronto";
     }
@@ -170,46 +171,73 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Activity LED Dots (aligned with standard UI states: ready, live, loading, error, inactive)
-    if (data.activity) {
-      const setDot = (id, state) => {
-        const d = document.getElementById(id);
-        if (d) d.className = `act-dot ${state || "inactive"}`;
-      };
+    // Activity LED Dots (exact match with main dashboard logic in app.js)
+    const setDot = (id, state) => {
+      const d = document.getElementById(id);
+      if (d) d.className = `act-dot ${state || "inactive"}`;
+    };
 
-      // Synth Dot
-      const engineRunning = data.synth && data.synth.engine_running;
-      const midiReady = data.synth && data.synth.midi_ready;
-      const synthState = engineRunning ? (midiReady ? "ready" : "loading") : "inactive";
-      setDot("dot-synth", synthState);
-
-      // SF2 Dot
-      const sfLoaded = data.soundfont && data.soundfont.loaded;
-      const sfLoading = data.soundfont && data.soundfont.loading;
-      const sfState = sfLoading ? "loading" : sfLoaded ? "ready" : "inactive";
-      setDot("dot-sf2", sfState);
-
-      // MIDI In Dot
-      const midiActive = data.activity.midi && data.activity.midi.active;
-      setDot("dot-midi", midiActive ? "live" : "inactive");
-
-      // Audio Out Dot
-      const audioActive = data.activity.audio && data.activity.audio.active;
-      setDot("dot-audio", audioActive ? "live" : "inactive");
+    // Synth Dot
+    let synthDotState = "inactive";
+    if (starting || (engineRunning && !midiReady)) {
+      synthDotState = "loading";
+    } else if (engineRunning && midiReady) {
+      synthDotState = "ready";
     }
+    setDot("dot-synth", synthDotState);
 
-    // Connected MIDI Inputs
-    if (data.midi && data.midi.inputs) {
-      const container = document.getElementById("kiosk-midi-inputs");
-      if (container) {
-        if (data.midi.inputs.length === 0) {
-          container.innerText = "Nessun dispositivo MIDI USB collegato";
-        } else {
-          container.innerHTML = data.midi.inputs
-            .map((inp) => `<div style="padding: 2px 0;">🎹 <strong>${inp}</strong></div>`)
-            .join("");
-        }
+    // SF2 Dot
+    let sfState = "inactive";
+    if (sfLoading) {
+      sfState = "loading";
+    } else if (sfLoaded) {
+      sfState = "ready";
+    }
+    setDot("dot-sf2", sfState);
+
+    // MIDI In Dot
+    const midiAct = data.activity?.midi || {};
+    const midiReceiving = !!midiAct.receiving;
+    let midiDotState = "inactive";
+    if (midiReceiving) {
+      midiDotState = "live";
+    } else if (starting || (engineRunning && !midiReady)) {
+      midiDotState = "loading";
+    } else if (midiReady) {
+      midiDotState = "ready";
+    }
+    setDot("dot-midi", midiDotState);
+
+    // Audio Out Dot
+    const audioAct = data.activity?.audio || {};
+    const audioPlaying = !!audioAct.output_active;
+    let audioDotState = "inactive";
+    if (audioPlaying) {
+      audioDotState = "live";
+    } else if (sfLoading || starting || (engineRunning && !sfLoaded)) {
+      audioDotState = "loading";
+    } else if (engineRunning && sfLoaded) {
+      audioDotState = "ready";
+    }
+    setDot("dot-audio", audioDotState);
+
+    // Connected MIDI Connections (WSS & RTP AppleMIDI)
+    const container = document.getElementById("kiosk-midi-inputs");
+    if (container && data.midi) {
+      const m = data.midi;
+      const lines = [];
+      if (m.wss_enabled) {
+        lines.push(`🌐 <strong>Tabloza Sing (WSS :${m.wss_port || 8765})</strong> — ${m.wss_clients || 0} client`);
       }
+      if (m.rtp_midi_enabled) {
+        lines.push(`🎹 <strong>RTP AppleMIDI (5004)</strong> — ${m.rtp_midi_clients || 0} sessioni`);
+      }
+      if (m.inputs && m.inputs.length > 0) {
+        m.inputs.forEach((inp) => lines.push(`🔌 USB: ${inp}`));
+      }
+      container.innerHTML = lines.length > 0
+        ? lines.map((l) => `<div style="padding: 2px 0;">${l}</div>`).join("")
+        : "Nessuna connessione MIDI attiva";
     }
 
     // Synth Effects Parameters sync
@@ -301,7 +329,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const res = await fetch("/api/soundfonts");
       if (!res.ok) return;
       const data = await res.json();
-      renderSf2List(data.soundfonts || [], data.active || "");
+      renderSf2List(data.soundfonts || [], data.active || data.loaded || "");
     } catch {
       /* ignore */
     }
@@ -318,7 +346,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     container.innerHTML = soundfonts
       .map((sf) => {
-        const isSelected = sf.name === activeSf2 || sf.filename === activeSf2;
+        const isSelected = sf.name === activeSf2 || sf.filename === activeSf2 || sf.active || sf.loaded;
         return `
           <div class="sf2-item-btn ${isSelected ? "active" : ""}" data-sf2="${sf.name || sf.filename}">
             <div>
