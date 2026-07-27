@@ -556,13 +556,15 @@ input[type="range"].kiosk-slider-input {
 
 .act-dot.ready {
   background-color: #3fb950;
-  box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.5);
+  opacity: 0.7;
 }
 
 .act-dot.live {
-  background-color: #58a6ff;
-  box-shadow: 0 0 8px rgba(88, 166, 255, 0.8);
-  animation: pulse-dot 1s infinite alternate;
+  background-color: #2ecc71;
+  box-shadow: 0 0 10px rgba(46, 204, 113, 0.95);
+  opacity: 1;
+  animation: pulse-dot 0.8s infinite alternate;
 }
 
 .act-dot.loading {
