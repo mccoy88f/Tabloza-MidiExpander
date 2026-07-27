@@ -1,0 +1,345 @@
+/* ==========================================================================
+   Tabloza MidiExpander — Kiosk Touch Interface CSS (4.3" 800x480 & Mobile)
+   ========================================================================== */
+
+:root {
+  --bg-dark: #0a0e14;
+  --bg-card: #131924;
+  --bg-card-hover: #1c2536;
+  --border-color: #263347;
+  --text-main: #f0f6fc;
+  --text-muted: #8b9ab0;
+  --accent-cyan: #00f2fe;
+  --accent-blue: #1f6feb;
+  --accent-green: #238636;
+  --accent-red: #da3633;
+  --accent-orange: #d29922;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html, body {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* App Container */
+#kiosk-app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header & Tab Bar */
+.kiosk-header {
+  height: 52px;
+  background-color: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.kiosk-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kiosk-brand img {
+  height: 24px;
+  width: auto;
+}
+
+.kiosk-brand-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent-cyan);
+  letter-spacing: 0.5px;
+}
+
+/* Nav Tabs */
+.kiosk-nav {
+  display: flex;
+  gap: 4px;
+  height: 100%;
+  align-items: flex-end;
+}
+
+.kiosk-tab-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0 14px;
+  height: 44px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+}
+
+.kiosk-tab-btn.active {
+  color: var(--text-main);
+  border-bottom-color: var(--accent-cyan);
+  background: rgba(0, 242, 254, 0.08);
+}
+
+.kiosk-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  background: var(--bg-dark);
+  padding: 4px 10px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--accent-orange);
+  transition: background-color 0.3s;
+}
+
+.status-dot.online {
+  background-color: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+}
+
+.status-dot.offline {
+  background-color: var(--accent-red);
+}
+
+/* Main Viewport & Slider Track */
+.kiosk-main {
+  flex-grow: 1;
+  overflow: hidden;
+  position: relative;
+  width: 100vw;
+}
+
+.kiosk-slider {
+  display: flex;
+  width: 300vw;
+  height: 100%;
+  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.kiosk-page {
+  width: 100vw;
+  height: 100%;
+  padding: 12px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* Card Styling */
+.kiosk-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+.card-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+/* Volume Controls */
+.volume-control {
+  margin-top: 8px;
+}
+
+.volume-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.volume-val {
+  color: var(--accent-cyan);
+  font-weight: 700;
+}
+
+input[type="range"].kiosk-slider-input {
+  width: 100%;
+  height: 14px;
+  accent-color: var(--accent-cyan);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+/* Big Panic Button */
+.btn-panic {
+  width: 100%;
+  height: 76px;
+  background-color: var(--accent-red);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(218, 54, 51, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  touch-action: manipulation;
+  transition: transform 0.1s, background-color 0.2s;
+}
+
+.btn-panic:active {
+  transform: scale(0.98);
+}
+
+.btn-panic.success {
+  background-color: var(--accent-green);
+  box-shadow: 0 4px 14px rgba(35, 134, 54, 0.4);
+}
+
+/* General Buttons */
+.kiosk-btn {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card-hover);
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  touch-action: manipulation;
+}
+
+.kiosk-btn-primary {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+/* SoundFont List Scroll Container */
+.sf2-scroll-list {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding-right: 4px;
+}
+
+.sf2-item-btn {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: border-color 0.2s;
+}
+
+.sf2-item-btn.active {
+  border-color: var(--accent-cyan);
+  background-color: rgba(0, 242, 254, 0.08);
+}
+
+.sf2-item-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.sf2-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Activity Dots */
+.activity-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.act-box {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 6px;
+  text-align: center;
+}
+
+.act-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  margin: 0 auto 4px auto;
+}
+
+.act-dot.active {
+  background: var(--accent-cyan);
+  box-shadow: 0 0 6px var(--accent-cyan);
+}
+
+.act-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Responsive adjustments for portrait or small phones */
+@media (max-width: 600px) {
+  .kiosk-page {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}

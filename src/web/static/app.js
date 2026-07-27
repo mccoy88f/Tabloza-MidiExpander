@@ -386,12 +386,14 @@ function renderNetworkSection(s) {
     }
   }
 
-  // WiFi client: nascosto se hotspot (AP occupa wlan) o radio WiFi spenta
+  // WiFi client: mostrato sempre se la radio WiFi è attiva (anche in Hotspot)
   if (blockWifi) {
-    const showWifi = wifiEnabled && !hotspot;
+    const showWifi = wifiEnabled;
     blockWifi.classList.toggle("hidden", !showWifi);
     if (hintWifi) {
-      if (ethRouter) {
+      if (hotspot) {
+        hintWifi.textContent = t("wifiHotspotScanHint");
+      } else if (ethRouter) {
         hintWifi.textContent = t("wifiEthHint");
       } else if (wifiClient && net.wifi_connection) {
         hintWifi.textContent = t("wifiConnectedHint", { name: net.wifi_connection });
@@ -423,6 +425,7 @@ async function refreshStatus() {
   document.getElementById("status-ip").textContent = formatStatusIp(s.network, s.ip || "—");
   document.getElementById("status-network").textContent = networkModeLabel(s.network_mode, s.network || {});
   renderNetworkSection(s);
+  refreshSavedWifi();
   renderSoundfontUi(s.soundfont, s.synth);
   if (!volumeAdjusting) {
     const pct = Math.min(100, Math.max(0, Number(s.volume) || 0));
@@ -1551,12 +1554,74 @@ function showWifiForm(ssid, security = "") {
       msg.textContent = t("connectedWifi", { ssid });
       msg.className = "msg ok";
       refreshStatus();
+      refreshSavedWifi();
       refreshConsole();
     } catch (err) {
       msg.textContent = err.message;
       msg.className = "msg err";
       refreshConsole();
     }
+  });
+}
+
+async function refreshSavedWifi() {
+  const container = document.getElementById("wifi-saved-list");
+  if (!container) return;
+  try {
+    const res = await api("/api/wifi/saved");
+    const saved = res.saved || [];
+    renderSavedWifi(saved);
+  } catch {
+    /* ignore */
+  }
+}
+
+function renderSavedWifi(savedList) {
+  const container = document.getElementById("wifi-saved-list");
+  const block = document.getElementById("block-wifi-saved");
+  if (!container) return;
+
+  if (!savedList.length) {
+    if (block) block.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+
+  if (block) block.classList.remove("hidden");
+  container.innerHTML = "";
+
+  savedList.forEach((item) => {
+    const div = document.createElement("div");
+    div.className = "wifi-item";
+    const badge = item.active
+      ? `<span class="badge badge-connected">${t("badgeConnected")}</span>`
+      : `<span class="badge badge-ok">${t("badgeSaved")}</span>`;
+    div.innerHTML = `
+      <span>📶 <strong>${escapeHtml(item.ssid)}</strong></span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        ${badge}
+        <button type="button" class="btn btn-small btn-secondary btn-forget-wifi" data-ssid="${escapeHtml(item.ssid)}" title="${t("forgetWifi")}">🗑️</button>
+      </div>
+    `;
+    container.appendChild(div);
+  });
+
+  container.querySelectorAll(".btn-forget-wifi").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const ssid = btn.getAttribute("data-ssid");
+      if (!ssid || !confirm(t("forgetWifiConfirm", { ssid }))) return;
+      try {
+        await api("/api/wifi/saved/delete", {
+          method: "POST",
+          body: JSON.stringify({ ssid }),
+        });
+        refreshSavedWifi();
+        refreshStatus();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
   });
 }
 

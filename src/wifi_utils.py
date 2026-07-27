@@ -572,3 +572,44 @@ def connect_wifi_network(
             err = (result.stderr or result.stdout or err).strip()
         log_event("wifi", f"Connessione fallita: {err}", "error")
         return False, _friendly_connect_error(err)
+
+
+def list_saved_wifi_networks() -> list[dict]:
+    """Restituisce le reti Wi-Fi salvate in NetworkManager."""
+    result = _run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"], timeout=10)
+    saved: list[dict] = []
+    active_conn = _active_wifi_connection()
+    seen_ssids: set[str] = set()
+
+    for line in result.stdout.splitlines():
+        fields = parse_nmcli_terse_fields(line.strip())
+        if len(fields) < 2 or fields[1] != "802-11-wireless":
+            continue
+        name = fields[0]
+        if name == HOTSPOT_CONN:
+            continue
+        ssid_result = _run(
+            ["nmcli", "-g", "802-11-wireless.ssid", "connection", "show", name],
+            timeout=5,
+        )
+        ssid = ssid_result.stdout.strip() or name
+        if ssid in seen_ssids:
+            continue
+        seen_ssids.add(ssid)
+        saved.append({
+            "name": name,
+            "ssid": ssid,
+            "active": (name == active_conn or ssid == _active_wifi_ssid(active_conn)),
+        })
+    return saved
+
+
+def delete_saved_wifi_network(ssid_or_name: str) -> tuple[bool, str | None]:
+    """Elimina i profili Wi-Fi salvati per SSID o nome profilo."""
+    if not ssid_or_name:
+        return False, "SSID o nome profilo richiesto"
+    _delete_wifi_profiles_for_ssid(ssid_or_name)
+    _run(["nmcli", "connection", "delete", ssid_or_name], timeout=10)
+    log_event("wifi", f"Rete Wi-Fi salvata «{ssid_or_name}» eliminata")
+    return True, None
+

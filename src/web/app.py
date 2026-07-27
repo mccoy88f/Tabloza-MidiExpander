@@ -67,9 +67,11 @@ from update_utils import apply_update_if_needed, check_for_update, read_update_s
 from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
 from wifi_utils import (  # noqa: E402
     connect_wifi_network,
+    delete_saved_wifi_network,
     disable_wifi,
     enable_wifi,
     get_network_status,
+    list_saved_wifi_networks,
     scan_wifi_networks,
     start_hotspot,
     stop_hotspot,
@@ -87,7 +89,7 @@ SAFE_FILENAME = re.compile(r"^[a-zA-Z0-9._\- ]+\.sf2$", re.IGNORECASE)
 @app.after_request
 def _disable_api_cache(response):
     """Evita 301 HTTP→HTTPS in cache (v2.3) su /api/* e sulla shell HTML."""
-    if request.path.startswith("/api/") or request.path in ("/", "/setup/sing"):
+    if request.path.startswith("/api/") or request.path in ("/", "/kiosk", "/setup/sing"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
         response.headers["Pragma"] = "no-cache"
     return response
@@ -102,6 +104,9 @@ def request_entity_too_large(_e):
 def require_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
+        # Auto-autentica se la richiesta proviene da localhost (kiosk Pi) o sessione kiosk
+        if request.remote_addr in ("127.0.0.1", "::1") or session.get("kiosk"):
+            session["authenticated"] = True
         if not session.get("authenticated"):
             return jsonify({"error": "Non autenticato"}), 401
         return f(*args, **kwargs)
@@ -111,6 +116,14 @@ def require_auth(f):
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
+
+
+@app.route("/kiosk")
+def kiosk():
+    """Interfaccia Touch Kiosk per display DSI 4.3" / schermi locali e mobile."""
+    session["authenticated"] = True
+    session["kiosk"] = True
+    return send_from_directory(app.static_folder, "kiosk.html")
 
 
 @app.route("/setup/sing")
@@ -822,6 +835,26 @@ def api_bluetooth_remove():
 
 
 # --- WiFi ---
+
+@app.route("/api/wifi/saved")
+@require_auth
+def api_wifi_saved():
+    saved = list_saved_wifi_networks()
+    return jsonify({"saved": saved})
+
+
+@app.route("/api/wifi/saved/delete", methods=["POST"])
+@require_auth
+def api_wifi_saved_delete():
+    data = request.get_json(silent=True) or {}
+    ssid = (data.get("ssid") or data.get("name") or "").strip()
+    if not ssid:
+        return jsonify({"error": "SSID o nome profilo richiesto"}), 400
+    ok, err = delete_saved_wifi_network(ssid)
+    if not ok:
+        return jsonify({"error": err or "Eliminazione fallita"}), 500
+    return jsonify({"ok": True, "saved": list_saved_wifi_networks()})
+
 
 @app.route("/api/wifi/scan")
 @require_auth
