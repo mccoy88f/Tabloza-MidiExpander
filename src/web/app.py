@@ -308,12 +308,6 @@ def api_update_status():
     return jsonify(status)
 
 
-@app.route("/api/device/stats")
-@require_auth
-def api_device_stats():
-    return jsonify(get_device_stats(SOUNDFONTS_DIR))
-
-
 # --- Synth engine ---
 
 @app.route("/api/synth/settings")
