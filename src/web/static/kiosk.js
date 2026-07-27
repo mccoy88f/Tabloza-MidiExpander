@@ -274,6 +274,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- DEVICE STATS (CPU & RAM) ---
+
+  async function fetchDeviceStats() {
+    try {
+      const res = await fetch("/api/device/stats");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const cpuVal = document.getElementById("stat-cpu-val");
+      const cpuFill = document.getElementById("stat-cpu-fill");
+      const ramVal = document.getElementById("stat-ram-val");
+      const ramFill = document.getElementById("stat-ram-fill");
+      const tempVal = document.getElementById("stat-temp-val");
+
+      const cpuPct = data.percent !== undefined && data.percent !== null ? data.percent : 0;
+      const ramPct = data.used_percent !== undefined && data.used_percent !== null ? data.used_percent : 0;
+
+      if (cpuVal) cpuVal.innerText = `${cpuPct}%`;
+      if (cpuFill) cpuFill.style.width = `${Math.min(100, Math.max(0, cpuPct))}%`;
+
+      if (ramVal) ramVal.innerText = `${ramPct}%`;
+      if (ramFill) ramFill.style.width = `${Math.min(100, Math.max(0, ramPct))}%`;
+
+      if (tempVal && data.temperature_c !== undefined) {
+        tempVal.innerText = data.temperature_c ? `${data.temperature_c} °C` : "-- °C";
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   // --- AUDIO DEVICES FETCH & SELECT ---
 
   async function fetchAudioDevices() {
@@ -322,20 +353,20 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // --- SOUNDFONT LIST FETCH & SELECT ---
+  // --- SOUNDFONT LIST FETCH & SELECT WITH ACTION BUTTONS ---
 
   async function fetchSoundfonts() {
     try {
       const res = await fetch("/api/soundfonts");
       if (!res.ok) return;
       const data = await res.json();
-      renderSf2List(data.soundfonts || [], data.active || data.loaded || "");
+      renderSf2List(data.soundfonts || [], data.active || data.loaded || "", data.default || "");
     } catch {
       /* ignore */
     }
   }
 
-  function renderSf2List(soundfonts, activeSf2) {
+  function renderSf2List(soundfonts, activeSf2, defaultSf2) {
     const container = document.getElementById("sf2-list-container");
     if (!container) return;
 
@@ -346,29 +377,70 @@ document.addEventListener("DOMContentLoaded", () => {
 
     container.innerHTML = soundfonts
       .map((sf) => {
-        const isSelected = sf.name === activeSf2 || sf.filename === activeSf2 || sf.active || sf.loaded;
+        const sfName = sf.name || sf.filename;
+        const isSelected = sfName === activeSf2 || sf.active || sf.loaded;
+        const isDefault = sfName === defaultSf2 || sf.default;
         return `
-          <div class="sf2-item-btn ${isSelected ? "active" : ""}" data-sf2="${sf.name || sf.filename}">
-            <div>
-              <div class="sf2-item-title">${sf.name || sf.filename}</div>
-              <div class="sf2-item-meta">${sf.size ? `${Math.round(sf.size / (1024 * 1024))} MB` : ""} ${sf.default ? "★ Default" : ""}</div>
+          <div class="sf2-item-btn ${isSelected ? "active" : ""}">
+            <div style="flex: 1; min-width: 0; padding-right: 8px;">
+              <div class="sf2-item-title" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${sfName}</div>
+              <div class="sf2-item-meta">
+                ${sf.size ? `${Math.round(sf.size / (1024 * 1024))} MB` : ""}
+                ${isSelected ? ' · <span style="color: var(--accent-cyan);">● Attivo</span>' : ""}
+                ${isDefault ? ' · <span style="color: var(--accent-orange);">★ Predefinito</span>' : ""}
+              </div>
             </div>
-            ${isSelected ? '<span style="color: var(--accent-cyan); font-weight: bold;">✓</span>' : ""}
+            <div class="sf2-action-btns">
+              <button type="button" class="sf2-btn-sm ${isSelected ? "active-load" : ""} btn-sf2-load" data-sf2="${sfName}">
+                ${isSelected ? "● Attivo" : "Carica"}
+              </button>
+              <button type="button" class="sf2-btn-sm ${isDefault ? "is-default" : ""} btn-sf2-default" data-sf2="${sfName}" data-is-default="${isDefault}">
+                ${isDefault ? "★ Default" : "Predefinito"}
+              </button>
+            </div>
           </div>
         `;
       })
       .join("");
 
-    container.querySelectorAll(".sf2-item-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+    // Attach Load Button Handlers
+    container.querySelectorAll(".btn-sf2-load").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
         const sf2Name = btn.getAttribute("data-sf2");
         if (!sf2Name) return;
+        btn.innerText = "Caricamento...";
         try {
           await fetch("/api/soundfonts/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name: sf2Name }),
           });
+          fetchSoundfonts();
+          fetchStatus();
+        } catch {
+          /* ignore */
+        }
+      });
+    });
+
+    // Attach Default Button Handlers
+    container.querySelectorAll(".btn-sf2-default").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const sf2Name = btn.getAttribute("data-sf2");
+        const isDefault = btn.getAttribute("data-is-default") === "true";
+        if (!sf2Name) return;
+        try {
+          if (isDefault) {
+            await fetch("/api/soundfonts/default", { method: "DELETE" });
+          } else {
+            await fetch("/api/soundfonts/default", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: sf2Name }),
+            });
+          }
           fetchSoundfonts();
           fetchStatus();
         } catch {
@@ -644,5 +716,8 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchStatus();
   fetchSoundfonts();
   fetchAudioDevices();
+  fetchDeviceStats();
+
   setInterval(fetchStatus, 3000);
+  setInterval(fetchDeviceStats, 3000);
 });

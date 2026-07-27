@@ -206,8 +206,34 @@
               <div class="card-title">Informazioni Hardware & Controllo</div>
               <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5;">
                 <div>• Versione: <strong id="kiosk-version-text" style="color: var(--text-main);">v3.1.0</strong></div>
+                <div>• Temp. CPU: <strong id="stat-temp-val" style="color: var(--accent-cyan);">-- °C</strong></div>
                 <div>• Display Target: <strong style="color: var(--accent-cyan);">DSI 4.3" / 7" / 11" & Mobile</strong></div>
-                <div>• Interfaccia Kiosk Autonoma</div>
+              </div>
+            </div>
+
+            <!-- Stats Hardware (CPU & RAM) -->
+            <div>
+              <div class="card-title">Risorse Sistema (CPU & RAM)</div>
+              <div class="stats-grid">
+                <div class="stat-box">
+                  <div class="stat-box-header">
+                    <span data-i18n="kioskCpuUsage">Uso CPU</span>
+                    <span class="stat-val" id="stat-cpu-val">0%</span>
+                  </div>
+                  <div class="stat-bar-track">
+                    <div class="stat-bar-fill" id="stat-cpu-fill" style="width: 0%;"></div>
+                  </div>
+                </div>
+
+                <div class="stat-box">
+                  <div class="stat-box-header">
+                    <span data-i18n="kioskRamUsage">Uso RAM</span>
+                    <span class="stat-val" id="stat-ram-val">0%</span>
+                  </div>
+                  <div class="stat-bar-track">
+                    <div class="stat-bar-fill" id="stat-ram-fill" style="width: 0%;"></div>
+                  </div>
+                </div>
               </div>
             </div>
 
