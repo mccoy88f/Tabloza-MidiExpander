@@ -1,5 +1,5 @@
 /**
- * Tabloza MidiExpander — Touch Kiosk Logic (4.3" 800x480 & Mobile)
+ * Tabloza MidiExpander — Touch Kiosk Logic (v3.1.0)
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -11,6 +11,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let startX = null;
   let startY = null;
   let currX = null;
+
+  // Track adjustments so polling doesn't override sliders during drag
+  let sf2GainAdjusting = false;
+  let reverbAdjusting = false;
+  let chorusAdjusting = false;
 
   // --- TAB NAVIGATION & SWIPE ---
 
@@ -51,12 +56,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const diffX = currX - startX;
     const diffY = e.changedTouches[0].clientY - startY;
 
-    // Trigger horizontal swipe if horizontal displacement > 50px and larger than vertical
     if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
       if (diffX < 0 && currentTab < 2) {
-        goToTab(currentTab + 1); // Swipe left -> Next tab
+        goToTab(currentTab + 1);
       } else if (diffX > 0 && currentTab > 0) {
-        goToTab(currentTab - 1); // Swipe right -> Prev tab
+        goToTab(currentTab - 1);
       }
     }
     startX = null;
@@ -64,7 +68,22 @@ document.addEventListener("DOMContentLoaded", () => {
     currX = null;
   });
 
-  // --- API INTEGRATION & POLLING ---
+  // --- NETWORK MODE FORMATTING ---
+
+  function formatNetworkMode(mode, net = {}) {
+    const wifi = net.wifi_connection || "";
+    switch (mode) {
+      case "hotspot": return "Hotspot";
+      case "client": return wifi ? `Wi-Fi (${wifi})` : "Wi-Fi";
+      case "ethernet": return "Ethernet";
+      case "lan_wifi": return wifi ? `Ethernet + Wi-Fi (${wifi})` : "Ethernet + Wi-Fi";
+      case "lan_direct": return "Link LAN Diretto";
+      case "offline": return "Offline";
+      default: return "—";
+    }
+  }
+
+  // --- API STATUS & POLLING ---
 
   async function fetchStatus() {
     try {
@@ -72,72 +91,114 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!res.ok) throw new Error("Status error");
       const data = await res.json();
       updateUI(data);
-    } catch (err) {
+    } catch {
       const dot = document.getElementById("status-dot-indicator");
       const label = document.getElementById("status-label-text");
-      if (dot) {
-        dot.className = "status-dot offline";
-      }
-      if (label) {
-        label.innerText = "Offline";
-      }
+      if (dot) dot.className = "status-dot startup";
+      if (label) label.innerText = typeof t === "function" ? t("kioskStatusStarting") : "Avvio...";
     }
   }
 
   function updateUI(data) {
-    // Header status dot
+    // Header Status Dot: Grigio (Avvio...), Giallo (Caricamento...), Verde (Pronto)
     const dot = document.getElementById("status-dot-indicator");
     const label = document.getElementById("status-label-text");
-    const isOnline = data.synth && data.synth.engine_running;
 
-    if (dot) {
-      dot.className = `status-dot ${isOnline ? "online" : "offline"}`;
-    }
-    if (label) {
-      label.innerText = isOnline ? "FluidSynth OK" : "Inattivo";
+    const engineRunning = data.synth && data.synth.engine_running;
+    const midiReady = data.synth && data.synth.midi_ready;
+    const sfLoaded = data.soundfont && data.soundfont.loaded;
+    const sfLoading = data.soundfont && data.soundfont.loading;
+
+    let sysState = "startup";
+    let sysText = typeof t === "function" ? t("kioskStatusStarting") : "Avvio...";
+
+    if (sfLoading || (engineRunning && !midiReady)) {
+      sysState = "loading";
+      sysText = typeof t === "function" ? t("kioskStatusLoading") : "Caricamento...";
+    } else if (engineRunning && midiReady && sfLoaded) {
+      sysState = "ready";
+      sysText = typeof t === "function" ? t("kioskStatusReady") : "Pronto";
     }
 
-    // Host & IP
+    if (dot) dot.className = `status-dot ${sysState}`;
+    if (label) label.innerText = sysText;
+
+    // Host, IP & Network Mode
     if (data.hostname) {
       const hostEl = document.getElementById("kiosk-hostname");
       const netMdns = document.getElementById("net-mdns");
       if (hostEl) hostEl.innerText = data.hostname;
       if (netMdns) netMdns.innerText = data.hostname;
     }
-    if (data.ip) {
+    if (data.ip || data.network) {
       const ipEl = document.getElementById("kiosk-ip");
       const netIp = document.getElementById("net-ip");
-      if (ipEl) ipEl.innerText = `IP: ${data.ip}`;
-      if (netIp) netIp.innerText = data.ip;
-    }
-    if (data.network && data.network.ssid) {
-      const netName = document.getElementById("net-name");
-      if (netName) netName.innerText = data.network.ssid;
+      const ipStr = data.ip || (data.network ? (data.network.eth_ip || data.network.wifi_ip) : "---");
+      if (ipEl) ipEl.innerText = `IP: ${ipStr}`;
+      if (netIp) netIp.innerText = ipStr || "---";
     }
 
-    // Volume
+    const netModeLabel = document.getElementById("net-mode-label");
+    if (netModeLabel) {
+      netModeLabel.innerText = formatNetworkMode(data.network_mode || (data.network ? data.network.network_mode : ""), data.network);
+    }
+
+    // Version
+    if (data.version) {
+      const verText = document.getElementById("kiosk-version-text");
+      if (verText) verText.innerText = `v${data.version}`;
+    }
+
+    // Master Volume
     if (data.volume !== undefined) {
       const sliderEl = document.getElementById("vol-slider");
       const volText = document.getElementById("vol-val-text");
-      if (sliderEl && document.activeElement !== sliderEl) {
-        sliderEl.value = data.volume;
-      }
+      if (sliderEl && document.activeElement !== sliderEl) sliderEl.value = data.volume;
       if (volText) volText.innerText = `${data.volume}%`;
     }
 
-    // Activity Dots
-    if (data.activity) {
-      const setDot = (id, active) => {
-        const d = document.getElementById(id);
-        if (d) d.className = `act-dot ${active ? "active" : ""}`;
-      };
-      setDot("dot-synth", data.synth && data.synth.engine_running);
-      setDot("dot-sf2", data.soundfont && data.soundfont.loaded);
-      setDot("dot-midi", data.activity.midi && data.activity.midi.active);
-      setDot("dot-audio", data.activity.audio && data.activity.audio.active);
+    // SF2 Gain Volume
+    if (data.synth_gain !== undefined && !sf2GainAdjusting) {
+      const sf2GainSlider = document.getElementById("sf2-gain-slider");
+      const sf2GainText = document.getElementById("sf2-gain-text");
+      const gainVal = Number(data.synth_gain);
+      if (sf2GainSlider && document.activeElement !== sf2GainSlider) {
+        sf2GainSlider.value = Math.round(gainVal * 100);
+      }
+      if (sf2GainText) {
+        sf2GainText.innerText = `${(Math.round(gainVal * 10) / 10).toFixed(1)}×`;
+      }
     }
 
-    // MIDI Connections
+    // Activity LED Dots (aligned with standard UI states: ready, live, loading, error, inactive)
+    if (data.activity) {
+      const setDot = (id, state) => {
+        const d = document.getElementById(id);
+        if (d) d.className = `act-dot ${state || "inactive"}`;
+      };
+
+      // Synth Dot
+      const engineRunning = data.synth && data.synth.engine_running;
+      const midiReady = data.synth && data.synth.midi_ready;
+      const synthState = engineRunning ? (midiReady ? "ready" : "loading") : "inactive";
+      setDot("dot-synth", synthState);
+
+      // SF2 Dot
+      const sfLoaded = data.soundfont && data.soundfont.loaded;
+      const sfLoading = data.soundfont && data.soundfont.loading;
+      const sfState = sfLoading ? "loading" : sfLoaded ? "ready" : "inactive";
+      setDot("dot-sf2", sfState);
+
+      // MIDI In Dot
+      const midiActive = data.activity.midi && data.activity.midi.active;
+      setDot("dot-midi", midiActive ? "live" : "inactive");
+
+      // Audio Out Dot
+      const audioActive = data.activity.audio && data.activity.audio.active;
+      setDot("dot-audio", audioActive ? "live" : "inactive");
+    }
+
+    // Connected MIDI Inputs
     if (data.midi && data.midi.inputs) {
       const container = document.getElementById("kiosk-midi-inputs");
       if (container) {
@@ -150,6 +211,87 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     }
+
+    // Synth Effects Parameters sync
+    if (data.synth_settings) {
+      syncSynthEffectsUI(data.synth_settings);
+    }
+  }
+
+  function syncSynthEffectsUI(settings) {
+    if (!settings) return;
+
+    if (!reverbAdjusting) {
+      const revToggle = document.getElementById("kiosk-reverb-toggle");
+      const revLevel = document.getElementById("kiosk-reverb-level");
+      const revText = document.getElementById("reverb-val-text");
+      if (revToggle) revToggle.checked = !!settings.reverb;
+      if (settings.reverb_effect && settings.reverb_effect.level !== undefined) {
+        const l = Number(settings.reverb_effect.level);
+        if (revLevel && document.activeElement !== revLevel) revLevel.value = l;
+        if (revText) revText.innerText = l.toFixed(2);
+      }
+    }
+
+    if (!chorusAdjusting) {
+      const choToggle = document.getElementById("kiosk-chorus-toggle");
+      const choLevel = document.getElementById("kiosk-chorus-level");
+      const choText = document.getElementById("chorus-val-text");
+      if (choToggle) choToggle.checked = !!settings.chorus;
+      if (settings.chorus_effect && settings.chorus_effect.level !== undefined) {
+        const l = Number(settings.chorus_effect.level);
+        if (choLevel && document.activeElement !== choLevel) choLevel.value = l;
+        if (choText) choText.innerText = l.toFixed(2);
+      }
+    }
+  }
+
+  // --- AUDIO DEVICES FETCH & SELECT ---
+
+  async function fetchAudioDevices() {
+    try {
+      const res = await fetch("/api/audio/devices");
+      if (!res.ok) return;
+      const data = await res.json();
+      renderAudioDevicesSelect(data.devices || [], data.current || "");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function renderAudioDevicesSelect(devices, currentId) {
+    const select = document.getElementById("kiosk-audio-device-select");
+    if (!select) return;
+
+    if (!devices.length) {
+      select.innerHTML = '<option value="">Nessuna uscita audio rilevata</option>';
+      return;
+    }
+
+    select.innerHTML = devices
+      .map((dev) => {
+        const isSelected = dev.id === currentId || dev.active;
+        return `<option value="${dev.id}" ${isSelected ? "selected" : ""}>${dev.label || dev.id}</option>`;
+      })
+      .join("");
+  }
+
+  const audioSelect = document.getElementById("kiosk-audio-device-select");
+  if (audioSelect) {
+    audioSelect.addEventListener("change", async (e) => {
+      const devId = e.target.value;
+      if (!devId) return;
+      try {
+        await fetch("/api/audio/device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device: devId }),
+        });
+        fetchStatus();
+      } catch {
+        /* ignore */
+      }
+    });
   }
 
   // --- SOUNDFONT LIST FETCH & SELECT ---
@@ -170,7 +312,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!container) return;
 
     if (soundfonts.length === 0) {
-      container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Nessun SoundFont (.sf2) trovato in /soundfonts</div>';
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Nessun SoundFont (.sf2) trovato</div>';
       return;
     }
 
@@ -181,7 +323,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="sf2-item-btn ${isSelected ? "active" : ""}" data-sf2="${sf.name || sf.filename}">
             <div>
               <div class="sf2-item-title">${sf.name || sf.filename}</div>
-              <div class="sf2-item-meta">${sf.size_mb ? `${sf.size_mb} MB` : ""} ${sf.is_default ? "★ Default" : ""}</div>
+              <div class="sf2-item-meta">${sf.size ? `${Math.round(sf.size / (1024 * 1024))} MB` : ""} ${sf.default ? "★ Default" : ""}</div>
             </div>
             ${isSelected ? '<span style="color: var(--accent-cyan); font-weight: bold;">✓</span>' : ""}
           </div>
@@ -194,10 +336,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const sf2Name = btn.getAttribute("data-sf2");
         if (!sf2Name) return;
         try {
-          await fetch("/api/soundfont/select", {
+          await fetch("/api/soundfonts/select", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename: sf2Name }),
+            body: JSON.stringify({ name: sf2Name }),
           });
           fetchSoundfonts();
           fetchStatus();
@@ -208,17 +350,15 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // --- ACTION BUTTONS ---
+  // --- CONTROLS & SLIDERS ---
 
-  // Volume Slider Change
+  // Master Volume
   const volSlider = document.getElementById("vol-slider");
   if (volSlider) {
     volSlider.addEventListener("input", (e) => {
-      const val = e.target.value;
       const volText = document.getElementById("vol-val-text");
-      if (volText) volText.innerText = `${val}%`;
+      if (volText) volText.innerText = `${e.target.value}%`;
     });
-
     volSlider.addEventListener("change", async (e) => {
       const val = parseInt(e.target.value, 10);
       try {
@@ -226,6 +366,152 @@ document.addEventListener("DOMContentLoaded", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ volume: val }),
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  // SoundFont Volume (SF2 Gain)
+  const sf2GainSlider = document.getElementById("sf2-gain-slider");
+  if (sf2GainSlider) {
+    sf2GainSlider.addEventListener("pointerdown", () => { sf2GainAdjusting = true; });
+    sf2GainSlider.addEventListener("pointercancel", () => { sf2GainAdjusting = false; });
+    sf2GainSlider.addEventListener("input", (e) => {
+      sf2GainAdjusting = true;
+      const gain = parseInt(e.target.value, 10) / 100;
+      const textEl = document.getElementById("sf2-gain-text");
+      if (textEl) textEl.innerText = `${(Math.round(gain * 10) / 10).toFixed(1)}×`;
+    });
+    sf2GainSlider.addEventListener("change", async (e) => {
+      const gain = parseInt(e.target.value, 10) / 100;
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ synth_gain: gain }),
+        });
+      } finally {
+        sf2GainAdjusting = false;
+      }
+    });
+  }
+
+  // Reverb Level & Toggle
+  const revSlider = document.getElementById("kiosk-reverb-level");
+  const revToggle = document.getElementById("kiosk-reverb-toggle");
+  if (revSlider) {
+    revSlider.addEventListener("pointerdown", () => { reverbAdjusting = true; });
+    revSlider.addEventListener("pointercancel", () => { reverbAdjusting = false; });
+    revSlider.addEventListener("input", (e) => {
+      reverbAdjusting = true;
+      const revText = document.getElementById("reverb-val-text");
+      if (revText) revText.innerText = Number(e.target.value).toFixed(2);
+    });
+    revSlider.addEventListener("change", async (e) => {
+      const l = parseFloat(e.target.value);
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reverb: revToggle ? revToggle.checked : true,
+            reverb_effect: { level: l }
+          }),
+        });
+      } finally {
+        reverbAdjusting = false;
+      }
+    });
+  }
+  if (revToggle) {
+    revToggle.addEventListener("change", async () => {
+      const l = revSlider ? parseFloat(revSlider.value) : 0.5;
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reverb: revToggle.checked,
+            reverb_effect: { level: l }
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  // Chorus Level & Toggle
+  const choSlider = document.getElementById("kiosk-chorus-level");
+  const choToggle = document.getElementById("kiosk-chorus-toggle");
+  if (choSlider) {
+    choSlider.addEventListener("pointerdown", () => { chorusAdjusting = true; });
+    choSlider.addEventListener("pointercancel", () => { chorusAdjusting = false; });
+    choSlider.addEventListener("input", (e) => {
+      chorusAdjusting = true;
+      const choText = document.getElementById("chorus-val-text");
+      if (choText) choText.innerText = Number(e.target.value).toFixed(2);
+    });
+    choSlider.addEventListener("change", async (e) => {
+      const l = parseFloat(e.target.value);
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chorus: choToggle ? choToggle.checked : true,
+            chorus_effect: { level: l }
+          }),
+        });
+      } finally {
+        chorusAdjusting = false;
+      }
+    });
+  }
+  if (choToggle) {
+    choToggle.addEventListener("change", async () => {
+      const l = choSlider ? parseFloat(choSlider.value) : 0.6;
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chorus: choToggle.checked,
+            chorus_effect: { level: l }
+          }),
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
+  // Reset Effects Button
+  const btnResetEffects = document.getElementById("btn-kiosk-reset-effects");
+  if (btnResetEffects) {
+    btnResetEffects.addEventListener("click", async () => {
+      if (revSlider) revSlider.value = 0.5;
+      if (revToggle) revToggle.checked = true;
+      if (choSlider) choSlider.value = 0.6;
+      if (choToggle) choToggle.checked = true;
+
+      const revText = document.getElementById("reverb-val-text");
+      const choText = document.getElementById("chorus-val-text");
+      if (revText) revText.innerText = "0.50";
+      if (choText) choText.innerText = "0.60";
+
+      try {
+        await fetch("/api/synth/settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reverb: true,
+            chorus: true,
+            reverb_effect: { level: 0.5 },
+            chorus_effect: { level: 0.6 }
+          }),
         });
       } catch {
         /* ignore */
@@ -241,7 +527,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (btnText) btnText.innerText = "Invio in corso...";
 
       try {
-        await fetch("/api/midi/stop-notes", { method: "POST" });
+        await fetch("/api/synth/stop-notes", { method: "POST" });
         btnPanic.classList.add("success");
         if (btnText) btnText.innerText = "NOTE SILENZIATE!";
         setTimeout(() => {
@@ -281,27 +567,43 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Reboot & Shutdown
-  const btnReboot = document.getElementById("btn-reboot");
-  if (btnReboot) {
-    btnReboot.addEventListener("click", async () => {
-      if (confirm("Riavviare il Raspberry Pi?")) {
-        try {
-          await fetch("/api/system/reboot", { method: "POST" });
-          alert("Riavvio avviato...");
-        } catch {
-          /* ignore */
-        }
+  // REBOOT MODAL HANDLERS
+  const rebootModal = document.getElementById("reboot-modal");
+  const btnOpenRebootModal = document.getElementById("btn-open-reboot-modal");
+  const btnRebootCancel = document.getElementById("btn-reboot-modal-cancel");
+  const btnRebootConfirm = document.getElementById("btn-reboot-modal-confirm");
+
+  if (btnOpenRebootModal && rebootModal) {
+    btnOpenRebootModal.addEventListener("click", () => {
+      rebootModal.classList.remove("hidden");
+    });
+  }
+
+  if (btnRebootCancel && rebootModal) {
+    btnRebootCancel.addEventListener("click", () => {
+      rebootModal.classList.add("hidden");
+    });
+  }
+
+  if (btnRebootConfirm && rebootModal) {
+    btnRebootConfirm.addEventListener("click", async () => {
+      rebootModal.classList.add("hidden");
+      try {
+        await fetch("/api/device/reboot", { method: "POST" });
+        alert("Riavvio avviato...");
+      } catch {
+        /* ignore */
       }
     });
   }
 
+  // Shutdown Button
   const btnShutdown = document.getElementById("btn-shutdown");
   if (btnShutdown) {
     btnShutdown.addEventListener("click", async () => {
       if (confirm("Spegnere completamente il Raspberry Pi?")) {
         try {
-          await fetch("/api/system/shutdown", { method: "POST" });
+          await fetch("/api/device/shutdown", { method: "POST" });
           alert("Spegnimento avviato...");
         } catch {
           /* ignore */
@@ -313,5 +615,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // --- INITIAL STARTUP & POLLING ---
   fetchStatus();
   fetchSoundfonts();
+  fetchAudioDevices();
   setInterval(fetchStatus, 3000);
 });

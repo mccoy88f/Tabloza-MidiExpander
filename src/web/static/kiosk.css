@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Tabloza MidiExpander — Kiosk Touch Interface CSS (4.3" 800x480 & Mobile)
+   Tabloza MidiExpander — Kiosk Touch Interface CSS (4.3", 7", 11" & Mobile)
    ========================================================================== */
 
 :root {
@@ -123,17 +123,24 @@ html, body {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background-color: var(--accent-orange);
-  transition: background-color 0.3s;
+  background-color: var(--text-muted);
+  transition: background-color 0.3s, box-shadow 0.3s;
 }
 
-.status-dot.online {
+.status-dot.startup {
+  background-color: #8b9ab0;
+  box-shadow: none;
+}
+
+.status-dot.loading {
+  background-color: var(--accent-orange);
+  box-shadow: 0 0 8px var(--accent-orange);
+  animation: pulse-dot 0.6s infinite alternate;
+}
+
+.status-dot.ready {
   background-color: var(--accent-green);
   box-shadow: 0 0 8px var(--accent-green);
-}
-
-.status-dot.offline {
-  background-color: var(--accent-red);
 }
 
 /* Main Viewport & Slider Track */
@@ -159,9 +166,10 @@ html, body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  overflow: hidden;
 }
 
-/* Card Styling */
+/* Card Styling: Independent Vertical Scroll per Column */
 .kiosk-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
@@ -169,8 +177,19 @@ html, body {
   padding: 14px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  overflow: hidden;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.kiosk-card::-webkit-scrollbar {
+  width: 5px;
+}
+.kiosk-card::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
 }
 
 .card-title {
@@ -179,18 +198,19 @@ html, body {
   letter-spacing: 1px;
   color: var(--text-muted);
   font-weight: 700;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
-/* Volume Controls */
+/* Volume & Effect Controls */
 .volume-control {
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .volume-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 4px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -208,10 +228,49 @@ input[type="range"].kiosk-slider-input {
   cursor: pointer;
 }
 
+/* Dropdown Select */
+.kiosk-select {
+  width: 100%;
+  padding: 10px 12px;
+  background-color: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+
+.kiosk-select:focus {
+  border-color: var(--accent-cyan);
+}
+
+/* Effect Toggle Row */
+.effect-box {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.effect-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.effect-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
 /* Big Panic Button */
 .btn-panic {
   width: 100%;
-  height: 76px;
+  height: 64px;
   background-color: var(--accent-red);
   color: #fff;
   border: none;
@@ -227,6 +286,7 @@ input[type="range"].kiosk-slider-input {
   gap: 8px;
   touch-action: manipulation;
   transition: transform 0.1s, background-color 0.2s;
+  flex-shrink: 0;
 }
 
 .btn-panic:active {
@@ -253,11 +313,22 @@ input[type="range"].kiosk-slider-input {
   justify-content: center;
   gap: 6px;
   touch-action: manipulation;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
 .kiosk-btn-primary {
   background-color: var(--accent-blue);
   border-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+.kiosk-btn-danger {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.kiosk-btn-danger:active {
+  background-color: var(--accent-red);
   color: #ffffff;
 }
 
@@ -268,8 +339,9 @@ input[type="range"].kiosk-slider-input {
   flex-direction: column;
   gap: 6px;
   overflow-y: auto;
-  margin-top: 6px;
-  padding-right: 4px;
+  margin-top: 4px;
+  padding-right: 2px;
+  max-height: 300px;
 }
 
 .sf2-item-btn {
@@ -301,12 +373,12 @@ input[type="range"].kiosk-slider-input {
   color: var(--text-muted);
 }
 
-/* Activity Dots */
+/* Activity Dots matching standard UI */
 .activity-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .act-box {
@@ -318,16 +390,39 @@ input[type="range"].kiosk-slider-input {
 }
 
 .act-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: #484f58;
   margin: 0 auto 4px auto;
+  transition: background-color 0.3s, box-shadow 0.3s;
 }
 
-.act-dot.active {
-  background: var(--accent-cyan);
-  box-shadow: 0 0 6px var(--accent-cyan);
+.act-dot.ready {
+  background-color: #3fb950;
+  box-shadow: 0 0 6px rgba(63, 185, 80, 0.6);
+}
+
+.act-dot.live {
+  background-color: #58a6ff;
+  box-shadow: 0 0 8px rgba(88, 166, 255, 0.8);
+  animation: pulse-dot 1s infinite alternate;
+}
+
+.act-dot.loading {
+  background-color: #d29922;
+  box-shadow: 0 0 6px rgba(210, 153, 34, 0.6);
+  animation: pulse-dot 0.6s infinite alternate;
+}
+
+.act-dot.error {
+  background-color: #f85149;
+  box-shadow: 0 0 6px rgba(248, 81, 73, 0.6);
+}
+
+@keyframes pulse-dot {
+  from { opacity: 0.6; }
+  to { opacity: 1; }
 }
 
 .act-label {
@@ -336,8 +431,56 @@ input[type="range"].kiosk-slider-input {
   text-transform: uppercase;
 }
 
-/* Responsive adjustments for portrait or small phones */
-@media (max-width: 600px) {
+/* Modal Confirmation Overlay */
+.kiosk-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 16px;
+}
+
+.kiosk-modal-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kiosk-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.kiosk-modal-body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.kiosk-modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Responsive Layout for phones in portrait mode */
+@media (max-width: 650px) {
   .kiosk-page {
     grid-template-columns: 1fr;
     overflow-y: auto;

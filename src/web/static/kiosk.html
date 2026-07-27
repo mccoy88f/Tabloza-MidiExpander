@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Tabloza MidiExpander — Touch Kiosk</title>
-  <link rel="stylesheet" href="/static/kiosk.css?v=3.0.0">
+  <link rel="stylesheet" href="/static/kiosk.css?v=3.1.0">
 </head>
 <body>
   <div id="kiosk-app">
@@ -28,8 +28,8 @@
       </nav>
 
       <div class="kiosk-status-badge">
-        <span class="status-dot" id="status-dot-indicator"></span>
-        <span id="status-label-text">Avvio...</span>
+        <span class="status-dot startup" id="status-dot-indicator"></span>
+        <span id="status-label-text" data-i18n="kioskStatusStarting">Avvio...</span>
       </div>
     </header>
 
@@ -39,14 +39,15 @@
 
         <!-- PAGE 0: STATO -->
         <div class="kiosk-page">
-          <!-- Left Card: Synth & Volume -->
+          <!-- Left Card: Server Info, Master Volume & SF2 Gain -->
           <div class="kiosk-card">
             <div>
-              <div class="card-title">Dispositivo & Master Volume</div>
-              <div style="font-size: 18px; font-weight: 700;" id="kiosk-hostname">tabloza-me.local</div>
+              <div class="card-title">Dispositivo & Volumi</div>
+              <div style="font-size: 17px; font-weight: 700;" id="kiosk-hostname">tabloza-me.local</div>
               <div style="font-size: 12px; color: var(--text-muted);" id="kiosk-ip">IP: ---</div>
             </div>
 
+            <!-- Master Volume (ALSA) -->
             <div class="volume-control">
               <div class="volume-header">
                 <span>Volume Master (ALSA)</span>
@@ -55,7 +56,16 @@
               <input type="range" id="vol-slider" class="kiosk-slider-input" min="0" max="100" value="100">
             </div>
 
-            <div style="display: flex; gap: 8px;">
+            <!-- SoundFont Volume (SF2 Gain) -->
+            <div class="volume-control">
+              <div class="volume-header">
+                <span>Volume SoundFont (Gain)</span>
+                <span class="volume-val" id="sf2-gain-text">2.0×</span>
+              </div>
+              <input type="range" id="sf2-gain-slider" class="kiosk-slider-input" min="0" max="400" step="5" value="200">
+            </div>
+
+            <div style="display: flex; gap: 8px; margin-top: 4px;">
               <button type="button" id="btn-sound-test" class="kiosk-btn kiosk-btn-primary" style="flex: 1;">
                 🔊 Test Suono
               </button>
@@ -65,23 +75,23 @@
             </div>
           </div>
 
-          <!-- Right Card: Panic Stop Notes -->
+          <!-- Right Card: Panic Stop Notes & Reboot -->
           <div class="kiosk-card">
             <div>
-              <div class="card-title">Controllo Emergenza</div>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                Silenzia istantaneamente tutte le note e i canali MIDI su FluidSynth.
+              <div class="card-title">Controllo Emergenza & Sistema</div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+                Silenzia istantaneamente tutte le note su FluidSynth o riavvia il sistema.
               </div>
             </div>
 
             <button type="button" id="btn-panic-stop" class="btn-panic">
-              <span style="font-size: 26px;">🛑</span>
+              <span style="font-size: 24px;">🛑</span>
               <span id="panic-btn-text">PANIC — SILENZIA TUTTO</span>
             </button>
 
-            <div style="font-size: 11px; color: var(--text-muted); text-align: center;">
-              Invia All Sound Off & All Notes Off a FluidSynth
-            </div>
+            <button type="button" id="btn-open-reboot-modal" class="kiosk-btn kiosk-btn-danger" style="height: 48px;">
+              🔄 Riavvia Dispositivo
+            </button>
           </div>
         </div>
 
@@ -89,14 +99,23 @@
         <div class="kiosk-page">
           <!-- Left Card: SoundFont Select -->
           <div class="kiosk-card">
-            <div class="card-title">SoundFont Caricato / Selezionabile</div>
+            <div class="card-title">SoundFont Caricato / Libreria</div>
             <div class="sf2-scroll-list" id="sf2-list-container">
               <div style="color: var(--text-muted); font-size: 12px;">Caricamento elenco SF2...</div>
             </div>
           </div>
 
-          <!-- Right Card: Activity & MIDI Inputs -->
+          <!-- Right Card: Audio Output, Activity & Effects -->
           <div class="kiosk-card">
+            <!-- Audio Output Device Picker -->
+            <div>
+              <div class="card-title">Uscita Audio</div>
+              <select id="kiosk-audio-device-select" class="kiosk-select">
+                <option value="">Caricamento uscite audio...</option>
+              </select>
+            </div>
+
+            <!-- Activity Status LEDs matching Standard UI -->
             <div>
               <div class="card-title">Stato Attività Hardware</div>
               <div class="activity-grid">
@@ -119,8 +138,48 @@
               </div>
             </div>
 
+            <!-- Synth Effects (Reverb & Chorus) -->
             <div>
-              <div class="card-title" style="margin-top: 8px;">Connessioni MIDI USB / WSS</div>
+              <div class="card-title">Effetti Synth (Riverbero & Chorus)</div>
+              
+              <!-- Reverb -->
+              <div class="effect-box">
+                <div class="effect-header">
+                  <span class="effect-title">Riverbero</span>
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="kiosk-reverb-toggle" checked> Attivo
+                  </label>
+                </div>
+                <div class="volume-header">
+                  <span style="font-size: 11px; color: var(--text-muted);">Level</span>
+                  <span class="volume-val" id="reverb-val-text" style="font-size: 12px;">0.50</span>
+                </div>
+                <input type="range" id="kiosk-reverb-level" class="kiosk-slider-input" min="0" max="1" step="0.01" value="0.5">
+              </div>
+
+              <!-- Chorus -->
+              <div class="effect-box" style="margin-top: 6px;">
+                <div class="effect-header">
+                  <span class="effect-title">Chorus</span>
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="kiosk-chorus-toggle" checked> Attivo
+                  </label>
+                </div>
+                <div class="volume-header">
+                  <span style="font-size: 11px; color: var(--text-muted);">Level</span>
+                  <span class="volume-val" id="chorus-val-text" style="font-size: 12px;">0.60</span>
+                </div>
+                <input type="range" id="kiosk-chorus-level" class="kiosk-slider-input" min="0" max="10" step="0.05" value="0.6">
+              </div>
+
+              <button type="button" id="btn-kiosk-reset-effects" class="kiosk-btn" style="margin-top: 8px; width: 100%; font-size: 11px;">
+                ⚙️ Ripristina Predefiniti Effetti
+              </button>
+            </div>
+
+            <!-- MIDI Inputs -->
+            <div>
+              <div class="card-title">Connessioni MIDI USB / WSS</div>
               <div id="kiosk-midi-inputs" style="font-size: 12px; color: var(--text-muted); background: var(--bg-dark); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
                 In attesa di connessioni...
               </div>
@@ -134,14 +193,14 @@
           <div class="kiosk-card">
             <div>
               <div class="card-title">Stato Rete & Indirizzo</div>
-              <div style="margin-top: 8px; font-size: 13px;">
-                <div><span style="color: var(--text-muted);">Host mDNS:</span> <strong style="color: var(--accent-cyan);" id="net-mdns">tabloza-me.local</strong></div>
+              <div style="margin-top: 8px; font-size: 13px; display: flex; flex-direction: column; gap: 6px;">
+                <div><span style="color: var(--text-muted);">Modalità Rete:</span> <strong style="color: var(--accent-cyan);" id="net-mode-label">---</strong></div>
+                <div><span style="color: var(--text-muted);">Host mDNS:</span> <strong style="color: var(--text-main);" id="net-mdns">tabloza-me.local</strong></div>
                 <div><span style="color: var(--text-muted);">IP Locale:</span> <strong id="net-ip">---</strong></div>
-                <div><span style="color: var(--text-muted);">Rete Wi-Fi/LAN:</span> <span id="net-name">---</span></div>
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
               <a href="https://tabloza-me.local:8765/setup" target="_blank" class="kiosk-btn" style="text-decoration: none; color: var(--accent-cyan);">
                 🔗 Setup Certificato WSS (:8765)
               </a>
@@ -151,30 +210,47 @@
             </div>
           </div>
 
-          <!-- Right Card: System Control -->
+          <!-- Right Card: System Info -->
           <div class="kiosk-card">
             <div>
-              <div class="card-title">Gestione Dispositivo Pi</div>
-              <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
-                Comandi di riavvio e spegnimento hardware.
+              <div class="card-title">Informazioni Hardware</div>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5;">
+                <div>• Versione: <strong id="kiosk-version-text" style="color: var(--text-main);">v3.1.0</strong></div>
+                <div>• Display Target: <strong style="color: var(--accent-cyan);">DSI 4.3" / 7" / 11" & Mobile</strong></div>
+                <div>• Interfaccia Kiosk Autonoma</div>
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <button type="button" id="btn-reboot" class="kiosk-btn" style="border-color: var(--accent-orange); color: var(--accent-orange);">
-                🔄 Riavvia Raspberry Pi
-              </button>
-              <button type="button" id="btn-shutdown" class="kiosk-btn" style="border-color: var(--accent-red); color: var(--accent-red);">
-                ⚡ Spegni Raspberry Pi
-              </button>
-            </div>
+            <button type="button" id="btn-shutdown" class="kiosk-btn kiosk-btn-danger" style="height: 48px; margin-top: 12px;">
+              ⚡ Spegni Raspberry Pi
+            </button>
           </div>
         </div>
 
       </div>
     </main>
+
+    <!-- REBOOT CONFIRMATION MODAL -->
+    <div id="reboot-modal" class="kiosk-modal-overlay hidden">
+      <div class="kiosk-modal-card">
+        <div class="kiosk-modal-title" data-i18n="kioskRebootModalTitle">Riavviare il Raspberry Pi?</div>
+        <div class="kiosk-modal-body" data-i18n="kioskRebootModalBody">
+          La connessione verrà interrotta per circa un minuto durante il riavvio del dispositivo.
+        </div>
+        <div class="kiosk-modal-actions">
+          <button type="button" id="btn-reboot-modal-cancel" class="kiosk-btn" style="flex: 1;" data-i18n="kioskModalCancel">
+            Annulla
+          </button>
+          <button type="button" id="btn-reboot-modal-confirm" class="kiosk-btn kiosk-btn-danger" style="flex: 1;" data-i18n="kioskModalConfirm">
+            Conferma Riavvio
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <script src="/static/kiosk.js?v=1.0.0"></script>
+  <script src="/static/i18n.js?v=3.1.0"></script>
+  <script src="/static/kiosk.js?v=3.1.0"></script>
 </body>
 </html>
