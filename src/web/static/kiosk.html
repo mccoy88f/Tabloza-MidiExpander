@@ -4,10 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Tabloza MidiExpander — Touch Kiosk</title>
-  <link rel="stylesheet" href="/static/kiosk.css?v=3.1.0">
+  <link rel="stylesheet" href="/static/kiosk.css?v=3.2.0">
 </head>
 <body>
   <div id="kiosk-app">
+    <!-- PULL TO REFRESH INDICATOR -->
+    <div id="kiosk-pull-indicator" class="pull-refresh-indicator">
+      <span id="pull-icon">⬇️</span>
+      <span id="pull-text">Trascina in basso per aggiornare</span>
+    </div>
+
     <!-- Header & Tab Navigation -->
     <header class="kiosk-header">
       <div class="kiosk-brand">

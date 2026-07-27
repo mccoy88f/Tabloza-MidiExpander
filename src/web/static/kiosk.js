@@ -68,6 +68,76 @@ document.addEventListener("DOMContentLoaded", () => {
     currX = null;
   });
 
+  // --- PULL TO REFRESH GESTURE HANDLER ---
+  const pullIndicator = document.getElementById("kiosk-pull-indicator");
+  const pullIcon = document.getElementById("pull-icon");
+  const pullText = document.getElementById("pull-text");
+
+  let pullStartY = null;
+  let pullDiffY = 0;
+  let isRefreshing = false;
+
+  document.addEventListener("touchstart", (e) => {
+    const isAtTop = window.scrollY === 0 || document.documentElement.scrollTop === 0;
+    if (isAtTop) {
+      pullStartY = e.touches[0].clientY;
+      pullDiffY = 0;
+    } else {
+      pullStartY = null;
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (pullStartY === null || isRefreshing) return;
+    const currentY = e.touches[0].clientY;
+    pullDiffY = currentY - pullStartY;
+
+    if (pullDiffY > 30) {
+      if (pullIndicator) pullIndicator.classList.add("visible");
+      if (pullDiffY > 80) {
+        if (pullIcon) pullIcon.innerText = "⬆️";
+        if (pullText) pullText.innerText = "Rilascia per aggiornare";
+      } else {
+        if (pullIcon) pullIcon.innerText = "⬇️";
+        if (pullText) pullText.innerText = "Trascina in basso per aggiornare";
+      }
+    }
+  }, { passive: true });
+
+  document.addEventListener("touchend", async () => {
+    if (pullStartY !== null && pullDiffY > 80 && !isRefreshing) {
+      isRefreshing = true;
+      if (pullIcon) {
+        pullIcon.innerText = "↻";
+        pullIcon.classList.add("spin-icon");
+      }
+      if (pullText) pullText.innerText = "Aggiornamento in corso...";
+      if (pullIndicator) pullIndicator.classList.add("visible");
+
+      try {
+        await Promise.all([
+          fetchStatus(),
+          fetchSoundfonts(),
+          fetchAudioDevices(),
+          fetchDeviceStats()
+        ]);
+        if (pullText) pullText.innerText = "Aggiornato!";
+      } catch {
+        if (pullText) pullText.innerText = "Errore aggiornamento";
+      } finally {
+        setTimeout(() => {
+          if (pullIndicator) pullIndicator.classList.remove("visible");
+          if (pullIcon) pullIcon.classList.remove("spin-icon");
+          isRefreshing = false;
+        }, 800);
+      }
+    } else if (pullIndicator && !isRefreshing) {
+      pullIndicator.classList.remove("visible");
+    }
+    pullStartY = null;
+    pullDiffY = 0;
+  });
+
   // --- NETWORK MODE FORMATTING ---
 
   function formatNetworkMode(mode, net = {}) {
