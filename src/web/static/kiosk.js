@@ -442,16 +442,21 @@ document.addEventListener("DOMContentLoaded", () => {
     audioSelect.addEventListener("change", async (e) => {
       const devId = e.target.value;
       if (!devId) return;
-      showKioskNotification("Uscita Audio Cambiata", "🔊", 2500, "ready");
+      showKioskNotification("Cambio Uscita Audio...", "🔊", 3000, "loading");
       try {
-        await fetch("/api/audio/device", {
+        const res = await fetch("/api/audio/select", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ device: devId }),
         });
+        if (res.ok) {
+          showKioskNotification("Uscita Audio Cambiata!", "🔊", 2500, "ready");
+        } else {
+          showKioskNotification("Errore Cambio Audio", "⚠️", 2800, "startup");
+        }
         fetchStatus();
       } catch {
-        /* ignore */
+        showKioskNotification("Errore Cambio Audio", "⚠️", 2800, "startup");
       }
     });
   }
