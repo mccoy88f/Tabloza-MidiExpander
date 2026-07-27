@@ -153,6 +153,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // --- DYNAMIC TOP-RIGHT NOTIFICATION AREA ---
+  let notificationTimeout = null;
+
+  function showKioskNotification(text, icon = "ℹ️", durationMs = 2800, dotState = "ready") {
+    const dot = document.getElementById("status-dot-indicator");
+    const label = document.getElementById("status-label-text");
+    if (!label || !dot) return;
+
+    if (notificationTimeout) {
+      clearTimeout(notificationTimeout);
+    }
+
+    dot.className = `status-dot ${dotState}`;
+    label.innerHTML = `<span style="margin-right: 4px;">${icon}</span>${text}`;
+
+    notificationTimeout = setTimeout(() => {
+      notificationTimeout = null;
+      fetchStatus();
+    }, durationMs);
+  }
+
   // --- API STATUS & POLLING ---
 
   async function fetchStatus() {
@@ -162,10 +183,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await res.json();
       updateUI(data);
     } catch {
-      const dot = document.getElementById("status-dot-indicator");
-      const label = document.getElementById("status-label-text");
-      if (dot) dot.className = "status-dot startup";
-      if (label) label.innerText = typeof t === "function" ? t("kioskStatusStarting") : "Avvio...";
+      if (!notificationTimeout) {
+        const dot = document.getElementById("status-dot-indicator");
+        const label = document.getElementById("status-label-text");
+        if (dot) dot.className = "status-dot startup";
+        if (label) label.innerText = typeof t === "function" ? t("kioskStatusStarting") : "Avvio...";
+      }
     }
   }
 
@@ -191,8 +214,10 @@ document.addEventListener("DOMContentLoaded", () => {
       sysText = typeof t === "function" ? t("kioskStatusReady") : "Pronto";
     }
 
-    if (dot) dot.className = `status-dot ${sysState}`;
-    if (label) label.innerText = sysText;
+    if (!notificationTimeout) {
+      if (dot) dot.className = `status-dot ${sysState}`;
+      if (label) label.innerText = sysText;
+    }
 
     // Active SoundFont Display Name Under Activity LEDs
     const activeSf2Display = document.getElementById("kiosk-active-sf2-display");
@@ -417,6 +442,7 @@ document.addEventListener("DOMContentLoaded", () => {
     audioSelect.addEventListener("change", async (e) => {
       const devId = e.target.value;
       if (!devId) return;
+      showKioskNotification("Uscita Audio Cambiata", "🔊", 2500, "ready");
       try {
         await fetch("/api/audio/device", {
           method: "POST",
@@ -487,6 +513,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!sf2Name) return;
         btn.innerText = "Caricamento...";
         btn.disabled = true;
+        showKioskNotification(`Caricamento SoundFont...`, "🎼", 3500, "loading");
         try {
           await fetch("/api/soundfonts/select", {
             method: "POST",
@@ -508,6 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sf2Name = btn.getAttribute("data-sf2");
         const isDefault = btn.getAttribute("data-is-default") === "true";
         if (!sf2Name) return;
+        showKioskNotification(isDefault ? "Predefinito Rimosso" : "Predefinito Impostato!", "★", 2500, "ready");
         try {
           if (isDefault) {
             await fetch("/api/soundfonts/default", { method: "DELETE" });
@@ -679,6 +707,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (revText) revText.innerText = "0.50";
       if (choText) choText.innerText = "0.60";
 
+      showKioskNotification("Effetti Ripristinati", "⚙️", 2500, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
@@ -702,6 +731,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnPanic.addEventListener("click", async () => {
       const btnText = document.getElementById("panic-btn-text");
       if (btnText) btnText.innerText = "Invio in corso...";
+      showKioskNotification("Note & Controller Silenziati!", "🛑", 2500, "ready");
 
       try {
         await fetch("/api/synth/stop-notes", { method: "POST" });
@@ -732,6 +762,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (audioDot) audioDot.className = "act-dot live";
       if (statusDot) statusDot.className = "status-dot ready";
 
+      showKioskNotification("Nota C4 Inviata", "🔊", 2200, "ready");
+
       try {
         await fetch("/api/audio/test", { method: "POST" });
       } catch {
@@ -752,6 +784,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnRestartSoftware.addEventListener("click", async () => {
       btnRestartSoftware.innerText = "Riavvio in corso...";
       btnRestartSoftware.disabled = true;
+      showKioskNotification("Riavvio Software...", "🔄", 3500, "loading");
       try {
         await fetch("/api/synth/restart-software", { method: "POST" });
         setTimeout(() => {
