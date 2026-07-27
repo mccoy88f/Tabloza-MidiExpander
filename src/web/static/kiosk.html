@@ -57,20 +57,14 @@
             </div>
 
             <!-- SoundFont Volume (SF2 Gain) -->
-            <div class="volume-control">
-              <div class="volume-header">
+            <div class="volume-header">
                 <span>Volume SoundFont (Gain)</span>
                 <span class="volume-val" id="sf2-gain-text">2.0×</span>
               </div>
               <input type="range" id="sf2-gain-slider" class="kiosk-slider-input" min="0" max="400" step="5" value="200">
-            </div>
-
-            <div style="display: flex; gap: 8px; margin-top: 4px;">
-              <button type="button" id="btn-sound-test" class="kiosk-btn kiosk-btn-primary" style="flex: 1;">
-                🔊 Test Suono
-              </button>
-              <button type="button" id="btn-midi-reset" class="kiosk-btn" style="flex: 1;">
-                🔄 Reset MIDI
+                   <div style="display: flex; gap: 8px; margin-top: 4px;">
+              <button type="button" id="btn-sound-test" class="kiosk-btn kiosk-btn-primary" style="width: 100%;">
+                🔊 Test Suono (Nota C4)
               </button>
             </div>
           </div>
@@ -98,6 +92,9 @@
                   <div class="act-label">Audio</div>
                 </div>
               </div>
+              <div class="kiosk-active-sf-text" id="kiosk-active-sf2-display">
+                SF2 Attivo: Caricamento...
+              </div>
             </div>
 
             <!-- Big Panic Button -->
@@ -113,28 +110,30 @@
 
         <!-- PAGE 1: SOUNDFONT & MIDI -->
         <div class="kiosk-page">
-          <!-- Left Card: SoundFont Select -->
-          <div class="kiosk-card" style="display: flex; flex-direction: column;">
-            <div class="card-title">SoundFont Caricato / Libreria</div>
-            <div class="sf2-scroll-list" id="sf2-list-container">
-              <div style="color: var(--text-muted); font-size: 12px;">Caricamento elenco SF2...</div>
+          <!-- Left Card: SoundFont SF2 Selection & Gain -->
+          <div class="kiosk-card">
+            <div>
+              <div class="card-title">Selezione SoundFont (.sf2)</div>
+              <div class="sf2-scroll-list" id="sf2-list-container">
+                <div style="color: var(--text-muted); font-size: 12px;">Caricamento banchi in corso...</div>
+              </div>
             </div>
           </div>
 
-          <!-- Right Card: Audio Output, Effects & MIDI Connections -->
+          <!-- Right Card: Audio Output & Reverb/Chorus Effects -->
           <div class="kiosk-card">
-            <!-- Audio Output Device Picker -->
+            <!-- Uscita Audio Select -->
             <div>
-              <div class="card-title">Uscita Audio</div>
-              <select id="kiosk-audio-device-select" class="kiosk-select">
-                <option value="">Caricamento uscite audio...</option>
+              <div class="card-title" data-i18n="kioskAudioDevice">Uscita Audio</div>
+              <select id="kiosk-audio-device-select" class="kiosk-btn" style="width: 100%; font-size: 12px; font-weight: bold; background: var(--bg-dark);">
+                <option value="">Rilevamento uscite audio...</option>
               </select>
             </div>
 
-            <!-- Synth Effects (Reverb & Chorus) -->
+            <!-- Effects Controls (Reverb & Chorus) -->
             <div>
-              <div class="card-title">Effetti Synth (Riverbero & Chorus)</div>
-              
+              <div class="card-title">Controlli Effetti Synth</div>
+
               <!-- Reverb -->
               <div class="effect-box">
                 <div class="effect-header">
@@ -169,14 +168,6 @@
                 ⚙️ Ripristina Predefiniti Effetti
               </button>
             </div>
-
-            <!-- MIDI Inputs (WSS & RTP AppleMIDI) -->
-            <div>
-              <div class="card-title">Connessioni MIDI (WSS & RTP AppleMIDI)</div>
-              <div id="kiosk-midi-inputs" style="font-size: 12px; color: var(--text-muted); background: var(--bg-dark); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
-                In attesa di connessioni...
-              </div>
-            </div>
           </div>
         </div>
 
@@ -194,18 +185,18 @@
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-              <a href="/" target="_blank" class="kiosk-btn" style="text-decoration: none; color: var(--text-main);">
-                🖥️ Apri Pannello Web Completo
-              </a>
+              <button type="button" id="btn-open-conn-wizard" class="kiosk-btn kiosk-btn-primary" style="height: 48px; font-size: 13px; font-weight: bold;">
+                🌐 Imposta Connessione Rete
+              </button>
             </div>
           </div>
 
-          <!-- Right Card: System Control & Reboot/Shutdown -->
+          <!-- Right Card: System Control & Reboot -->
           <div class="kiosk-card">
             <div>
               <div class="card-title">Informazioni Hardware & Controllo</div>
               <div style="font-size: 12px; color: var(--text-muted); margin-top: 6px; line-height: 1.5;">
-                <div>• Versione: <strong id="kiosk-version-text" style="color: var(--text-main);">v3.1.0</strong></div>
+                <div>• Versione: <strong id="kiosk-version-text" style="color: var(--text-main);">v3.2.0</strong></div>
                 <div>• Temp. CPU: <strong id="stat-temp-val" style="color: var(--accent-cyan);">-- °C</strong></div>
                 <div>• Display Target: <strong style="color: var(--accent-cyan);">DSI 4.3" / 7" / 11" & Mobile</strong></div>
               </div>
@@ -237,16 +228,16 @@
               </div>
             </div>
 
-            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-              <button type="button" id="btn-kiosk-restart-software" class="kiosk-btn kiosk-btn-primary" style="height: 44px;">
-                🔄 Riavvia Software Synth
+            <div class="kiosk-btn-row" style="margin-top: 12px;">
+              <button type="button" id="btn-kiosk-restart-software" class="kiosk-btn kiosk-btn-primary" style="height: 44px; font-size: 12px;">
+                🔄 Riavvia Software
               </button>
-              <button type="button" id="btn-open-reboot-modal" class="kiosk-btn kiosk-btn-danger" style="height: 44px;">
-                🔄 Riavvia Dispositivo (Pi)
+              <button type="button" id="btn-open-reboot-modal" class="kiosk-btn kiosk-btn-danger" style="height: 44px; font-size: 12px;">
+                🔄 Riavvia Dispositivo
               </button>
-              <button type="button" id="btn-shutdown" class="kiosk-btn kiosk-btn-danger" style="height: 44px;">
-                ⚡ Spegni Raspberry Pi
-              </button>
+            </div>
+          </div>
+        </div>
             </div>
           </div>
         </div>
@@ -270,11 +261,32 @@
           </button>
         </div>
       </div>
+    <!-- CONNECTION WIZARD MODAL -->
+    <div id="conn-wizard-modal" class="kiosk-modal-overlay hidden">
+      <div class="kiosk-modal-card" style="max-width: 480px;">
+        <div class="kiosk-modal-title" id="wizard-modal-title" data-i18n="kioskConnWizardTitle">Imposta Connessione Rete</div>
+        <div id="wizard-step-indicator" style="font-size: 12px; color: var(--accent-cyan); font-weight: 600; margin-top: 4px;" data-i18n="kioskConnWizardStep1">
+          Passo 1: Seleziona tipo di rete
+        </div>
+
+        <div class="wizard-step-container" id="wizard-content-area" style="margin-top: 12px;">
+          <!-- Injected via JS -->
+        </div>
+
+        <div class="kiosk-modal-actions" style="margin-top: 16px;">
+          <button type="button" id="btn-wizard-back" class="kiosk-btn hidden" style="flex: 1;" data-i18n="kioskConnBack">
+            ‹ Indietro
+          </button>
+          <button type="button" id="btn-wizard-close" class="kiosk-btn" style="flex: 1;" data-i18n="kioskConnClose">
+            Chiudi
+          </button>
+        </div>
+      </div>
     </div>
 
   </div>
 
-  <script src="/static/i18n.js?v=3.1.0"></script>
-  <script src="/static/kiosk.js?v=3.1.0"></script>
+  <script src="/static/i18n.js?v=3.2.0"></script>
+  <script src="/static/kiosk.js?v=3.2.0"></script>
 </body>
 </html>

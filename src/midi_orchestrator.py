@@ -492,6 +492,12 @@ def apply_soundfont_from_config() -> bool:
         clear_cancel_soundfont_load()
         return False
 
+    if soundfont_load_lock.locked():
+        st = read_soundfont_state()
+        if st.get("selected") == selected and st.get("loading"):
+            log.info("Caricamento già in corso per %s, ignoro richiesta duplicata", selected)
+            return True
+
     with soundfont_load_lock:
         if cancel_soundfont_load_requested():
             clear_cancel_soundfont_load()

@@ -1,5 +1,5 @@
 /**
- * Tabloza MidiExpander — Touch Kiosk Logic (v3.1.0)
+ * Tabloza MidiExpander — Touch Kiosk Logic (v3.2.0)
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -124,6 +124,18 @@ document.addEventListener("DOMContentLoaded", () => {
     if (dot) dot.className = `status-dot ${sysState}`;
     if (label) label.innerText = sysText;
 
+    // Active SoundFont Display Name Under Activity LEDs
+    const activeSf2Display = document.getElementById("kiosk-active-sf2-display");
+    if (activeSf2Display) {
+      if (sfLoading) {
+        activeSf2Display.innerText = "SF2 Attivo: Caricamento...";
+      } else if (data.soundfont && data.soundfont.loaded) {
+        activeSf2Display.innerText = `SF2 Attivo: ${data.soundfont.loaded}`;
+      } else {
+        activeSf2Display.innerText = "SF2 Attivo: Nessuno";
+      }
+    }
+
     // Host, IP & Network Mode
     if (data.hostname) {
       const hostEl = document.getElementById("kiosk-hostname");
@@ -171,13 +183,12 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Activity LED Dots (exact match with main dashboard logic in app.js)
+    // Activity LED Dots
     const setDot = (id, state) => {
       const d = document.getElementById(id);
       if (d) d.className = `act-dot ${state || "inactive"}`;
     };
 
-    // Synth Dot
     let synthDotState = "inactive";
     if (starting || (engineRunning && !midiReady)) {
       synthDotState = "loading";
@@ -186,7 +197,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setDot("dot-synth", synthDotState);
 
-    // SF2 Dot
     let sfState = "inactive";
     if (sfLoading) {
       sfState = "loading";
@@ -195,7 +205,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setDot("dot-sf2", sfState);
 
-    // MIDI In Dot
     const midiAct = data.activity?.midi || {};
     const midiReceiving = !!midiAct.receiving;
     let midiDotState = "inactive";
@@ -208,7 +217,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setDot("dot-midi", midiDotState);
 
-    // Audio Out Dot
     const audioAct = data.activity?.audio || {};
     const audioPlaying = !!audioAct.output_active;
     let audioDotState = "inactive";
@@ -221,7 +229,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     setDot("dot-audio", audioDotState);
 
-    // Connected MIDI Connections (WSS & RTP AppleMIDI)
+    // Connected MIDI Connections
     const container = document.getElementById("kiosk-midi-inputs");
     if (container && data.midi) {
       const m = data.midi;
@@ -240,7 +248,6 @@ document.addEventListener("DOMContentLoaded", () => {
         : "Nessuna connessione MIDI attiva";
     }
 
-    // Synth Effects Parameters sync
     if (data.synth_settings) {
       syncSynthEffectsUI(data.synth_settings);
     }
@@ -353,7 +360,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // --- SOUNDFONT LIST FETCH & SELECT WITH ACTION BUTTONS ---
+  // --- SOUNDFONT LIST FETCH & SELECT WITH STAR BUTTON ---
 
   async function fetchSoundfonts() {
     try {
@@ -387,15 +394,14 @@ document.addEventListener("DOMContentLoaded", () => {
               <div class="sf2-item-meta">
                 ${sf.size ? `${Math.round(sf.size / (1024 * 1024))} MB` : ""}
                 ${isSelected ? ' · <span style="color: var(--accent-cyan);">● Attivo</span>' : ""}
-                ${isDefault ? ' · <span style="color: var(--accent-orange);">★ Predefinito</span>' : ""}
               </div>
             </div>
             <div class="sf2-action-btns">
               <button type="button" class="sf2-btn-sm ${isSelected ? "active-load" : ""} btn-sf2-load" data-sf2="${sfName}">
                 ${isSelected ? "● Attivo" : "Carica"}
               </button>
-              <button type="button" class="sf2-btn-sm ${isDefault ? "is-default" : ""} btn-sf2-default" data-sf2="${sfName}" data-is-default="${isDefault}">
-                ${isDefault ? "★ Default" : "Predefinito"}
+              <button type="button" class="sf2-btn-star ${isDefault ? "is-default" : ""} btn-sf2-default" data-sf2="${sfName}" data-is-default="${isDefault}" title="${isDefault ? "Predefinito all'avvio" : "Imposta come predefinito"}">
+                ${isDefault ? "★" : "☆"}
               </button>
             </div>
           </div>
@@ -410,6 +416,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const sf2Name = btn.getAttribute("data-sf2");
         if (!sf2Name) return;
         btn.innerText = "Caricamento...";
+        btn.disabled = true;
         try {
           await fetch("/api/soundfonts/select", {
             method: "POST",
@@ -419,12 +426,12 @@ document.addEventListener("DOMContentLoaded", () => {
           fetchSoundfonts();
           fetchStatus();
         } catch {
-          /* ignore */
+          btn.disabled = false;
         }
       });
     });
 
-    // Attach Default Button Handlers
+    // Attach Default Star Button Handlers
     container.querySelectorAll(".btn-sf2-default").forEach((btn) => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -619,7 +626,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // PANIC Button
+  // PANIC Button (Stop notes + reset controllers)
   const btnPanic = document.getElementById("btn-panic-stop");
   if (btnPanic) {
     btnPanic.addEventListener("click", async () => {
@@ -629,7 +636,7 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await fetch("/api/synth/stop-notes", { method: "POST" });
         btnPanic.classList.add("success");
-        if (btnText) btnText.innerText = "NOTE SILENZIATE!";
+        if (btnText) btnText.innerText = "NOTE & SILENZIATE!";
         setTimeout(() => {
           btnPanic.classList.remove("success");
           if (btnText) btnText.innerText = "PANIC — SILENZIA TUTTO";
@@ -655,18 +662,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // MIDI Reset Button
-  const btnMidiReset = document.getElementById("btn-midi-reset");
-  if (btnMidiReset) {
-    btnMidiReset.addEventListener("click", async () => {
-      try {
-        await fetch("/api/midi/reset", { method: "POST" });
-      } catch {
-        /* ignore */
-      }
-    });
-  }
-
   // Restart Software Button
   const btnRestartSoftware = document.getElementById("btn-kiosk-restart-software");
   if (btnRestartSoftware) {
@@ -676,14 +671,14 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await fetch("/api/synth/restart-software", { method: "POST" });
         setTimeout(() => {
-          btnRestartSoftware.innerText = "🔄 Riavvia Software Synth";
+          btnRestartSoftware.innerText = "🔄 Riavvia Software";
           btnRestartSoftware.disabled = false;
           fetchStatus();
         }, 3000);
       } catch {
         btnRestartSoftware.innerText = "Errore Riavvio";
         setTimeout(() => {
-          btnRestartSoftware.innerText = "🔄 Riavvia Software Synth";
+          btnRestartSoftware.innerText = "🔄 Riavvia Software";
           btnRestartSoftware.disabled = false;
         }, 3000);
       }
@@ -720,17 +715,192 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Shutdown Button
-  const btnShutdown = document.getElementById("btn-shutdown");
-  if (btnShutdown) {
-    btnShutdown.addEventListener("click", async () => {
-      if (confirm("Spegnere completamente il Raspberry Pi?")) {
+  // --- CONNECTION WIZARD MODAL WIZARD LOGIC ---
+  const connWizardModal = document.getElementById("conn-wizard-modal");
+  const btnOpenConnWizard = document.getElementById("btn-open-conn-wizard");
+  const btnWizardBack = document.getElementById("btn-wizard-back");
+  const btnWizardClose = document.getElementById("btn-wizard-close");
+  const wizardStepIndicator = document.getElementById("wizard-step-indicator");
+  const wizardContentArea = document.getElementById("wizard-content-area");
+
+  let wizardStep = 1;
+
+  if (btnOpenConnWizard && connWizardModal) {
+    btnOpenConnWizard.addEventListener("click", () => {
+      connWizardModal.classList.remove("hidden");
+      showWizardStep(1);
+    });
+  }
+
+  if (btnWizardClose && connWizardModal) {
+    btnWizardClose.addEventListener("click", () => {
+      connWizardModal.classList.add("hidden");
+    });
+  }
+
+  if (btnWizardBack) {
+    btnWizardBack.addEventListener("click", () => {
+      if (wizardStep > 1) {
+        showWizardStep(wizardStep - 1);
+      }
+    });
+  }
+
+  function showWizardStep(step) {
+    wizardStep = step;
+    if (step === 1) {
+      if (btnWizardBack) btnWizardBack.classList.add("hidden");
+      if (wizardStepIndicator) wizardStepIndicator.innerText = "Passo 1: Seleziona tipo di rete";
+      renderWizardStep1();
+    }
+  }
+
+  function renderWizardStep1() {
+    if (!wizardContentArea) return;
+    wizardContentArea.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" class="kiosk-btn kiosk-btn-primary" id="wizard-opt-wifi" style="height: 52px; font-size: 14px; font-weight: bold; text-align: left; padding: 0 16px;">
+          📶 Configura Rete Wi-Fi
+        </button>
+        <button type="button" class="kiosk-btn" id="wizard-opt-lan" style="height: 52px; font-size: 14px; font-weight: bold; text-align: left; padding: 0 16px;">
+          🔌 Configura Ethernet / LAN
+        </button>
+      </div>
+    `;
+
+    document.getElementById("wizard-opt-wifi")?.addEventListener("click", () => {
+      showWizardStep2Wifi();
+    });
+
+    document.getElementById("wizard-opt-lan")?.addEventListener("click", () => {
+      showWizardStep2Lan();
+    });
+  }
+
+  async function showWizardStep2Wifi() {
+    wizardStep = 2;
+    if (btnWizardBack) btnWizardBack.classList.remove("hidden");
+    if (wizardStepIndicator) wizardStepIndicator.innerText = "Passo 2: Modalità o Rete Wi-Fi";
+    if (!wizardContentArea) return;
+
+    wizardContentArea.innerHTML = '<div style="color: var(--text-muted); font-size: 12px;">Caricamento reti salvate...</div>';
+
+    let savedNetworks = [];
+    try {
+      const res = await fetch("/api/wifi/saved");
+      if (res.ok) {
+        const data = await res.json();
+        savedNetworks = data.saved || [];
+      }
+    } catch { /* ignore */ }
+
+    let html = '<div style="display: flex; flex-direction: column; gap: 8px;">';
+
+    if (savedNetworks.length > 0) {
+      html += '<div style="font-size: 12px; font-weight: bold; color: var(--accent-cyan);">Reti Wi-Fi Salvate:</div>';
+      savedNetworks.forEach((net) => {
+        const ssid = typeof net === "string" ? net : (net.ssid || net.name);
+        html += `
+          <button type="button" class="kiosk-btn btn-wifi-select" data-ssid="${ssid}" style="font-size: 12px; text-align: left;">
+            📶 Connetti a "${ssid}"
+          </button>
+        `;
+      });
+    } else {
+      html += '<div style="font-size: 12px; color: var(--text-muted);">Nessuna rete Wi-Fi salvata.</div>';
+    }
+
+    html += `
+      <hr style="border: none; border-top: 1px solid var(--border-color); margin: 6px 0;">
+      <button type="button" class="kiosk-btn" id="btn-wizard-start-hotspot" style="font-size: 12px; text-align: left;">
+        📡 Avvia Hotspot Fallback (Tabloza-Hotspot)
+      </button>
+      <button type="button" class="kiosk-btn kiosk-btn-danger" id="btn-wizard-disable-wifi" style="font-size: 12px; text-align: left;">
+        🚫 Disattiva Wi-Fi
+      </button>
+    </div>`;
+
+    wizardContentArea.innerHTML = html;
+
+    wizardContentArea.querySelectorAll(".btn-wifi-select").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const ssid = btn.getAttribute("data-ssid");
+        if (!ssid) return;
+        btn.innerText = `Connessione a ${ssid}...`;
         try {
-          await fetch("/api/device/shutdown", { method: "POST" });
-          alert("Spegnimento avviato...");
+          await fetch("/api/wifi/connect", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ssid }),
+          });
+          alert(`Connessione inviata a ${ssid}`);
+          connWizardModal.classList.add("hidden");
+          fetchStatus();
         } catch {
-          /* ignore */
+          alert("Errore invio connessione");
         }
+      });
+    });
+
+    document.getElementById("btn-wizard-start-hotspot")?.addEventListener("click", async () => {
+      try {
+        await fetch("/api/wifi/hotspot/start", { method: "POST" });
+        alert("Hotspot avviato!");
+        connWizardModal.classList.add("hidden");
+        fetchStatus();
+      } catch {
+        alert("Errore avvio hotspot");
+      }
+    });
+
+    document.getElementById("btn-wizard-disable-wifi")?.addEventListener("click", async () => {
+      try {
+        await fetch("/api/wifi/disable", { method: "POST" });
+        alert("Wi-Fi disattivato");
+        connWizardModal.classList.add("hidden");
+        fetchStatus();
+      } catch {
+        alert("Errore disattivazione Wi-Fi");
+      }
+    });
+  }
+
+  function showWizardStep2Lan() {
+    wizardStep = 2;
+    if (btnWizardBack) btnWizardBack.classList.remove("hidden");
+    if (wizardStepIndicator) wizardStepIndicator.innerText = "Passo 2: Modalità Ethernet (LAN)";
+    if (!wizardContentArea) return;
+
+    wizardContentArea.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" class="kiosk-btn kiosk-btn-primary" id="btn-lan-dhcp" style="height: 48px; font-size: 13px; font-weight: bold; text-align: left;">
+          🌐 Modalità DHCP Normale (Router Casa/Studio)
+        </button>
+        <button type="button" class="kiosk-btn" id="btn-lan-direct" style="height: 48px; font-size: 13px; font-weight: bold; text-align: left;">
+          🔌 Link LAN Diretto PC/Mac (192.168.5.1)
+        </button>
+      </div>
+    `;
+
+    document.getElementById("btn-lan-dhcp")?.addEventListener("click", async () => {
+      try {
+        await fetch("/api/network/lan-direct/stop", { method: "POST" });
+        alert("Impostata modalità LAN DHCP normale");
+        connWizardModal.classList.add("hidden");
+        fetchStatus();
+      } catch {
+        alert("Errore impostazione LAN DHCP");
+      }
+    });
+
+    document.getElementById("btn-lan-direct")?.addEventListener("click", async () => {
+      try {
+        await fetch("/api/network/lan-direct/start", { method: "POST" });
+        alert("Attivato Link LAN Diretto su 192.168.5.1");
+        connWizardModal.classList.add("hidden");
+        fetchStatus();
+      } catch {
+        alert("Errore attivazione Link LAN Diretto");
       }
     });
   }

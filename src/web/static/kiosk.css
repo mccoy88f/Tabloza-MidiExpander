@@ -391,9 +391,47 @@ input[type="range"].kiosk-slider-input {
   color: #fff;
 }
 
-.sf2-btn-sm.is-default {
+.sf2-btn-star {
+  font-size: 16px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sf2-btn-star.is-default {
   border-color: var(--accent-orange);
   color: var(--accent-orange);
+  background-color: rgba(255, 170, 0, 0.12);
+}
+
+.kiosk-btn-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.kiosk-btn-row .kiosk-btn {
+  flex: 1;
+}
+
+.kiosk-active-sf-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--accent-cyan);
+  text-align: center;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(0, 242, 254, 0.06);
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 242, 254, 0.15);
 }
 
 /* Device Stats Boxes (CPU & RAM) */
