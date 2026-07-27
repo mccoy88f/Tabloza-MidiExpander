@@ -551,6 +551,26 @@ document.getElementById("btn-check-update")?.addEventListener("click", async () 
   }
 });
 
+document.getElementById("btn-restart-software")?.addEventListener("click", async () => {
+  const btn = document.getElementById("btn-restart-software");
+  const msg = document.getElementById("device-power-msg");
+  btn.disabled = true;
+  msg.textContent = "Riavvio software in corso…";
+  msg.className = "msg";
+  msg.classList.remove("hidden", "ok", "err");
+  try {
+    await api("/api/synth/restart-software", { method: "POST" });
+    msg.textContent = "Software synth riavviato!";
+    msg.classList.add("ok");
+    refreshStatus();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.classList.add("err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 document.getElementById("btn-device-reboot")?.addEventListener("click", async () => {
   if (!window.confirm(t("rebootConfirm"))) return;
 

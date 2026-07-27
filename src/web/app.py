@@ -469,6 +469,15 @@ def api_synth_stop_notes():
     return jsonify({"ok": True, "message": "Note silenziate"})
 
 
+@app.route("/api/synth/restart-software", methods=["POST"])
+@require_auth
+def api_synth_restart_software():
+    log_event("web", "Riavvio software synth (orchestrator & FluidSynth)...")
+    if not trigger_orchestrator_reload_fluidsynth():
+        return jsonify({"error": "Orchestrator non raggiungibile"}), 503
+    return jsonify({"ok": True, "message": "Software synth riavviato"})
+
+
 # --- SoundFonts ---
 
 @app.route("/api/soundfonts")

@@ -667,6 +667,29 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Restart Software Button
+  const btnRestartSoftware = document.getElementById("btn-kiosk-restart-software");
+  if (btnRestartSoftware) {
+    btnRestartSoftware.addEventListener("click", async () => {
+      btnRestartSoftware.innerText = "Riavvio in corso...";
+      btnRestartSoftware.disabled = true;
+      try {
+        await fetch("/api/synth/restart-software", { method: "POST" });
+        setTimeout(() => {
+          btnRestartSoftware.innerText = "🔄 Riavvia Software Synth";
+          btnRestartSoftware.disabled = false;
+          fetchStatus();
+        }, 3000);
+      } catch {
+        btnRestartSoftware.innerText = "Errore Riavvio";
+        setTimeout(() => {
+          btnRestartSoftware.innerText = "🔄 Riavvia Software Synth";
+          btnRestartSoftware.disabled = false;
+        }, 3000);
+      }
+    });
+  }
+
   // REBOOT MODAL HANDLERS
   const rebootModal = document.getElementById("reboot-modal");
   const btnOpenRebootModal = document.getElementById("btn-open-reboot-modal");
