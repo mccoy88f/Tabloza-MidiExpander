@@ -22,14 +22,14 @@
       </div>
 
       <nav class="kiosk-nav">
-        <button type="button" class="kiosk-tab-btn active" data-tab="0">
-          <span>📊</span><span data-i18n="kioskTabStatus">Stato</span>
+        <button type="button" class="kiosk-tab-btn active" data-tab="0" title="Stato">
+          <span style="font-size: 20px;">📊</span>
         </button>
-        <button type="button" class="kiosk-tab-btn" data-tab="1">
-          <span>🎼</span><span data-i18n="kioskTabSoundfont">SoundFont & MIDI</span>
+        <button type="button" class="kiosk-tab-btn" data-tab="1" title="SoundFont & MIDI">
+          <span style="font-size: 20px;">🎼</span>
         </button>
-        <button type="button" class="kiosk-tab-btn" data-tab="2">
-          <span>⚙️</span><span data-i18n="kioskTabConnection">Dispositivo</span>
+        <button type="button" class="kiosk-tab-btn" data-tab="2" title="Dispositivo">
+          <span style="font-size: 20px;">⚙️</span>
         </button>
       </nav>
 
@@ -267,6 +267,8 @@
           </button>
         </div>
       </div>
+    </div>
+
     <!-- CONNECTION WIZARD MODAL -->
     <div id="conn-wizard-modal" class="kiosk-modal-overlay hidden">
       <div class="kiosk-modal-card" style="max-width: 480px;">

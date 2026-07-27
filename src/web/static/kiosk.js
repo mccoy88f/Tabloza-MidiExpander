@@ -724,10 +724,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnSoundTest = document.getElementById("btn-sound-test");
   if (btnSoundTest) {
     btnSoundTest.addEventListener("click", async () => {
+      btnSoundTest.innerText = "🔊 Riproduzione nota C4...";
+      btnSoundTest.disabled = true;
+
+      const audioDot = document.getElementById("dot-audio");
+      const statusDot = document.getElementById("status-dot-indicator");
+      if (audioDot) audioDot.className = "act-dot live";
+      if (statusDot) statusDot.className = "status-dot ready";
+
       try {
         await fetch("/api/audio/test", { method: "POST" });
       } catch {
         /* ignore */
+      } finally {
+        setTimeout(() => {
+          btnSoundTest.innerText = "🔊 Test Suono (Nota C4)";
+          btnSoundTest.disabled = false;
+          fetchStatus();
+        }, 1800);
       }
     });
   }
