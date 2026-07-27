@@ -571,6 +571,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     volSlider.addEventListener("change", async (e) => {
       const val = parseInt(e.target.value, 10);
+      showKioskNotification(`Volume: ${val}%`, "🔊", 2000, "ready");
       try {
         await fetch("/api/volume", {
           method: "POST",
@@ -596,6 +597,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     sf2GainSlider.addEventListener("change", async (e) => {
       const gain = parseInt(e.target.value, 10) / 100;
+      showKioskNotification(`Gain SF2: ${(Math.round(gain * 10) / 10).toFixed(1)}×`, "🎚️", 2000, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
@@ -621,6 +623,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     revSlider.addEventListener("change", async (e) => {
       const l = parseFloat(e.target.value);
+      showKioskNotification(`Riverbero: ${l.toFixed(2)}`, "🌊", 2000, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
@@ -638,6 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (revToggle) {
     revToggle.addEventListener("change", async () => {
       const l = revSlider ? parseFloat(revSlider.value) : 0.5;
+      showKioskNotification(revToggle.checked ? "Riverbero Attivo" : "Riverbero Disattivato", "🌊", 2000, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
@@ -666,6 +670,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     choSlider.addEventListener("change", async (e) => {
       const l = parseFloat(e.target.value);
+      showKioskNotification(`Chorus: ${l.toFixed(2)}`, "✨", 2000, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
@@ -683,6 +688,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (choToggle) {
     choToggle.addEventListener("change", async () => {
       const l = choSlider ? parseFloat(choSlider.value) : 0.6;
+      showKioskNotification(choToggle.checked ? "Chorus Attivo" : "Chorus Disattivato", "✨", 2000, "ready");
       try {
         await fetch("/api/synth/settings", {
           method: "POST",
