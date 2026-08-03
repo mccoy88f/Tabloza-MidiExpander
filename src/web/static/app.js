@@ -1935,6 +1935,42 @@ document.getElementById("btn-midi-apply")?.addEventListener("click", async () =>
   }
 });
 
+// --- Rete: forza LAN diretto ---
+async function refreshEthForceDirect() {
+  const checkbox = document.getElementById("eth-force-direct");
+  if (!checkbox) return;
+  try {
+    const res = await api("/api/network/eth-force-direct");
+    checkbox.checked = !!res.enabled;
+  } catch {
+    /* ignore */
+  }
+}
+
+document.getElementById("btn-eth-force-direct-apply")?.addEventListener("click", async () => {
+  const msg = document.getElementById("eth-force-direct-msg");
+  const btn = document.getElementById("btn-eth-force-direct-apply");
+  const checkbox = document.getElementById("eth-force-direct");
+  btn.disabled = true;
+  msg.textContent = t("midiApplying");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const res = await api("/api/network/eth-force-direct", {
+      method: "POST",
+      body: JSON.stringify({ enabled: checkbox.checked }),
+    });
+    msg.textContent = res.enabled ? t("ethForceDirectEnabled") : t("ethForceDirectDisabled");
+    msg.className = "msg ok";
+    refreshStatus();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // --- Password ---
 document.getElementById("change-password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1965,6 +2001,7 @@ function refreshAll() {
     void loadPairedBluetoothDevices({ quiet: true });
     refreshSynthSettings();
     refreshMidiSettings();
+    refreshEthForceDirect();
   }
 }
 

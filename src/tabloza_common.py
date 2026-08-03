@@ -59,6 +59,12 @@ def save_config(config: dict):
         merged["midi"] = {**existing_midi, **incoming_midi}
     elif existing_midi:
         merged["midi"] = existing_midi
+    existing_network = existing.get("network") if isinstance(existing.get("network"), dict) else {}
+    incoming_network = config.get("network") if isinstance(config.get("network"), dict) else None
+    if incoming_network is not None:
+        merged["network"] = {**existing_network, **incoming_network}
+    elif existing_network:
+        merged["network"] = existing_network
     CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(merged, f, indent=2)

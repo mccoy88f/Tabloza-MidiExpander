@@ -149,8 +149,26 @@ def stop_lan_direct(skip_reconnect: bool = False) -> tuple[bool, str | None]:
     return True, None
 
 
+def is_eth_force_direct_enabled() -> bool:
+    """True se l'utente ha forzato la modalità LAN diretto da pannello (config.json → network.eth_force_direct)."""
+    try:
+        from tabloza_common import load_config
+        config = load_config()
+    except Exception:
+        return False
+    network_cfg = config.get("network")
+    if not isinstance(network_cfg, dict):
+        return False
+    return bool(network_cfg.get("eth_force_direct", False))
+
+
 def manage_ethernet_auto() -> None:
-    """Prefer normal DHCP on eth; after grace period without IP, enable router/shared mode."""
+    """Prefer normal DHCP on eth; after grace period without IP, enable router/shared mode.
+
+    Se `network.eth_force_direct` è attivo, salta il rilevamento DHCP e mantiene
+    sempre la modalità LAN diretto (192.168.5.1) finché il cavo resta collegato,
+    anche se l'altro capo è un router che offrirebbe un IP normale.
+    """
     device = get_primary_ethernet_device()
     if not device:
         _clear_carrier_since()
@@ -160,6 +178,13 @@ def manage_ethernet_auto() -> None:
         if is_lan_direct_active():
             stop_lan_direct(skip_reconnect=True)
         _clear_carrier_since()
+        return
+
+    if is_eth_force_direct_enabled():
+        _clear_carrier_since()
+        if not is_lan_direct_active():
+            log_event("network", "Forza LAN diretto attivo — avvio modalità router su Ethernet")
+            start_lan_direct()
         return
 
     if has_usable_eth_ip(device):

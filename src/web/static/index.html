@@ -299,6 +299,18 @@
         <h2 data-i18n="sectionNetwork">Rete</h2>
         <p id="network-status-badge" class="network-status-badge" aria-live="polite">—</p>
 
+        <div id="block-eth-force-direct" class="network-block">
+          <label class="synth-toggle">
+            <input type="checkbox" id="eth-force-direct">
+            <span data-i18n="labelEthForceDirect">Forza sempre Link LAN diretto</span>
+          </label>
+          <p class="muted synth-hint" data-i18n="ethForceDirectHint">Ignora il DHCP del router: qualunque cavo Ethernet collegato attiva subito 192.168.5.1, anche su una rete normale. Usalo solo con un cavo diretto Pi↔computer — su una rete condivisa con altri dispositivi crea conflitti (doppio DHCP).</p>
+          <div class="network-mode-actions">
+            <button type="button" id="btn-eth-force-direct-apply" class="btn btn-secondary" data-i18n="applyEthForceDirect">Applica</button>
+          </div>
+          <p id="eth-force-direct-msg" class="msg hidden"></p>
+        </div>
+
         <div id="block-lan-direct" class="network-block hidden">
           <p id="hint-lan-direct" class="muted network-hint"></p>
           <div class="network-mode-actions">

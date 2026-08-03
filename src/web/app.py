@@ -64,7 +64,13 @@ from rtpmidid_config import apply_rtpmidid_config  # noqa: E402
 from synth_config import merge_fluidsynth_config, normalize_synth_gain, parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
 from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
-from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
+from network_utils import (  # noqa: E402
+    _ethernet_carrier_up,
+    get_primary_ethernet_device,
+    is_eth_force_direct_enabled,
+    start_lan_direct,
+    stop_lan_direct,
+)
 from wifi_utils import (  # noqa: E402
     connect_wifi_network,
     delete_saved_wifi_network,
@@ -980,6 +986,43 @@ def api_lan_direct_stop():
     if not ok:
         return jsonify({"error": err or "Spegnimento link LAN fallito"}), 500
     return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/network/eth-force-direct", methods=["GET"])
+@require_auth
+def api_eth_force_direct_get():
+    return jsonify({"enabled": is_eth_force_direct_enabled()})
+
+
+@app.route("/api/network/eth-force-direct", methods=["POST"])
+@require_auth
+def api_eth_force_direct_set():
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+
+    config = load_config()
+    network_cfg = dict(config.get("network") or {})
+    network_cfg["eth_force_direct"] = enabled
+    save_config({"network": network_cfg})
+    log_event(
+        "network",
+        f"Forza LAN diretto {'attivato' if enabled else 'disattivato'} da pannello",
+    )
+
+    # Applica subito solo se un cavo Ethernet è collegato adesso; altrimenti
+    # sarà il monitor Ethernet a occuparsene al prossimo cavo rilevato.
+    device = get_primary_ethernet_device()
+    if device and _ethernet_carrier_up(device):
+        if enabled:
+            ok, err = start_lan_direct()
+            if not ok:
+                return jsonify({"error": err or "Link LAN diretto fallito"}), 500
+        else:
+            ok, err = stop_lan_direct()
+            if not ok:
+                return jsonify({"error": err or "Spegnimento link LAN fallito"}), 500
+
+    return jsonify({"ok": True, "enabled": enabled, **get_network_status()})
 
 
 # --- Device stats ---
