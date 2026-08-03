@@ -3,9 +3,11 @@
 
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from functools import wraps
 from pathlib import Path
@@ -63,8 +65,19 @@ from midi_config import parse_midi_settings_update  # noqa: E402
 from rtpmidid_config import apply_rtpmidid_config  # noqa: E402
 from synth_config import merge_fluidsynth_config, normalize_synth_gain, parse_synth_settings_update, synth_settings_for_api  # noqa: E402
 from system_stats import SF2_MAX_UPLOAD_BYTES, get_device_stats  # noqa: E402
-from update_utils import apply_update_if_needed, check_for_update, read_update_status  # noqa: E402
-from network_utils import start_lan_direct, stop_lan_direct  # noqa: E402
+from update_utils import (  # noqa: E402
+    apply_manual_zip_update,
+    apply_update_if_needed,
+    check_for_update,
+    read_update_status,
+)
+from network_utils import (  # noqa: E402
+    _ethernet_carrier_up,
+    get_primary_ethernet_device,
+    is_eth_force_direct_enabled,
+    start_lan_direct,
+    stop_lan_direct,
+)
 from wifi_utils import (  # noqa: E402
     connect_wifi_network,
     delete_saved_wifi_network,
@@ -297,6 +310,37 @@ def api_update_apply():
         )
     else:
         log_event("web", f"Nessun aggiornamento (v{result.get('current_version', '?')})")
+    return jsonify(result)
+
+
+@app.route("/api/update/apply-zip", methods=["POST"])
+@require_auth
+def api_update_apply_zip():
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "Nessun file selezionato"}), 400
+    if not file.filename.lower().endswith(".zip"):
+        return jsonify({"error": "Il file deve essere uno ZIP (.zip)"}), 400
+
+    log_event("web", "Aggiornamento manuale da file ZIP…")
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tabloza-upload-"))
+    try:
+        zip_path = tmp_dir / "update.zip"
+        file.save(zip_path)
+        result = apply_manual_zip_update(zip_path)
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if result.get("busy"):
+        return jsonify({"error": result["error"]}), 409
+    if not result.get("ok"):
+        log_event("web", f"Aggiornamento manuale fallito: {result.get('error', '?')}", "error")
+        return jsonify({"error": result.get("error", "Aggiornamento fallito")}), 500
+
+    log_event(
+        "web",
+        f"Aggiornato manualmente {result.get('previous_version', '?')} → {result.get('current_version', '?')}",
+    )
     return jsonify(result)
 
 
@@ -980,6 +1024,43 @@ def api_lan_direct_stop():
     if not ok:
         return jsonify({"error": err or "Spegnimento link LAN fallito"}), 500
     return jsonify({"ok": True, **get_network_status()})
+
+
+@app.route("/api/network/eth-force-direct", methods=["GET"])
+@require_auth
+def api_eth_force_direct_get():
+    return jsonify({"enabled": is_eth_force_direct_enabled()})
+
+
+@app.route("/api/network/eth-force-direct", methods=["POST"])
+@require_auth
+def api_eth_force_direct_set():
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get("enabled"))
+
+    config = load_config()
+    network_cfg = dict(config.get("network") or {})
+    network_cfg["eth_force_direct"] = enabled
+    save_config({"network": network_cfg})
+    log_event(
+        "network",
+        f"Forza LAN diretto {'attivato' if enabled else 'disattivato'} da pannello",
+    )
+
+    # Applica subito solo se un cavo Ethernet è collegato adesso; altrimenti
+    # sarà il monitor Ethernet a occuparsene al prossimo cavo rilevato.
+    device = get_primary_ethernet_device()
+    if device and _ethernet_carrier_up(device):
+        if enabled:
+            ok, err = start_lan_direct()
+            if not ok:
+                return jsonify({"error": err or "Link LAN diretto fallito"}), 500
+        else:
+            ok, err = stop_lan_direct()
+            if not ok:
+                return jsonify({"error": err or "Spegnimento link LAN fallito"}), 500
+
+    return jsonify({"ok": True, "enabled": enabled, **get_network_status()})
 
 
 # --- Device stats ---

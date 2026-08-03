@@ -72,6 +72,8 @@ The panel detects connectivity automatically and adapts available controls.
 
 **Ethernet with router:** the Pi tries normal DHCP first. If the cable is plugged in but no IP arrives within ~25 s (e.g. direct link to a computer), it automatically switches to **direct LAN link** (`192.168.5.1`, DHCP on the cable). You can force start/stop from the panel.
 
+**Always force direct LAN link:** in **Network**, an opt-in toggle (off by default). When enabled, any Ethernet cable plugged in switches straight to direct LAN mode (`192.168.5.1`), skipping the normal DHCP attempt — useful if the Pi is always wired directly to a single computer (e.g. RTP-MIDI over cable) and you want predictable behavior without the ~25 s grace period. **Warning:** on a network shared with other devices (router/switch) this causes a conflict (two DHCP servers on the same network) — only use it with a direct Pi↔computer cable.
+
 **Hotspot:** starts automatically when there is no Ethernet and no reachable Wi‑Fi; WPA2 password `tabloza-hotspot`, panel at `http://192.168.4.1`. If a saved Wi‑Fi network is in range, unplugging Ethernet joins that network (no hotspot). With a router cable connected, hotspot remains optional from the panel.
 
 **WiFi client:** scan networks, password, profile saved in NetworkManager. With Ethernet active you can also enable WiFi (dual-homed). Use **Network → Disable Wi‑Fi** to turn off the radio (handy with Ethernet or direct LAN to avoid duplicate paths).
@@ -185,6 +187,8 @@ Collapsible **Diagnostics** section, auto-refreshed every ~2 s while open:
 ### Software updates
 
 **From the panel:** **Diagnostics → Check for updates**. If available, installation runs in the background and services restart.
+
+**No Internet connection:** if the Pi can't reach GitHub, the panel shows a warning with the option to manually upload a project ZIP (downloaded from GitHub via **Code → Download ZIP**, `main` branch). This only updates the application code (not system dependencies) and restarts services automatically.
 
 **From SSH:**
 
