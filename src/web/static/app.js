@@ -55,7 +55,11 @@ async function api(path, opts = {}) {
     showLogin();
     throw new Error(t("authRequired"));
   }
-  if (!res.ok) throw new Error(data.error || t("errorGeneric", { code: res.status }));
+  if (!res.ok) {
+    const err = new Error(data.error || t("errorGeneric", { code: res.status }));
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
@@ -536,7 +540,14 @@ document.getElementById("btn-check-update")?.addEventListener("click", async () 
       showLogin();
       throw new Error(t("authRequired"));
     }
-    if (!res.ok) throw new Error(data.error || t("updateFailed"));
+    if (!res.ok) {
+      if (data.network_error) {
+        msg.classList.add("hidden");
+        showUpdateNetworkModal();
+        return;
+      }
+      throw new Error(data.error || t("updateFailed"));
+    }
     if (data.applied) {
       await pollAfterUpdate();
       return;
@@ -544,8 +555,77 @@ document.getElementById("btn-check-update")?.addEventListener("click", async () 
     msg.textContent = t("updateUpToDate", { version: data.current_version });
     msg.classList.add("ok");
   } catch (e) {
-    msg.textContent = e.message || t("updateFailed");
-    msg.classList.add("err");
+    if (e.data && e.data.network_error) {
+      msg.classList.add("hidden");
+      showUpdateNetworkModal();
+    } else {
+      msg.textContent = e.message || t("updateFailed");
+      msg.classList.add("err");
+    }
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// --- Aggiornamento manuale da ZIP (fallback senza rete) ---
+function showUpdateNetworkModal() {
+  document.getElementById("update-network-modal")?.classList.remove("hidden");
+}
+
+function hideUpdateNetworkModal() {
+  document.getElementById("update-network-modal")?.classList.add("hidden");
+  const input = document.getElementById("update-zip-input");
+  if (input) input.value = "";
+  const msg = document.getElementById("update-zip-msg");
+  if (msg) {
+    msg.textContent = "";
+    msg.className = "msg hidden";
+  }
+}
+
+document.getElementById("btn-update-zip-cancel")?.addEventListener("click", hideUpdateNetworkModal);
+
+document.getElementById("btn-update-zip-upload")?.addEventListener("click", async () => {
+  const input = document.getElementById("update-zip-input");
+  const msg = document.getElementById("update-zip-msg");
+  const btn = document.getElementById("btn-update-zip-upload");
+  const file = input?.files?.[0];
+  if (!file) {
+    msg.textContent = t("updateZipMissing");
+    msg.className = "msg err";
+    msg.classList.remove("hidden");
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = t("updateZipUploading");
+  msg.className = "msg";
+  msg.classList.remove("hidden");
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API}/api/update/apply-zip`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      showLogin();
+      throw new Error(t("authRequired"));
+    }
+    if (!res.ok) throw new Error(data.error || t("updateFailed"));
+    msg.textContent = t("updateZipApplied", {
+      from: data.previous_version || "?",
+      to: data.current_version || "?",
+    });
+    msg.className = "msg ok";
+    setTimeout(() => {
+      hideUpdateNetworkModal();
+      pollAfterUpdate();
+    }, 1500);
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = "msg err";
   } finally {
     btn.disabled = false;
   }
@@ -1951,6 +2031,9 @@ document.getElementById("btn-eth-force-direct-apply")?.addEventListener("click",
   const msg = document.getElementById("eth-force-direct-msg");
   const btn = document.getElementById("btn-eth-force-direct-apply");
   const checkbox = document.getElementById("eth-force-direct");
+  if (checkbox.checked && !confirm(t("ethForceDirectConfirm"))) {
+    return;
+  }
   btn.disabled = true;
   msg.textContent = t("midiApplying");
   msg.className = "msg";

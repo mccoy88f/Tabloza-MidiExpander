@@ -188,6 +188,8 @@ Collapsible **Diagnostics** section, auto-refreshed every ~2 s while open:
 
 **From the panel:** **Diagnostics → Check for updates**. If available, installation runs in the background and services restart.
 
+**No Internet connection:** if the Pi can't reach GitHub, the panel shows a warning with the option to manually upload a project ZIP (downloaded from GitHub via **Code → Download ZIP**, `main` branch). This only updates the application code (not system dependencies) and restarts services automatically.
+
 **From SSH:**
 
 ```bash

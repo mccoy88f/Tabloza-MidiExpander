@@ -196,6 +196,8 @@ Sezione collassabile **Diagnostica** con aggiornamento automatico ogni ~2 s ment
 
 **Dal pannello:** **Diagnostica → Verifica aggiornamenti**. Se disponibile, l’installazione parte in background e i servizi vengono riavviati.
 
+**Senza connessione a Internet:** se il Pi non riesce a raggiungere GitHub, il pannello mostra un avviso con la possibilità di caricare manualmente uno ZIP del progetto (scaricato da GitHub con **Code → Download ZIP**, branch `main`). Aggiorna solo il codice applicativo (non le dipendenze di sistema) e riavvia i servizi automaticamente.
+
 **Da SSH:**
 
 ```bash

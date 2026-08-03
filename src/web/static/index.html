@@ -423,6 +423,20 @@
     <a id="footer-github" href="https://github.com/mccoy88f/Tabloza-MidiExpander" target="_blank" rel="noopener noreferrer" data-i18n="footerCredits">mccoy88f</a>
   </footer>
 
+  <div id="update-network-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <h3 data-i18n="updateNetworkModalTitle">Nessuna connessione a Internet</h3>
+      <p data-i18n="updateNetworkModalBody">Il dispositivo non riesce a raggiungere GitHub per verificare gli aggiornamenti. Se hai scaricato manualmente lo ZIP del progetto, puoi caricarlo qui per aggiornare senza rete.</p>
+      <p class="muted" data-i18n="updateNetworkModalHint">Scarica lo ZIP dalla pagina GitHub del progetto (branch main) con «Code → Download ZIP». Viene aggiornato solo il codice: eventuali nuove dipendenze di sistema richiederanno comunque una connessione in futuro.</p>
+      <input type="file" id="update-zip-input" accept=".zip">
+      <p id="update-zip-msg" class="msg hidden"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-update-zip-upload" class="btn btn-primary" data-i18n="updateZipUpload">Carica e aggiorna</button>
+        <button type="button" id="btn-update-zip-cancel" class="btn btn-secondary" data-i18n="updateZipCancel">Annulla</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/i18n.js?v=3.2.0"></script>
   <script src="/static/app.js?v=3.2.0"></script>
 </body>

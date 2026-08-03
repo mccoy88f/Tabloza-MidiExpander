@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1323,6 +1324,101 @@ class TestUpdateUtils(unittest.TestCase):
             timeout=self.uu.APPLY_TIMEOUT,
             check=False,
         )
+
+    @patch("update_utils._run_git")
+    def test_check_for_update_flags_network_error(self, mock_git):
+        mock_git.return_value = MagicMock(
+            returncode=128,
+            stdout="",
+            stderr="fatal: unable to access 'https://github.com/x': "
+            "Could not resolve host: github.com",
+        )
+        result = self.uu.check_for_update(fetch=True)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["network_error"])
+
+    @patch("update_utils._run_git")
+    def test_check_for_update_non_network_fetch_error_not_flagged(self, mock_git):
+        mock_git.return_value = MagicMock(
+            returncode=128, stdout="", stderr="fatal: some other git error",
+        )
+        result = self.uu.check_for_update(fetch=True)
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["network_error"])
+
+
+class TestManualZipUpdate(unittest.TestCase):
+    def setUp(self):
+        import update_utils as uu
+
+        self.uu = uu
+        self.tmp = tempfile.TemporaryDirectory()
+        self.install = Path(self.tmp.name) / "tabloza"
+        self.install.mkdir()
+        (self.install / "VERSION").write_text("1.0.0")
+        (self.install / "old_file.txt").write_text("stale")
+        self.status = Path(self.tmp.name) / "update_status.json"
+        self.uu.INSTALL_DIR = self.install
+        self.uu.UPDATE_STATUS_FILE = self.status
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _make_zip(self, root_prefix: str = "Tabloza-MidiExpander-main/") -> Path:
+        zip_path = Path(self.tmp.name) / "update.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr(f"{root_prefix}install.sh", "#!/bin/bash\necho hi\n")
+            zf.writestr(f"{root_prefix}VERSION", "2.0.0")
+            zf.writestr(f"{root_prefix}src/app.py", "print('new')\n")
+        return zip_path
+
+    def test_find_extracted_root_nested(self):
+        extract_dir = Path(self.tmp.name) / "extract1"
+        extract_dir.mkdir()
+        nested = extract_dir / "Tabloza-MidiExpander-main"
+        nested.mkdir()
+        (nested / "install.sh").write_text("#!/bin/bash\n")
+        found = self.uu._find_extracted_root(extract_dir)
+        self.assertEqual(found, nested)
+
+    def test_find_extracted_root_missing_raises(self):
+        extract_dir = Path(self.tmp.name) / "extract2"
+        extract_dir.mkdir()
+        with self.assertRaises(ValueError):
+            self.uu._find_extracted_root(extract_dir)
+
+    def test_safe_extract_zip_rejects_path_traversal(self):
+        zip_path = Path(self.tmp.name) / "evil.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("../evil.txt", "pwned")
+        dest = Path(self.tmp.name) / "extract3"
+        dest.mkdir()
+        with self.assertRaises(ValueError):
+            self.uu._safe_extract_zip(zip_path, dest)
+
+    @patch("update_utils.subprocess.Popen")
+    def test_apply_manual_zip_update_success(self, mock_popen):
+        zip_path = self._make_zip()
+        result = self.uu.apply_manual_zip_update(zip_path)
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["previous_version"], "1.0.0")
+        self.assertEqual(result["current_version"], "2.0.0")
+        self.assertEqual((self.install / "VERSION").read_text().strip(), "2.0.0")
+        self.assertTrue((self.install / "src" / "app.py").is_file())
+        self.assertFalse((self.install / "old_file.txt").exists())
+        mock_popen.assert_called_once()
+        args = mock_popen.call_args[0][0]
+        self.assertEqual(args[:2], ["systemctl", "restart"])
+
+    @patch("update_utils.subprocess.Popen")
+    def test_apply_manual_zip_update_rejects_invalid_zip(self, mock_popen):
+        bad_zip = Path(self.tmp.name) / "notazip.zip"
+        bad_zip.write_text("not a zip")
+        result = self.uu.apply_manual_zip_update(bad_zip)
+        self.assertFalse(result["ok"])
+        mock_popen.assert_not_called()
 
 
 class TestLanDirect(unittest.TestCase):
